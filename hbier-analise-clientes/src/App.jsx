@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v2.3";
+const APP_VERSION = "v3.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -157,27 +157,37 @@ function useData() {
   return useContext(DataContext);
 }
 
-// Transforma a lista plana vinda do GAS em estruturas prontas pro app
+// Transforma a lista plana vinda do GAS em estruturas prontas pro app.
+// Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
+// clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
+// sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
 function processarDados(linhas) {
-  const porCliente = {};
-  const grupoDoCliente = {};
+  const porCliente = {};       // codigo -> rows[]
+  const grupoDoCliente = {};   // codigo -> grupo
+  const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
+  const razaoSocialDoCliente = {}; // codigo -> razão social (info extra)
 
   linhas.forEach(r => {
+    const codigo = String(r.codigo);
     const chave = `${r.ano}-${String(r.mes).padStart(2, "0")}`;
-    porCliente[r.cliente] = porCliente[r.cliente] || [];
-    porCliente[r.cliente].push({
+    porCliente[codigo] = porCliente[codigo] || [];
+    porCliente[codigo].push({
       ano: r.ano, mes: r.mes, chave,
       faturamento: Number(r.faturamento) || 0,
       litros: Number(r.litros) || 0,
     });
-    if (r.grupo) grupoDoCliente[r.cliente] = r.grupo;
+    if (r.grupo) grupoDoCliente[codigo] = r.grupo;
+    labelDoCliente[codigo] = r.nomeFantasia || r.razaoSocial || codigo;
+    razaoSocialDoCliente[codigo] = r.razaoSocial || "";
   });
 
-  Object.keys(porCliente).forEach(cliente => {
-    porCliente[cliente].sort((a, b) => a.chave.localeCompare(b.chave));
+  Object.keys(porCliente).forEach(codigo => {
+    porCliente[codigo].sort((a, b) => a.chave.localeCompare(b.chave));
   });
 
-  const nomes = Object.keys(porCliente).sort((a, b) => a.localeCompare(b));
+  const nomes = Object.keys(porCliente).sort((a, b) =>
+    (labelDoCliente[a] || "").localeCompare(labelDoCliente[b] || "")
+  );
   const grupos = [...new Set(Object.values(grupoDoCliente))].sort();
   const clientesPorGrupo = Object.fromEntries(
     grupos.map(g => [g, nomes.filter(n => grupoDoCliente[n] === g)])
@@ -188,7 +198,7 @@ function processarDados(linhas) {
   Object.values(porCliente).forEach(rows => rows.forEach(r => periodosSet.add(r.chave)));
   const periodos = [...periodosSet].sort();
 
-  return { dados: porCliente, nomes, grupos, clientesPorGrupo, periodos, grupoDoCliente };
+  return { dados: porCliente, nomes, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente };
 }
 
 // -------------------- Componentes visuais --------------------
@@ -427,7 +437,7 @@ const chipBtnStyle = {
 };
 
 function ClienteDashboard() {
-  const { dados, nomes, periodos } = useData();
+  const { dados, nomes, periodos, labelDoCliente, razaoSocialDoCliente } = useData();
   const [busca, setBusca] = useState("");
   const [clienteSel, setClienteSel] = useState(null);
   const [inicio, setInicio] = useState("");
@@ -436,15 +446,15 @@ function ClienteDashboard() {
 
   const sugestoes = useMemo(() => {
     if (!busca.trim()) return [];
-    return nomes.filter(c => c.toLowerCase().includes(busca.toLowerCase())).slice(0, 6);
-  }, [busca, nomes]);
+    return nomes.filter(c => (labelDoCliente[c] || "").toLowerCase().includes(busca.toLowerCase())).slice(0, 6);
+  }, [busca, nomes, labelDoCliente]);
 
   const todasRows = clienteSel ? (dados[clienteSel] || []) : null;
 
-  function selecionarCliente(nome) {
-    setClienteSel(nome);
-    setBusca(nome);
-    const rows = dados[nome] || [];
+  function selecionarCliente(codigo) {
+    setClienteSel(codigo);
+    setBusca(labelDoCliente[codigo] || codigo);
+    const rows = dados[codigo] || [];
     setInicio(rows[0]?.chave || "");
     setFim(rows[rows.length - 1]?.chave || "");
     const { fechados } = separarMesEmAndamento(rows);
@@ -525,7 +535,10 @@ function ClienteDashboard() {
                 style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                {c}
+                {labelDoCliente[c]}
+                {razaoSocialDoCliente[c] && razaoSocialDoCliente[c] !== labelDoCliente[c] && (
+                  <div style={{ color: "#888", fontSize: 11 }}>{razaoSocialDoCliente[c]}</div>
+                )}
               </div>
             ))}
           </div>
@@ -546,9 +559,12 @@ function ClienteDashboard() {
 
       {clienteSel && todasRows && todasRows.length > 0 && (
         <>
-          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 8 }}>
-            {clienteSel}
+          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
+            {labelDoCliente[clienteSel]}
           </h2>
+          {razaoSocialDoCliente[clienteSel] && razaoSocialDoCliente[clienteSel] !== labelDoCliente[clienteSel] && (
+            <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>{razaoSocialDoCliente[clienteSel]}</div>
+          )}
 
           <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
 
@@ -661,7 +677,7 @@ function ClienteDashboard() {
           </Section>
 
           <Section title="Tabela" icon={<TableIcon size={18} color="#888" />}>
-            <TabelaClienteMeses cliente={clienteSel} rows={rowsFiltradas} />
+            <TabelaClienteMeses cliente={labelDoCliente[clienteSel]} rows={rowsFiltradas} />
           </Section>
         </>
       )}
@@ -751,7 +767,7 @@ function SeletorPeriodo({ ativo, inicio, fim, onInicio, onFim }) {
 }
 
 function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecionados, gruposSel, setGruposSel, inicio, setInicio, fim, setFim }) {
-  const { nomes, grupos, clientesPorGrupo } = useData();
+  const { nomes, grupos, clientesPorGrupo, labelDoCliente } = useData();
   const [buscaCliente, setBuscaCliente] = useState("");
 
   function toggleCliente(nome) {
@@ -769,7 +785,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
 
   const ativo = selecionados.length > 0;
   const nomesFiltrados = buscaCliente.trim()
-    ? nomes.filter(n => n.toLowerCase().includes(buscaCliente.toLowerCase()))
+    ? nomes.filter(n => (labelDoCliente[n] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : nomes;
 
   function limparSelecao() {
@@ -823,7 +839,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
             {nomesFiltrados.map(nome => (
               <label key={nome} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: "#fff", cursor: "pointer" }}>
                 <input type="checkbox" checked={selecionados.includes(nome)} onChange={() => toggleCliente(nome)} />
-                {nome}
+                {labelDoCliente[nome]}
               </label>
             ))}
             {nomesFiltrados.length === 0 && <div style={{ color: "#666", fontSize: 12, padding: "4px 0" }}>Nenhum cliente encontrado.</div>}
@@ -880,7 +896,7 @@ function CardComparativo({ titulo, valorA, valorB, variacao, formatador, icon })
 }
 
 function ComparacaoTab() {
-  const { dados, periodos } = useData();
+  const { dados, periodos, labelDoCliente } = useData();
   const [modoA, setModoA] = useState("clientes");
   const [selA, setSelA] = useState([]);
   const [gruposA, setGruposA] = useState([]);
@@ -912,8 +928,8 @@ function ComparacaoTab() {
   const rowsA = extrairPeriodoAgregado(selA, inicioA, fimA);
   const rowsB = extrairPeriodoAgregado(selB, inicioB, fimB);
 
-  const labelA = modoA === "grupo" && gruposA.length ? `Grupo: ${gruposA.join(" + ")}` : (selA.length > 1 ? `${selA.length} clientes (A)` : (selA[0] || "A"));
-  const labelB = modoB === "grupo" && gruposB.length ? `Grupo: ${gruposB.join(" + ")}` : (selB.length > 1 ? `${selB.length} clientes (B)` : (selB[0] || "B"));
+  const labelA = modoA === "grupo" && gruposA.length ? `Grupo: ${gruposA.join(" + ")}` : (selA.length > 1 ? `${selA.length} clientes (A)` : (labelDoCliente[selA[0]] || "A"));
+  const labelB = modoB === "grupo" && gruposB.length ? `Grupo: ${gruposB.join(" + ")}` : (selB.length > 1 ? `${selB.length} clientes (B)` : (labelDoCliente[selB[0]] || "B"));
 
   // versão curta pra caber nos cards de estatística (o nome completo continua na legenda/tooltip do gráfico)
   const labelACurto = modoA === "grupo" && gruposA.length
@@ -1277,7 +1293,7 @@ function TabelaHeatmapGrupos({ linhas }) {
 }
 
 function DashboardTab() {
-  const { dados, nomes, grupos, clientesPorGrupo, periodos } = useData();
+  const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState([]);
   const [todos, setTodos] = useState(true);
   const [buscaCliente, setBuscaCliente] = useState("");
@@ -1299,7 +1315,7 @@ function DashboardTab() {
   }, [clientesFiltrados, dados, mesRefAno]);
 
   const clientesExibidos = buscaCliente.trim()
-    ? clientesComMetricas.filter(c => c.nome.toLowerCase().includes(buscaCliente.toLowerCase()))
+    ? clientesComMetricas.filter(c => (labelDoCliente[c.nome] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : clientesComMetricas;
 
   const linhasHeatmap = useMemo(() => {
@@ -1370,7 +1386,7 @@ function DashboardTab() {
           </div>
         )}
         {clientesExibidos.map(c => (
-          <CardClienteDashboard key={c.nome} posicao={c.posicao} nome={c.nome} metricas={c.metricas} />
+          <CardClienteDashboard key={c.nome} posicao={c.posicao} nome={labelDoCliente[c.nome]} metricas={c.metricas} />
         ))}
       </Section>
     </div>

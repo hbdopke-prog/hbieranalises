@@ -27,14 +27,15 @@ O script (`Code.gs`) acha a linha de cabeçalho automaticamente (procura por
 linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
 - Atualize manualmente (semanalmente, colando o relatório atualizado); o app sempre lê a versão mais recente, sem precisar reimplantar nada.
-- **Grupo por cliente**: crie uma aba chamada **`clientes`** com 2 colunas:
+- **Identificação do cliente**: o app usa o **Código** (coluna A) como identificador único de cada cliente - não o nome. Isso importa quando duas lojas diferentes têm a mesma Razão Social (ex: várias unidades de uma rede) - cada Código vira um cliente separado de verdade, mesmo com nomes iguais.
+- **Nome exibido/buscado (Nome Fantasia) e Grupo**: crie (ou use) uma aba de cadastro com estas colunas (qualquer nome de aba serve, o app acha sozinho):
 
-  | cliente | grupo |
-  |---|---|
-  | 1 MILLER COMÉRCIO DE ALIMENTOS LTDA | Mini Mercado |
-  | 16.103.231 GIOVANE BRANDT | Rede de Mercado |
+  | Código | Nome Fantasia | Categoria |
+  |---|---|---|
+  | 2078 | Zaffari Higienópolis | Rede de Mercado |
+  | 2079 | Zaffari Bourbon | Rede de Mercado |
 
-  O valor de `cliente` precisa ser **idêntico** ao texto da coluna "Cliente - Razão Social/Nome" nas abas `faturamento`/`litros` (copie e cole de lá pra garantir o match). Se essa aba não existir, o app funciona normalmente, só sem a opção de comparar por grupo.
+  O app casa pelo **Código**, então o Nome Fantasia pode ser diferente mesmo quando a Razão Social é igual nas duas linhas. Se um código não estiver nessa aba, o app usa a Razão Social do relatório como nome de exibição (fallback). Se a aba inteira não existir, o app funciona normalmente, só sem nome fantasia/grupo.
 
 ## 2. Backend (Google Apps Script)
 
