@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v1.3
+ * Versão: v1.5
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -23,11 +23,15 @@
  * procura automaticamente a linha onde a coluna A contém "código" e
  * a coluna B contém "cliente".
  *
- * OBS: não há uma coluna de "grupo" por cliente nesse relatório -
- * a segmentação (linha 4) é só um resumo textual, sem vínculo direto
- * com cada linha de cliente. Por isso o campo "grupo" fica vazio por
- * enquanto. Se quiser habilitar a comparação por grupo, precisamos de
- * uma aba extra tipo "Clientes" com colunas cliente | grupo.
+ * GRUPO DE CLIENTES (opcional):
+ * Crie uma aba chamada "clientes" (cadastro) com 2 colunas:
+ *   cliente | grupo
+ * onde "cliente" tem que ser EXATAMENTE igual ao texto que aparece na
+ * coluna "Cliente - Razão Social/Nome" das abas faturamento/litros
+ * (copie e cole de lá pra garantir o match certo), e "grupo" é o
+ * segmento dele (ex: Mini Mercado, Rede de Mercado, Bar/Restaurante...).
+ * Se essa aba não existir, o app funciona normalmente, só sem grupo
+ * (a comparação por "Grupo" fica vazia até essa aba ser criada).
  *
  * DEPLOY:
  *   1. Extensões > Apps Script na planilha do Google Sheets
@@ -40,13 +44,15 @@
 
 const SHEET_FATURAMENTO = "faturamento";
 const SHEET_LITROS = "litros";
+const SHEET_CLIENTES = "clientes";
 
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const faturamento = lerRelatorio(ss, SHEET_FATURAMENTO);
     const litros = lerRelatorio(ss, SHEET_LITROS);
-    const combinado = combinar(faturamento, litros);
+    const grupoPorCliente = lerCadastroClientes(ss);
+    const combinado = combinar(faturamento, litros, grupoPorCliente);
     return jsonResponse({
       ok: true,
       dados: combinado,
@@ -55,6 +61,30 @@ function doGet(e) {
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+// Lê a aba opcional de cadastro cliente -> grupo. Se não existir, devolve {} (sem erro).
+function lerCadastroClientes(ss) {
+  const sheet = ss.getSheetByName(SHEET_CLIENTES);
+  if (!sheet) return {};
+
+  const valores = sheet.getDataRange().getValues();
+  if (valores.length < 2) return {};
+
+  const cabecalho = valores[0].map(function (c) {
+    return String(c).trim().toLowerCase();
+  });
+  const idxCliente = cabecalho.indexOf("cliente");
+  const idxGrupo = cabecalho.indexOf("grupo");
+  if (idxCliente === -1 || idxGrupo === -1) return {};
+
+  const mapa = {};
+  for (let i = 1; i < valores.length; i++) {
+    const cliente = String(valores[i][idxCliente] || "").trim();
+    const grupo = String(valores[i][idxGrupo] || "").trim();
+    if (cliente && grupo) mapa[cliente] = grupo;
+  }
+  return mapa;
 }
 
 // Lê o relatório "mês a mês por clientes" (formato largo) de uma aba
@@ -137,8 +167,10 @@ function lerRelatorio(ss, nomeAba) {
   return linhas;
 }
 
-// Junta faturamento + litros num único registro por cliente/ano/mes
-function combinar(faturamentoRows, litrosRows) {
+// Junta faturamento + litros num único registro por cliente/ano/mes, aplicando o grupo (se houver)
+function combinar(faturamentoRows, litrosRows, grupoPorCliente) {
+  grupoPorCliente = grupoPorCliente || {};
+
   function chaveDe(r) {
     return r.cliente + "__" + r.ano + "-" + String(r.mes).padStart(2, "0");
   }
@@ -148,7 +180,7 @@ function combinar(faturamentoRows, litrosRows) {
   faturamentoRows.forEach(function (r) {
     const chave = chaveDe(r);
     if (!mapa[chave]) {
-      mapa[chave] = { cliente: r.cliente, grupo: r.grupo, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
+      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[r.cliente] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].faturamento = r.valor;
   });
@@ -156,7 +188,7 @@ function combinar(faturamentoRows, litrosRows) {
   litrosRows.forEach(function (r) {
     const chave = chaveDe(r);
     if (!mapa[chave]) {
-      mapa[chave] = { cliente: r.cliente, grupo: r.grupo, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
+      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[r.cliente] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].litros = r.valor;
   });

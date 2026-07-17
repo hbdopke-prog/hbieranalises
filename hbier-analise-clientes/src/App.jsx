@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v1.3";
+const APP_VERSION = "v1.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -159,22 +159,81 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+function TabelaClienteMeses({ cliente, rows }) {
+  return (
+    <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8, marginBottom: 8 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 600 }}>
+        <thead>
+          <tr>
+            <th style={thStyle}>{cliente}</th>
+            {rows.map(r => <th key={r.chave} style={thStyle}>{labelMes(r.chave)}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={{ ...tdStyle, color: "#02601D", fontWeight: 700 }}>Faturamento</td>
+            {rows.map(r => <td key={r.chave} style={tdStyle}>{fmtMoeda(r.faturamento)}</td>)}
+          </tr>
+          <tr>
+            <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>Litros</td>
+            {rows.map(r => <td key={r.chave} style={tdStyle}>{fmtLitros(r.litros)}</td>)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const thStyle = {
+  background: "#1D1D1B", color: "#fff", fontSize: 12, padding: "8px 10px",
+  borderBottom: "1px solid #333", whiteSpace: "nowrap", textAlign: "left", position: "sticky", top: 0,
+};
+const tdStyle = {
+  color: "#ddd", fontSize: 12, padding: "6px 10px", borderBottom: "1px solid #262624", whiteSpace: "nowrap",
+};
+
+const chipBtnStyle = {
+  background: "transparent", border: "1px solid #444", color: "#C69700",
+  borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600,
+};
+
 function ClienteDashboard() {
-  const { dados, nomes } = useData();
+  const { dados, nomes, periodos } = useData();
   const [busca, setBusca] = useState("");
   const [clienteSel, setClienteSel] = useState(null);
+  const [inicio, setInicio] = useState("");
+  const [fim, setFim] = useState("");
 
   const sugestoes = useMemo(() => {
     if (!busca.trim()) return [];
     return nomes.filter(c => c.toLowerCase().includes(busca.toLowerCase())).slice(0, 6);
   }, [busca, nomes]);
 
-  const rows = clienteSel ? (dados[clienteSel] || []) : null;
-  const ultimos3 = rows ? rows.slice(-3) : [];
-  const ultimos6 = rows ? rows.slice(-6) : [];
-  const ultimos12 = rows ? rows.slice(-12) : [];
+  const todasRows = clienteSel ? (dados[clienteSel] || []) : null;
 
-  const chartData = ultimos3.map(r => ({ mes: labelMes(r.chave), Faturamento: r.faturamento, Litros: r.litros }));
+  function selecionarCliente(nome) {
+    setClienteSel(nome);
+    setBusca(nome);
+    const rows = dados[nome] || [];
+    setInicio(rows[0]?.chave || "");
+    setFim(rows[rows.length - 1]?.chave || "");
+  }
+
+  const rowsFiltradas = useMemo(() => {
+    if (!todasRows || !inicio || !fim) return [];
+    const iIdx = todasRows.findIndex(r => r.chave === inicio);
+    const fIdx = todasRows.findIndex(r => r.chave === fim);
+    if (iIdx === -1 || fIdx === -1 || iIdx > fIdx) return [];
+    return todasRows.slice(iIdx, fIdx + 1);
+  }, [todasRows, inicio, fim]);
+
+  const ultimos3 = todasRows ? todasRows.slice(-3) : [];
+  const ultimos6 = todasRows ? todasRows.slice(-6) : [];
+  const ultimos12 = todasRows ? todasRows.slice(-12) : [];
+
+  const chartData = rowsFiltradas.map(r => ({ mes: labelMes(r.chave), Faturamento: r.faturamento, Litros: r.litros }));
+  const primeiroPeriodo = todasRows && todasRows.length ? todasRows[0].chave : "";
+  const ultimoPeriodo = todasRows && todasRows.length ? todasRows[todasRows.length - 1].chave : "";
 
   return (
     <div>
@@ -188,7 +247,7 @@ function ClienteDashboard() {
         {sugestoes.length > 0 && (
           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
             {sugestoes.map(c => (
-              <div key={c} onClick={() => { setClienteSel(c); setBusca(c); }}
+              <div key={c} onClick={() => selecionarCliente(c)}
                 style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
@@ -205,17 +264,30 @@ function ClienteDashboard() {
         </div>
       )}
 
-      {clienteSel && rows && rows.length === 0 && (
+      {clienteSel && todasRows && todasRows.length === 0 && (
         <div style={{ color: "#888", textAlign: "center", padding: "40px 0", fontSize: 14 }}>
           Nenhum dado encontrado para este cliente.
         </div>
       )}
 
-      {clienteSel && rows && rows.length > 0 && (
+      {clienteSel && todasRows && todasRows.length > 0 && (
         <>
-          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 18 }}>
+          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 14 }}>
             {clienteSel}
           </h2>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
+            <button onClick={() => setInicio(primeiroPeriodo)} style={chipBtnStyle}>Desde o início</button>
+            <select value={inicio} onChange={e => setInicio(e.target.value)} style={selectStyle}>
+              {periodos.filter(p => todasRows.some(r => r.chave === p)).map(p => <option key={p} value={p}>{labelMes(p)}</option>)}
+            </select>
+            <span style={{ color: "#666" }}>até</span>
+            <select value={fim} onChange={e => setFim(e.target.value)} style={selectStyle}>
+              {periodos.filter(p => todasRows.some(r => r.chave === p)).map(p => <option key={p} value={p}>{labelMes(p)}</option>)}
+            </select>
+            <button onClick={() => setFim(ultimoPeriodo)} style={chipBtnStyle}>Até hoje</button>
+          </div>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -223,14 +295,14 @@ function ClienteDashboard() {
               <StatCard label="Média 6 meses" value={fmtMoeda(media(ultimos6, "faturamento"))} icon={<TrendingUp size={14} />} />
               <StatCard label="Média anual" value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" stroke="#888" fontSize={12} />
+                <XAxis dataKey="mes" stroke="#888" fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Bar dataKey="Faturamento" fill="#02601D" radius={[4,4,0,0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="Faturamento" stroke="#02601D" strokeWidth={2} dot={false} />
+              </LineChart>
             </ResponsiveContainer>
           </Section>
 
@@ -240,15 +312,19 @@ function ClienteDashboard() {
               <StatCard label="Média 6 meses" value={fmtLitros(media(ultimos6, "litros"))} icon={<Droplets size={14} />} />
               <StatCard label="Média anual" value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData}>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" stroke="#888" fontSize={12} />
+                <XAxis dataKey="mes" stroke="#888" fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
                 <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Bar dataKey="Litros" fill="#C69700" radius={[4,4,0,0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="Litros" stroke="#C69700" strokeWidth={2} dot={false} />
+              </LineChart>
             </ResponsiveContainer>
+          </Section>
+
+          <Section title="Tabela" icon={<TableIcon size={18} color="#888" />}>
+            <TabelaClienteMeses cliente={clienteSel} rows={rowsFiltradas} />
           </Section>
         </>
       )}

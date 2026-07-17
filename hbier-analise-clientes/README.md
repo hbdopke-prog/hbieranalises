@@ -27,7 +27,14 @@ O script (`Code.gs`) acha a linha de cabeçalho automaticamente (procura por
 linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
 - Atualize manualmente (semanalmente, colando o relatório atualizado); o app sempre lê a versão mais recente, sem precisar reimplantar nada.
-- **Grupo por cliente**: esse relatório não traz um grupo por linha (só um resumo textual no topo). A comparação por "Clientes" funciona normalmente; a comparação por "Grupo" fica disponível só quando tivermos uma forma de vincular cliente → grupo (ex: uma aba extra `Clientes` com `cliente | grupo`).
+- **Grupo por cliente**: crie uma aba chamada **`clientes`** com 2 colunas:
+
+  | cliente | grupo |
+  |---|---|
+  | 1 MILLER COMÉRCIO DE ALIMENTOS LTDA | Mini Mercado |
+  | 16.103.231 GIOVANE BRANDT | Rede de Mercado |
+
+  O valor de `cliente` precisa ser **idêntico** ao texto da coluna "Cliente - Razão Social/Nome" nas abas `faturamento`/`litros` (copie e cole de lá pra garantir o match). Se essa aba não existir, o app funciona normalmente, só sem a opção de comparar por grupo.
 
 ## 2. Backend (Google Apps Script)
 
