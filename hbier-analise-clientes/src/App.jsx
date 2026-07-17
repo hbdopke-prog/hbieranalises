@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v1.8";
+const APP_VERSION = "v1.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -39,6 +39,33 @@ function media(rows, campo) {
 }
 function soma(rows, campo) {
   return rows.reduce((s,r) => s + r[campo], 0);
+}
+
+// Chave (AAAA-MM) do mês corrente de verdade (data real de hoje, não o último dado da planilha)
+function chaveMesAtualReal() {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Separa o último mês da série se ele for o mês em andamento (ainda não fechou), pra não
+// distorcer comparações "mês fechado vs mês fechado". Retorna { fechados, emAndamento }.
+function separarMesEmAndamento(rows) {
+  if (!rows || !rows.length) return { fechados: rows || [], emAndamento: null };
+  const ultimo = rows[rows.length - 1];
+  if (ultimo.chave === chaveMesAtualReal()) {
+    return { fechados: rows.slice(0, -1), emAndamento: ultimo };
+  }
+  return { fechados: rows, emAndamento: null };
+}
+
+// Preço médio por litro (faturamento / litros). Retorna null se não houver litros.
+function precoMedioLitro(fat, lit) {
+  if (!lit) return null;
+  return fat / lit;
+}
+function fmtPrecoLitro(v) {
+  if (v == null) return "-";
+  return `${v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 })}/L`;
 }
 function periodoTexto(rows) {
   if (!rows || !rows.length) return "";
@@ -261,11 +288,13 @@ function ClienteDashboard() {
     return todasRows.slice(iIdx, fIdx + 1);
   }, [todasRows, inicio, fim]);
 
-  const ultimos3 = todasRows ? todasRows.slice(-3) : [];
-  const ultimos6 = todasRows ? todasRows.slice(-6) : [];
-  const ultimos12 = todasRows ? todasRows.slice(-12) : [];
-  const anteriores3 = todasRows ? todasRows.slice(-6, -3) : [];
-  const anteriores6 = todasRows ? todasRows.slice(-12, -6) : [];
+  const { fechados: rowsFechadas, emAndamento } = useMemo(() => separarMesEmAndamento(todasRows || []), [todasRows]);
+
+  const ultimos3 = rowsFechadas.slice(-3);
+  const ultimos6 = rowsFechadas.slice(-6);
+  const ultimos12 = rowsFechadas.slice(-12);
+  const anteriores3 = rowsFechadas.slice(-6, -3);
+  const anteriores6 = rowsFechadas.slice(-12, -6);
 
   const variacaoFat3 = anteriores3.length ? calcularVariacao(media(ultimos3, "faturamento"), media(anteriores3, "faturamento")) : null;
   const variacaoLit3 = anteriores3.length ? calcularVariacao(media(ultimos3, "litros"), media(anteriores3, "litros")) : null;
@@ -274,11 +303,11 @@ function ClienteDashboard() {
 
   // médias por ano-calendário (ex: 2023, 2024, 2025...), com crescimento vs o ano anterior
   const mediasPorAno = useMemo(() => {
-    if (!todasRows) return [];
-    const anos = [...new Set(todasRows.map(r => r.ano))].sort((a, b) => a - b);
+    if (!rowsFechadas.length) return [];
+    const anos = [...new Set(rowsFechadas.map(r => r.ano))].sort((a, b) => a - b);
     return anos.map((ano, idx) => {
-      const rowsDoAno = todasRows.filter(r => r.ano === ano);
-      const rowsAnoAnterior = idx > 0 ? todasRows.filter(r => r.ano === anos[idx - 1]) : [];
+      const rowsDoAno = rowsFechadas.filter(r => r.ano === ano);
+      const rowsAnoAnterior = idx > 0 ? rowsFechadas.filter(r => r.ano === anos[idx - 1]) : [];
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
       return {
@@ -288,7 +317,7 @@ function ClienteDashboard() {
         variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
       };
     });
-  }, [todasRows]);
+  }, [rowsFechadas]);
 
   const chartData = rowsFiltradas.map(r => ({ mes: labelMes(r.chave), Faturamento: r.faturamento, Litros: r.litros }));
   const primeiroPeriodo = todasRows && todasRows.length ? todasRows[0].chave : "";
@@ -331,9 +360,15 @@ function ClienteDashboard() {
 
       {clienteSel && todasRows && todasRows.length > 0 && (
         <>
-          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 14 }}>
+          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 8 }}>
             {clienteSel}
           </h2>
+
+          {emAndamento && (
+            <div style={{ color: "#888", fontSize: 12, marginBottom: 14, background: "#1D1D1B", border: "1px dashed #444", borderRadius: 6, padding: "8px 12px", display: "inline-block" }}>
+              ⏳ {labelMes(emAndamento.chave)} ainda está em andamento (mês não fechou): {fmtMoeda(emAndamento.faturamento)} · {fmtLitros(emAndamento.litros)} até o momento — os cálculos de média e crescimento abaixo usam só meses já fechados, pra não distorcer a comparação.
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
@@ -343,6 +378,14 @@ function ClienteDashboard() {
             <MonthPicker periodosDisponiveis={todasRows.map(r => r.chave)} valor={fim} onSelecionar={setFim} placeholder="Fim" />
             <button onClick={() => setFim(ultimoPeriodo)} style={chipBtnStyle}>Até hoje</button>
           </div>
+
+          <Section title="Preço médio por litro" icon={<Droplets size={18} color="#C69700" />}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <StatCard label="Últimos 3 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos3, "faturamento"), soma(ultimos3, "litros")))} icon={<Droplets size={14} />} />
+              <StatCard label="Últimos 6 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos6, "faturamento"), soma(ultimos6, "litros")))} icon={<Droplets size={14} />} />
+              <StatCard label="Últimos 12 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros")))} icon={<Droplets size={14} />} />
+            </div>
+          </Section>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -707,6 +750,10 @@ function ComparacaoTab() {
   const compMedia3Fat = pronto ? calcularVariacao(media3FatA, media3FatB) : null;
   const compMedia3Lit = pronto ? calcularVariacao(media3LitA, media3LitB) : null;
 
+  const precoLitroA = precoMedioLitro(totFatA, totLitA);
+  const precoLitroB = precoMedioLitro(totFatB, totLitB);
+  const compPrecoLitro = (precoLitroA != null && precoLitroB != null) ? calcularVariacao(precoLitroA, precoLitroB) : null;
+
   function rotuloCompactoMoeda(v) {
     if (v == null) return "";
     if (Math.abs(v) >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
@@ -769,6 +816,7 @@ function ComparacaoTab() {
               <CardComparativo titulo="Litros · Média 3 meses" valorA={media3LitA} valorB={media3LitB} variacao={compMedia3Lit} formatador={fmtLitros} icon={<Droplets size={13} />} />
               <CardComparativo titulo="Litros · Média do período" valorA={mediaLitA} valorB={mediaLitB} variacao={compMediaLit} formatador={fmtLitros} icon={<Droplets size={13} />} />
               <CardComparativo titulo="Litros · Total do período" valorA={totLitA} valorB={totLitB} variacao={compTotalLit} formatador={fmtLitros} icon={<Droplets size={13} />} />
+              <CardComparativo titulo="Preço médio por litro" valorA={precoLitroA} valorB={precoLitroB} variacao={compPrecoLitro} formatador={fmtPrecoLitro} icon={<Droplets size={13} />} />
             </div>
           </Section>
 
@@ -886,7 +934,8 @@ function rotuloCompactoGeral(v, unidade) {
   return Math.abs(v) >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : fmtMoeda(v);
 }
 
-function calcularMetricasCliente(rows) {
+function calcularMetricasCliente(rowsBrutas) {
+  const { fechados: rows, emAndamento } = separarMesEmAndamento(rowsBrutas);
   const n = rows.length;
   const atual = rows[n - 1];
   const anterior = rows[n - 2];
@@ -895,38 +944,47 @@ function calcularMetricasCliente(rows) {
   const j6 = rows.slice(-6), j6Prev = rows.slice(-12, -6);
   const j12 = rows.slice(-12), j12Prev = rows.slice(-24, -12);
 
+  function janela(rowsJanela, rowsAnteriores) {
+    const fat = soma(rowsJanela, "faturamento");
+    const lit = soma(rowsJanela, "litros");
+    return {
+      fat, lit, precoLitro: precoMedioLitro(fat, lit),
+      varFat: rowsAnteriores.length ? calcularVariacao(fat, soma(rowsAnteriores, "faturamento")) : null,
+      varLit: rowsAnteriores.length ? calcularVariacao(lit, soma(rowsAnteriores, "litros")) : null,
+      periodoTexto: rowsJanela.length ? periodoTexto(rowsJanela) : "",
+      periodoAnteriorTexto: rowsAnteriores.length ? periodoTexto(rowsAnteriores) : "",
+    };
+  }
+
   return {
-    atual: {
-      fat: atual?.faturamento ?? 0, lit: atual?.litros ?? 0,
+    ultimoMesFechado: atual ? {
+      fat: atual.faturamento, lit: atual.litros, precoLitro: precoMedioLitro(atual.faturamento, atual.litros),
       varFat: anterior ? calcularVariacao(atual.faturamento, anterior.faturamento) : null,
       varLit: anterior ? calcularVariacao(atual.litros, anterior.litros) : null,
-    },
-    j3: {
-      fat: soma(j3, "faturamento"), lit: soma(j3, "litros"),
-      varFat: j3Prev.length ? calcularVariacao(soma(j3, "faturamento"), soma(j3Prev, "faturamento")) : null,
-      varLit: j3Prev.length ? calcularVariacao(soma(j3, "litros"), soma(j3Prev, "litros")) : null,
-    },
-    j6: {
-      fat: soma(j6, "faturamento"), lit: soma(j6, "litros"),
-      varFat: j6Prev.length ? calcularVariacao(soma(j6, "faturamento"), soma(j6Prev, "faturamento")) : null,
-      varLit: j6Prev.length ? calcularVariacao(soma(j6, "litros"), soma(j6Prev, "litros")) : null,
-    },
-    j12: {
-      fat: soma(j12, "faturamento"), lit: soma(j12, "litros"),
-      varFat: j12Prev.length ? calcularVariacao(soma(j12, "faturamento"), soma(j12Prev, "faturamento")) : null,
-      varLit: j12Prev.length ? calcularVariacao(soma(j12, "litros"), soma(j12Prev, "litros")) : null,
-    },
+      mesTexto: labelMes(atual.chave),
+    } : null,
+    emAndamento: emAndamento ? {
+      fat: emAndamento.faturamento, lit: emAndamento.litros, precoLitro: precoMedioLitro(emAndamento.faturamento, emAndamento.litros),
+      mesTexto: labelMes(emAndamento.chave),
+    } : null,
+    j3: janela(j3, j3Prev),
+    j6: janela(j6, j6Prev),
+    j12: janela(j12, j12Prev),
   };
 }
 
-function JanelaMetrica({ label, fat, lit, varFat, varLit }) {
+function JanelaMetrica({ label, fat, lit, precoLitro, varFat, varLit, periodoTexto: pTexto, periodoAnteriorTexto }) {
   return (
-    <div style={{ minWidth: 165, flex: "1 1 165px" }}>
-      <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>{label}</div>
+    <div style={{ minWidth: 175, flex: "1 1 175px" }}>
+      <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>
+        {label}{pTexto && <span style={{ textTransform: "none", color: "#555" }}> ({pTexto})</span>}
+      </div>
+      <div style={{ color: "#666", fontSize: 9, marginBottom: 2 }}>Total no período</div>
       <div style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>{fmtMoeda(fat)}</div>
-      <BadgeTendencia variacao={varFat} formatador={fmtMoeda} />
+      <BadgeTendencia variacao={varFat} formatador={fmtMoeda} periodoTexto={periodoAnteriorTexto ? `vs ${periodoAnteriorTexto}` : ""} />
       <div style={{ color: "#ddd", fontSize: 13, fontWeight: 700, marginTop: 6 }}>{fmtLitros(lit)}</div>
-      <BadgeTendencia variacao={varLit} formatador={fmtLitros} />
+      <BadgeTendencia variacao={varLit} formatador={fmtLitros} periodoTexto={periodoAnteriorTexto ? `vs ${periodoAnteriorTexto}` : ""} />
+      <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginTop: 6 }}>{fmtPrecoLitro(precoLitro)}</div>
     </div>
   );
 }
@@ -934,14 +992,26 @@ function JanelaMetrica({ label, fat, lit, varFat, varLit }) {
 function CardClienteDashboard({ posicao, nome, metricas }) {
   return (
     <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 16, marginBottom: 10 }}>
-      <div style={{ color: "#C69700", fontWeight: 800, fontSize: 14, marginBottom: 10 }}>
+      <div style={{ color: "#C69700", fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
         #{posicao} · {nome}
       </div>
+      {metricas.emAndamento && (
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 10, background: "#141412", border: "1px dashed #444", borderRadius: 6, padding: "5px 8px", display: "inline-block" }}>
+          {metricas.emAndamento.mesTexto} em andamento (mês ainda não fechou): {fmtMoeda(metricas.emAndamento.fat)} · {fmtLitros(metricas.emAndamento.lit)} · {fmtPrecoLitro(metricas.emAndamento.precoLitro)} — parcial, não comparado
+        </div>
+      )}
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-        <JanelaMetrica label="Mês atual" fat={metricas.atual.fat} lit={metricas.atual.lit} varFat={metricas.atual.varFat} varLit={metricas.atual.varLit} />
-        <JanelaMetrica label="Últimos 3 meses" fat={metricas.j3.fat} lit={metricas.j3.lit} varFat={metricas.j3.varFat} varLit={metricas.j3.varLit} />
-        <JanelaMetrica label="Últimos 6 meses" fat={metricas.j6.fat} lit={metricas.j6.lit} varFat={metricas.j6.varFat} varLit={metricas.j6.varLit} />
-        <JanelaMetrica label="Últimos 12 meses" fat={metricas.j12.fat} lit={metricas.j12.lit} varFat={metricas.j12.varFat} varLit={metricas.j12.varLit} />
+        {metricas.ultimoMesFechado && (
+          <JanelaMetrica label={`Último mês fechado`} periodoTexto={metricas.ultimoMesFechado.mesTexto}
+            fat={metricas.ultimoMesFechado.fat} lit={metricas.ultimoMesFechado.lit} precoLitro={metricas.ultimoMesFechado.precoLitro}
+            varFat={metricas.ultimoMesFechado.varFat} varLit={metricas.ultimoMesFechado.varLit} periodoAnteriorTexto="mês anterior" />
+        )}
+        <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.j3.periodoTexto} periodoAnteriorTexto={metricas.j3.periodoAnteriorTexto}
+          fat={metricas.j3.fat} lit={metricas.j3.lit} precoLitro={metricas.j3.precoLitro} varFat={metricas.j3.varFat} varLit={metricas.j3.varLit} />
+        <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.j6.periodoTexto} periodoAnteriorTexto={metricas.j6.periodoAnteriorTexto}
+          fat={metricas.j6.fat} lit={metricas.j6.lit} precoLitro={metricas.j6.precoLitro} varFat={metricas.j6.varFat} varLit={metricas.j6.varLit} />
+        <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.j12.periodoTexto} periodoAnteriorTexto={metricas.j12.periodoAnteriorTexto}
+          fat={metricas.j12.fat} lit={metricas.j12.lit} precoLitro={metricas.j12.precoLitro} varFat={metricas.j12.varFat} varLit={metricas.j12.varLit} />
       </div>
     </div>
   );
@@ -985,6 +1055,7 @@ function DashboardTab() {
   const { dados, nomes, grupos, clientesPorGrupo, periodos } = useData();
   const [gruposSel, setGruposSel] = useState([]);
   const [todos, setTodos] = useState(true);
+  const [buscaCliente, setBuscaCliente] = useState("");
 
   function toggleGrupoFiltro(g) {
     setTodos(false);
@@ -996,8 +1067,13 @@ function DashboardTab() {
   const clientesComMetricas = useMemo(() => {
     return clientesFiltrados
       .map(nome => ({ nome, metricas: calcularMetricasCliente(dados[nome] || []) }))
-      .sort((a, b) => b.metricas.j12.fat - a.metricas.j12.fat);
+      .sort((a, b) => b.metricas.j12.fat - a.metricas.j12.fat)
+      .map((c, idx) => ({ ...c, posicao: idx + 1 }));
   }, [clientesFiltrados, dados]);
+
+  const clientesExibidos = buscaCliente.trim()
+    ? clientesComMetricas.filter(c => c.nome.toLowerCase().includes(buscaCliente.toLowerCase()))
+    : clientesComMetricas;
 
   const linhasHeatmap = useMemo(() => {
     const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
@@ -1025,7 +1101,7 @@ function DashboardTab() {
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Layers size={13} /> Filtrar por grupo:
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
             <input type="checkbox" checked={todos} onChange={() => { setTodos(true); setGruposSel([]); }} />
             Todos ({nomes.length})
@@ -1037,23 +1113,33 @@ function DashboardTab() {
             </label>
           ))}
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+          <Search size={14} color="#C69700" />
+          <input placeholder="Buscar um cliente específico dentro do ranking..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+        </div>
       </div>
 
       <Section title="Comparação mês a mês por grupo · Faturamento" icon={<AlertTriangle size={16} color="#C69700" />}>
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 crescimento vs mês anterior · 🔴 queda vs mês anterior · 🟡 estável (±1%)
+          🟢 crescimento vs mês anterior · 🔴 queda vs mês anterior · 🟡 estável (±1%). A última coluna pode ser um mês ainda em andamento — compare com cautela.
         </div>
         <TabelaHeatmapGrupos linhas={linhasHeatmap} />
       </Section>
 
-      <Section title={`Melhores Clientes (${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
+      <Section title={`Melhores Clientes (${clientesExibidos.length} de ${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
         {clientesComMetricas.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
             Selecione ao menos um grupo, ou marque "Todos".
           </div>
         )}
-        {clientesComMetricas.map((c, idx) => (
-          <CardClienteDashboard key={c.nome} posicao={idx + 1} nome={c.nome} metricas={c.metricas} />
+        {clientesComMetricas.length > 0 && clientesExibidos.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
+            Nenhum cliente encontrado com esse nome no filtro atual.
+          </div>
+        )}
+        {clientesExibidos.map(c => (
+          <CardClienteDashboard key={c.nome} posicao={c.posicao} nome={c.nome} metricas={c.metricas} />
         ))}
       </Section>
     </div>
