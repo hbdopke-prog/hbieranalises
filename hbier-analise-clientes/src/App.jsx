@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, createContext, useContext } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, LineChart, Line,
+  ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine,
 } from "recharts";
 import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon } from "lucide-react";
 
@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v1.4";
+const APP_VERSION = "v1.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -279,13 +279,9 @@ function ClienteDashboard() {
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
             <button onClick={() => setInicio(primeiroPeriodo)} style={chipBtnStyle}>Desde o início</button>
-            <select value={inicio} onChange={e => setInicio(e.target.value)} style={selectStyle}>
-              {periodos.filter(p => todasRows.some(r => r.chave === p)).map(p => <option key={p} value={p}>{labelMes(p)}</option>)}
-            </select>
+            <MonthPicker periodosDisponiveis={todasRows.map(r => r.chave)} valor={inicio} onSelecionar={setInicio} placeholder="Início" />
             <span style={{ color: "#666" }}>até</span>
-            <select value={fim} onChange={e => setFim(e.target.value)} style={selectStyle}>
-              {periodos.filter(p => todasRows.some(r => r.chave === p)).map(p => <option key={p} value={p}>{labelMes(p)}</option>)}
-            </select>
+            <MonthPicker periodosDisponiveis={todasRows.map(r => r.chave)} valor={fim} onSelecionar={setFim} placeholder="Fim" />
             <button onClick={() => setFim(ultimoPeriodo)} style={chipBtnStyle}>Até hoje</button>
           </div>
 
@@ -332,34 +328,108 @@ function ClienteDashboard() {
   );
 }
 
-function SeletorPeriodo({ ativo, inicio, fim, onInicio, onFim }) {
-  const { periodos } = useData();
+const navBtnStyle = {
+  background: "transparent", border: "1px solid #444", color: "#C69700",
+  borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 14, lineHeight: 1,
+};
+
+// Seletor de mês/ano em formato de "calendário" (navega por ano, clica no mês)
+function MonthPicker({ periodosDisponiveis, valor, onSelecionar, disabled, placeholder }) {
+  const [aberto, setAberto] = useState(false);
+  const anoPadrao = valor
+    ? parseInt(valor.split("-")[0], 10)
+    : (periodosDisponiveis.length ? parseInt(periodosDisponiveis[periodosDisponiveis.length - 1].split("-")[0], 10) : new Date().getFullYear());
+  const [anoVisivel, setAnoVisivel] = useState(anoPadrao);
+
+  const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  function chaveDoMes(idx) {
+    return `${anoVisivel}-${String(idx + 1).padStart(2, "0")}`;
+  }
+
   return (
-    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-      <select value={inicio} onChange={e => onInicio(e.target.value)} style={selectStyle} disabled={!ativo}>
-        <option value="">Início</option>
-        {periodos.map(c => <option key={c} value={c}>{labelMes(c)}</option>)}
-      </select>
-      <select value={fim} onChange={e => onFim(e.target.value)} style={selectStyle} disabled={!ativo}>
-        <option value="">Fim</option>
-        {periodos.map(c => <option key={c} value={c}>{labelMes(c)}</option>)}
-      </select>
+    <div style={{ position: "relative", flex: 1 }}>
+      <button type="button" disabled={disabled} onClick={() => setAberto(a => !a)} style={{
+        width: "100%", textAlign: "left", background: "#141412", border: "1px solid #444",
+        borderRadius: 6, padding: "8px 10px", fontSize: 13, cursor: disabled ? "not-allowed" : "pointer",
+        color: disabled ? "#555" : (valor ? "#fff" : "#888"),
+      }}>
+        {valor ? labelMes(valor) : (placeholder || "Selecionar")}
+      </button>
+
+      {aberto && !disabled && (
+        <div style={{
+          position: "absolute", zIndex: 30, top: "100%", left: 0, marginTop: 4,
+          background: "#1D1D1B", border: "1px solid #444", borderRadius: 8, padding: 10, width: 220,
+          boxShadow: "0 8px 20px rgba(0,0,0,0.4)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <button type="button" onClick={() => setAnoVisivel(a => a - 1)} style={navBtnStyle}>‹</button>
+            <span style={{ color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: 1 }}>{anoVisivel}</span>
+            <button type="button" onClick={() => setAnoVisivel(a => a + 1)} style={navBtnStyle}>›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {MESES_ABREV.map((m, idx) => {
+              const chave = chaveDoMes(idx);
+              const disponivel = periodosDisponiveis.includes(chave);
+              const selecionado = chave === valor;
+              return (
+                <button key={m} type="button" disabled={!disponivel}
+                  onClick={() => { onSelecionar(chave); setAberto(false); }}
+                  style={{
+                    padding: "6px 0", fontSize: 12, borderRadius: 6,
+                    cursor: disponivel ? "pointer" : "not-allowed",
+                    background: selecionado ? "#C69700" : "transparent",
+                    color: !disponivel ? "#444" : (selecionado ? "#141412" : "#ddd"),
+                    border: "1px solid " + (selecionado ? "#C69700" : "#333"), fontWeight: selecionado ? 700 : 400,
+                  }}>
+                  {m}
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" onClick={() => setAberto(false)} style={{
+            marginTop: 8, width: "100%", background: "transparent", border: "none", color: "#666", fontSize: 11, cursor: "pointer",
+          }}>
+            Fechar
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecionados, grupoSel, setGrupoSel, inicio, setInicio, fim, setFim }) {
+function SeletorPeriodo({ ativo, inicio, fim, onInicio, onFim }) {
+  const { periodos } = useData();
+  return (
+    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+      <MonthPicker periodosDisponiveis={periodos} valor={inicio} onSelecionar={onInicio} disabled={!ativo} placeholder="Início" />
+      <MonthPicker periodosDisponiveis={periodos} valor={fim} onSelecionar={onFim} disabled={!ativo} placeholder="Fim" />
+    </div>
+  );
+}
+
+function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecionados, gruposSel, setGruposSel, inicio, setInicio, fim, setFim }) {
   const { nomes, grupos, clientesPorGrupo } = useData();
+  const [buscaCliente, setBuscaCliente] = useState("");
 
   function toggleCliente(nome) {
     setSelecionados(prev => prev.includes(nome) ? prev.filter(n => n !== nome) : [...prev, nome]);
   }
-  function selecionarGrupo(g) {
-    setGrupoSel(g);
-    setSelecionados(g ? clientesPorGrupo[g] : []);
+
+  function toggleGrupo(g) {
+    setGruposSel(prev => {
+      const novo = prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g];
+      const uniao = [...new Set(novo.flatMap(gr => clientesPorGrupo[gr] || []))];
+      setSelecionados(uniao);
+      return novo;
+    });
   }
 
   const ativo = selecionados.length > 0;
+  const nomesFiltrados = buscaCliente.trim()
+    ? nomes.filter(n => n.toLowerCase().includes(buscaCliente.toLowerCase()))
+    : nomes;
 
   return (
     <div style={{ flex: 1, minWidth: 280, background: "#1D1D1B", borderRadius: 10, padding: 16, border: `1px solid ${cor}` }}>
@@ -368,7 +438,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-        <button onClick={() => { setModo("clientes"); setGrupoSel(""); setSelecionados([]); }} style={modoBtnStyle(modo === "clientes", cor)}>
+        <button onClick={() => { setModo("clientes"); setGruposSel([]); setSelecionados([]); }} style={modoBtnStyle(modo === "clientes", cor)}>
           <Users size={13} /> Clientes
         </button>
         <button onClick={() => { setModo("grupo"); setSelecionados([]); }} style={modoBtnStyle(modo === "grupo", cor)}>
@@ -377,21 +447,31 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
       </div>
 
       {modo === "grupo" && (
-        <select value={grupoSel} onChange={e => selecionarGrupo(e.target.value)} style={selectStyle}>
-          <option value="">Selecionar grupo</option>
-          {grupos.map(g => <option key={g} value={g}>{g} ({clientesPorGrupo[g].length})</option>)}
-        </select>
-      )}
-
-      {modo === "clientes" && (
         <div style={{ maxHeight: 140, overflowY: "auto", border: "1px solid #333", borderRadius: 6, padding: "6px 8px" }}>
-          {nomes.map(nome => (
-            <label key={nome} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: "#fff", cursor: "pointer" }}>
-              <input type="checkbox" checked={selecionados.includes(nome)} onChange={() => toggleCliente(nome)} />
-              {nome}
+          {grupos.length === 0 && <div style={{ color: "#666", fontSize: 12, padding: "4px 0" }}>Nenhum grupo cadastrado ainda.</div>}
+          {grupos.map(g => (
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupo(g)} />
+              {g} ({clientesPorGrupo[g].length})
             </label>
           ))}
         </div>
+      )}
+
+      {modo === "clientes" && (
+        <>
+          <input placeholder="Buscar cliente..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
+            style={{ ...selectStyle, marginBottom: 6, width: "100%", boxSizing: "border-box" }} />
+          <div style={{ maxHeight: 140, overflowY: "auto", border: "1px solid #333", borderRadius: 6, padding: "6px 8px" }}>
+            {nomesFiltrados.map(nome => (
+              <label key={nome} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: "#fff", cursor: "pointer" }}>
+                <input type="checkbox" checked={selecionados.includes(nome)} onChange={() => toggleCliente(nome)} />
+                {nome}
+              </label>
+            ))}
+            {nomesFiltrados.length === 0 && <div style={{ color: "#666", fontSize: 12, padding: "4px 0" }}>Nenhum cliente encontrado.</div>}
+          </div>
+        </>
       )}
 
       <div style={{ color: "#888", fontSize: 12, marginTop: 8 }}>
@@ -412,17 +492,23 @@ function modoBtnStyle(ativo, cor) {
   };
 }
 
+function mediaSimples(valores) {
+  const validos = valores.filter(v => v != null);
+  if (!validos.length) return 0;
+  return validos.reduce((s, v) => s + v, 0) / validos.length;
+}
+
 function ComparacaoTab() {
   const { dados, periodos } = useData();
   const [modoA, setModoA] = useState("clientes");
   const [selA, setSelA] = useState([]);
-  const [grupoA, setGrupoA] = useState("");
+  const [gruposA, setGruposA] = useState([]);
   const [inicioA, setInicioA] = useState("");
   const [fimA, setFimA] = useState("");
 
   const [modoB, setModoB] = useState("clientes");
   const [selB, setSelB] = useState([]);
-  const [grupoB, setGrupoB] = useState("");
+  const [gruposB, setGruposB] = useState([]);
   const [inicioB, setInicioB] = useState("");
   const [fimB, setFimB] = useState("");
 
@@ -445,14 +531,18 @@ function ComparacaoTab() {
   const rowsA = extrairPeriodoAgregado(selA, inicioA, fimA);
   const rowsB = extrairPeriodoAgregado(selB, inicioB, fimB);
 
-  const labelA = modoA === "grupo" && grupoA ? `Grupo: ${grupoA}` : (selA.length > 1 ? `${selA.length} clientes (A)` : (selA[0] || "A"));
-  const labelB = modoB === "grupo" && grupoB ? `Grupo: ${grupoB}` : (selB.length > 1 ? `${selB.length} clientes (B)` : (selB[0] || "B"));
+  const labelA = modoA === "grupo" && gruposA.length ? `Grupo: ${gruposA.join(" + ")}` : (selA.length > 1 ? `${selA.length} clientes (A)` : (selA[0] || "A"));
+  const labelB = modoB === "grupo" && gruposB.length ? `Grupo: ${gruposB.join(" + ")}` : (selB.length > 1 ? `${selB.length} clientes (B)` : (selB[0] || "B"));
 
+  // rótulo real de cada ponto do gráfico (data de A e/ou de B, já que os períodos podem ser de anos diferentes)
   const maxLen = Math.max(rowsA.length, rowsB.length);
   const chartFat = [], chartLit = [];
   for (let i = 0; i < maxLen; i++) {
-    chartFat.push({ periodo: `M${i + 1}`, [`${labelA} - Faturamento`]: rowsA[i]?.faturamento ?? null, [`${labelB} - Faturamento`]: rowsB[i]?.faturamento ?? null });
-    chartLit.push({ periodo: `M${i + 1}`, [`${labelA} - Litros`]: rowsA[i]?.litros ?? null, [`${labelB} - Litros`]: rowsB[i]?.litros ?? null });
+    const dataA = rowsA[i] ? labelMes(rowsA[i].chave) : null;
+    const dataB = rowsB[i] ? labelMes(rowsB[i].chave) : null;
+    const periodo = dataA && dataB ? (dataA === dataB ? dataA : `${dataA} / ${dataB}`) : (dataA || dataB || `M${i + 1}`);
+    chartFat.push({ periodo, faturamentoA: rowsA[i]?.faturamento ?? null, faturamentoB: rowsB[i]?.faturamento ?? null });
+    chartLit.push({ periodo, litrosA: rowsA[i]?.litros ?? null, litrosB: rowsB[i]?.litros ?? null });
   }
 
   const totFatA = rowsA.reduce((s,r)=>s+r.faturamento,0);
@@ -460,22 +550,38 @@ function ComparacaoTab() {
   const totLitA = rowsA.reduce((s,r)=>s+r.litros,0);
   const totLitB = rowsB.reduce((s,r)=>s+r.litros,0);
 
+  const mediaFatA = mediaSimples(rowsA.map(r => r.faturamento));
+  const mediaFatB = mediaSimples(rowsB.map(r => r.faturamento));
+  const mediaLitA = mediaSimples(rowsA.map(r => r.litros));
+  const mediaLitB = mediaSimples(rowsB.map(r => r.litros));
+
   const pronto = rowsA.length > 0 && rowsB.length > 0;
+
+  function rotuloCompactoMoeda(v) {
+    if (v == null) return "";
+    if (Math.abs(v) >= 1000) return `R$${(v / 1000).toFixed(1)}k`;
+    return fmtMoeda(v);
+  }
+  function rotuloCompactoLitros(v) {
+    if (v == null) return "";
+    if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k L`;
+    return `${Math.round(v)} L`;
+  }
 
   return (
     <div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
         <ColunaComparacao titulo="Cenário A" cor="#02601D"
           modo={modoA} setModo={setModoA} selecionados={selA} setSelecionados={setSelA}
-          grupoSel={grupoA} setGrupoSel={setGrupoA} inicio={inicioA} setInicio={setInicioA} fim={fimA} setFim={setFimA} />
+          gruposSel={gruposA} setGruposSel={setGruposA} inicio={inicioA} setInicio={setInicioA} fim={fimA} setFim={setFimA} />
         <ColunaComparacao titulo="Cenário B" cor="#C69700"
           modo={modoB} setModo={setModoB} selecionados={selB} setSelecionados={setSelB}
-          grupoSel={grupoB} setGrupoSel={setGrupoB} inicio={inicioB} setInicio={setInicioB} fim={fimB} setFim={setFimB} />
+          gruposSel={gruposB} setGruposSel={setGruposB} inicio={inicioB} setInicio={setInicioB} fim={fimB} setFim={setFimB} />
       </div>
 
       {!pronto && (
         <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
-          Selecione cliente(s) ou grupo, e período (início/fim), para os dois cenários.
+          Selecione cliente(s) ou grupo(s), e período (início/fim), para os dois cenários.
         </div>
       )}
 
@@ -489,29 +595,41 @@ function ComparacaoTab() {
           </div>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={chartFat}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={12} />
+                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey={`${labelA} - Faturamento`} fill="#02601D" radius={[4,4,0,0]} />
-                <Bar dataKey={`${labelB} - Faturamento`} fill="#C69700" radius={[4,4,0,0]} />
+                <ReferenceLine y={mediaFatA} stroke="#02601D" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 10 }} />
+                <ReferenceLine y={mediaFatB} stroke="#C69700" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#C69700", fontSize: 10 }} />
+                <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
+                  <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                </Bar>
+                <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
+                  <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </Section>
 
           <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={chartLit}>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={12} />
+                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey={`${labelA} - Litros`} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey={`${labelB} - Litros`} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }} />
+                <ReferenceLine y={mediaLitA} stroke="#02601D" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 10 }} />
+                <ReferenceLine y={mediaLitB} stroke="#C69700" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#C69700", fontSize: 10 }} />
+                <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
+                  <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                </Line>
+                <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
+                  <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
+                </Line>
               </LineChart>
             </ResponsiveContainer>
           </Section>
