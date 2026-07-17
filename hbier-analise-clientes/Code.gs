@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v1.5
+ * Versão: v1.6
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -23,15 +23,18 @@
  * procura automaticamente a linha onde a coluna A contém "código" e
  * a coluna B contém "cliente".
  *
- * GRUPO DE CLIENTES (opcional):
- * Crie uma aba chamada "clientes" (cadastro) com 2 colunas:
- *   cliente | grupo
- * onde "cliente" tem que ser EXATAMENTE igual ao texto que aparece na
- * coluna "Cliente - Razão Social/Nome" das abas faturamento/litros
- * (copie e cole de lá pra garantir o match certo), e "grupo" é o
- * segmento dele (ex: Mini Mercado, Rede de Mercado, Bar/Restaurante...).
- * Se essa aba não existir, o app funciona normalmente, só sem grupo
- * (a comparação por "Grupo" fica vazia até essa aba ser criada).
+ * GRUPO DE CLIENTES (opcional, 100% automático):
+ * O script varre TODAS as abas da planilha (menos faturamento/litros)
+ * procurando uma que tenha uma coluna de nome de cliente (com cabeçalho
+ * "Cliente", "Razão Social" ou "Nome") e uma coluna de grupo (cabeçalho
+ * "Grupo", "Categoria" ou "Segmento") - não importa o nome da aba nem
+ * a ordem das colunas. Se sua planilha de cadastro de clientes já tem
+ * essas colunas (com qualquer um desses nomes), o app encontra sozinho.
+ * O nome do cliente é comparado sem o código/numeração do início (ex:
+ * "1 MILLER..." e "MILLER..." batem), então não precisa ficar igual
+ * caractere por caractere ao relatório de faturamento/litros.
+ * Se nenhuma aba assim for encontrada, o app funciona normalmente, só
+ * sem grupo (a comparação por "Grupo" fica vazia).
  *
  * DEPLOY:
  *   1. Extensões > Apps Script na planilha do Google Sheets
@@ -44,7 +47,17 @@
 
 const SHEET_FATURAMENTO = "faturamento";
 const SHEET_LITROS = "litros";
-const SHEET_CLIENTES = "clientes";
+
+// Remove prefixos numéricos/código do início do nome do cliente (ex: "1 MILLER..." -> "MILLER...",
+// "16.103.231 GIOVANE BRANDT" -> "GIOVANE BRANDT") e normaliza pra comparação (maiúsculo, espaços únicos).
+function normalizarCliente(nome) {
+  return String(nome || "")
+    .trim()
+    .replace(/^[\d.,\-\s]+/, "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
 
 function doGet(e) {
   try {
@@ -63,28 +76,42 @@ function doGet(e) {
   }
 }
 
-// Lê a aba opcional de cadastro cliente -> grupo. Se não existir, devolve {} (sem erro).
+// Procura em TODAS as abas (menos faturamento/litros) por uma que tenha uma coluna de
+// nome de cliente ("Cliente", "Razão Social", "Nome"...) e uma de grupo ("Grupo", "Categoria",
+// "Segmento"...). Não depende do nome da aba nem do nome exato das colunas.
+// Se não encontrar nenhuma, devolve {} (o app funciona normalmente, só sem grupo).
 function lerCadastroClientes(ss) {
-  const sheet = ss.getSheetByName(SHEET_CLIENTES);
-  if (!sheet) return {};
+  const sheets = ss.getSheets();
+  const conhecidas = [SHEET_FATURAMENTO.toLowerCase(), SHEET_LITROS.toLowerCase()];
 
-  const valores = sheet.getDataRange().getValues();
-  if (valores.length < 2) return {};
+  for (let s = 0; s < sheets.length; s++) {
+    const sheet = sheets[s];
+    if (conhecidas.indexOf(sheet.getName().trim().toLowerCase()) !== -1) continue;
 
-  const cabecalho = valores[0].map(function (c) {
-    return String(c).trim().toLowerCase();
-  });
-  const idxCliente = cabecalho.indexOf("cliente");
-  const idxGrupo = cabecalho.indexOf("grupo");
-  if (idxCliente === -1 || idxGrupo === -1) return {};
+    const valores = sheet.getDataRange().getValues();
+    const limiteLinhas = Math.min(valores.length, 15);
 
-  const mapa = {};
-  for (let i = 1; i < valores.length; i++) {
-    const cliente = String(valores[i][idxCliente] || "").trim();
-    const grupo = String(valores[i][idxGrupo] || "").trim();
-    if (cliente && grupo) mapa[cliente] = grupo;
+    for (let i = 0; i < limiteLinhas; i++) {
+      let idxNome = -1, idxGrupo = -1;
+      valores[i].forEach(function (celula, c) {
+        const texto = String(celula || "").trim().toLowerCase();
+        if (idxNome === -1 && /(raz.o social|cliente|nome)/.test(texto)) idxNome = c;
+        if (idxGrupo === -1 && /(categoria|grupo|segmento)/.test(texto)) idxGrupo = c;
+      });
+
+      if (idxNome !== -1 && idxGrupo !== -1) {
+        const mapa = {};
+        for (let r = i + 1; r < valores.length; r++) {
+          const nome = String(valores[r][idxNome] || "").trim();
+          const grupo = String(valores[r][idxGrupo] || "").trim();
+          if (nome && grupo) mapa[normalizarCliente(nome)] = grupo;
+        }
+        return mapa;
+      }
+    }
   }
-  return mapa;
+
+  return {};
 }
 
 // Lê o relatório "mês a mês por clientes" (formato largo) de uma aba
@@ -180,7 +207,7 @@ function combinar(faturamentoRows, litrosRows, grupoPorCliente) {
   faturamentoRows.forEach(function (r) {
     const chave = chaveDe(r);
     if (!mapa[chave]) {
-      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[r.cliente] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
+      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[normalizarCliente(r.cliente)] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].faturamento = r.valor;
   });
@@ -188,7 +215,7 @@ function combinar(faturamentoRows, litrosRows, grupoPorCliente) {
   litrosRows.forEach(function (r) {
     const chave = chaveDe(r);
     if (!mapa[chave]) {
-      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[r.cliente] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
+      mapa[chave] = { cliente: r.cliente, grupo: grupoPorCliente[normalizarCliente(r.cliente)] || "", ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].litros = r.valor;
   });
