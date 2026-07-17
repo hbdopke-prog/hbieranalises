@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v1.9";
+const APP_VERSION = "v2.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -151,6 +151,58 @@ function StatCard({ label, value, icon, badge }) {
         {value}
       </div>
       {badge}
+    </div>
+  );
+}
+
+// Card completo de janela (ex: "Últimos 3 meses"): mostra total e média do período atual,
+// o badge de crescimento/queda, e — pra deixar claro contra o que está comparando — o total
+// e a média do período anterior também.
+function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, formatador }) {
+  const totalAtual = soma(rowsAtual, campo);
+  const mediaAtual = media(rowsAtual, campo);
+  const totalAnterior = rowsAnterior.length ? soma(rowsAnterior, campo) : null;
+  const mediaAnterior = rowsAnterior.length ? media(rowsAnterior, campo) : null;
+  const variacao = rowsAnterior.length ? calcularVariacao(totalAtual, totalAnterior) : null;
+
+  return (
+    <div style={{
+      background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
+      flex: "1 1 280px", minWidth: 280, border: "1px solid #33332f",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
+        {icon}{titulo}
+        {rowsAtual.length > 0 && <span style={{ textTransform: "none", color: "#555", fontWeight: 400 }}>({periodoTexto(rowsAtual)})</span>}
+      </div>
+
+      <div style={{ display: "flex", gap: 24, marginBottom: 8 }}>
+        <div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Total</div>
+          <div style={{ color: "#fff", fontSize: 19, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(totalAtual)}</div>
+        </div>
+        <div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Média/mês</div>
+          <div style={{ color: "#ddd", fontSize: 19, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(mediaAtual)}</div>
+        </div>
+      </div>
+
+      <BadgeTendencia variacao={variacao} formatador={formatador} periodoTexto="" />
+
+      {rowsAnterior.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2a2a28" }}>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 4 }}>Período anterior comparado ({periodoTexto(rowsAnterior)})</div>
+          <div style={{ display: "flex", gap: 24 }}>
+            <div>
+              <div style={{ color: "#555", fontSize: 9 }}>Total</div>
+              <div style={{ color: "#aaa", fontSize: 14, fontWeight: 700 }}>{formatador(totalAnterior)}</div>
+            </div>
+            <div>
+              <div style={{ color: "#555", fontSize: 9 }}>Média/mês</div>
+              <div style={{ color: "#aaa", fontSize: 14, fontWeight: 700 }}>{formatador(mediaAnterior)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -389,10 +441,8 @@ function ClienteDashboard() {
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <StatCard label="Média 3 meses" value={fmtMoeda(media(ultimos3, "faturamento"))} icon={<TrendingUp size={14} />}
-                badge={<BadgeTendencia variacao={variacaoFat3} formatador={fmtMoeda} periodoTexto={anteriores3.length ? `${periodoTexto(ultimos3)} vs ${periodoTexto(anteriores3)}` : ""} />} />
-              <StatCard label="Média 6 meses" value={fmtMoeda(media(ultimos6, "faturamento"))} icon={<TrendingUp size={14} />}
-                badge={<BadgeTendencia variacao={variacaoFat6} formatador={fmtMoeda} periodoTexto={anteriores6.length ? `${periodoTexto(ultimos6)} vs ${periodoTexto(anteriores6)}` : ""} />} />
+              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="faturamento" formatador={fmtMoeda} />
+              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="faturamento" formatador={fmtMoeda} />
               <StatCard label="Média 12 meses" value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
 
@@ -421,10 +471,8 @@ function ClienteDashboard() {
 
           <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <StatCard label="Média 3 meses" value={fmtLitros(media(ultimos3, "litros"))} icon={<Droplets size={14} />}
-                badge={<BadgeTendencia variacao={variacaoLit3} formatador={fmtLitros} periodoTexto={anteriores3.length ? `${periodoTexto(ultimos3)} vs ${periodoTexto(anteriores3)}` : ""} />} />
-              <StatCard label="Média 6 meses" value={fmtLitros(media(ultimos6, "litros"))} icon={<Droplets size={14} />}
-                badge={<BadgeTendencia variacao={variacaoLit6} formatador={fmtLitros} periodoTexto={anteriores6.length ? `${periodoTexto(ultimos6)} vs ${periodoTexto(anteriores6)}` : ""} />} />
+              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="litros" formatador={fmtLitros} />
+              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="litros" formatador={fmtLitros} />
               <StatCard label="Média 12 meses" value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
 
