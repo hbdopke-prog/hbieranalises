@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.1";
+const APP_VERSION = "v3.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -365,14 +365,34 @@ function LoginScreen({ onLogin }) {
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
 
   function tentarEntrar() {
     if (!usuario.trim() || !senha.trim()) {
       setErro("Preencha usuário e senha.");
       return;
     }
+    if (!GAS_URL) {
+      setErro("VITE_GAS_URL não configurada. Defina a URL do Apps Script no arquivo .env.");
+      return;
+    }
     setErro("");
-    onLogin(usuario);
+    setCarregando(true);
+    // Content-Type omitido de propósito: evita o preflight de CORS que o Apps Script não trata bem
+    fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "login", usuario, senha }) })
+      .then(r => r.json())
+      .then(json => {
+        setCarregando(false);
+        if (!json.ok) {
+          setErro(json.erro || "Usuário ou senha inválidos.");
+          return;
+        }
+        onLogin(json.nome || usuario, !!json.admin);
+      })
+      .catch(err => {
+        setCarregando(false);
+        setErro(`Não foi possível validar o login: ${err.message}`);
+      });
   }
   function handleKeyDown(e) {
     if (e.key === "Enter") tentarEntrar();
@@ -385,15 +405,16 @@ function LoginScreen({ onLogin }) {
           HBIER <span style={{ color: "#C69700" }}>ANÁLISE</span>
         </div>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 18 }}>{APP_VERSION}</div>
-        <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} />
-        <input placeholder="Senha" type="password" value={senha} onKeyDown={handleKeyDown} onChange={e => setSenha(e.target.value)} style={inputStyle} />
+        <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} disabled={carregando} />
+        <input placeholder="Senha" type="password" value={senha} onKeyDown={handleKeyDown} onChange={e => setSenha(e.target.value)} style={inputStyle} disabled={carregando} />
         {erro && <div style={{ color: "#e0645a", fontSize: 13, marginBottom: 10 }}>{erro}</div>}
-        <button type="button" onClick={tentarEntrar} style={{
+        <button type="button" onClick={tentarEntrar} disabled={carregando} style={{
           width: "100%", background: "#02601D", color: "#fff", border: "none",
           borderRadius: 8, padding: "10px 0", fontSize: 15, fontWeight: 600,
-          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          cursor: carregando ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          opacity: carregando ? 0.7 : 1,
         }}>
-          <LogIn size={16} /> Entrar
+          <LogIn size={16} /> {carregando ? "Entrando..." : "Entrar"}
         </button>
       </div>
     </div>
@@ -1630,6 +1651,7 @@ function GlobalTab() {
 export default function App() {
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState("cliente");
 
   const [status, setStatus] = useState("loading"); // loading | error | ready
@@ -1671,7 +1693,7 @@ export default function App() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      {!logado && <LoginScreen onLogin={u => { setUsuario(u); setLogado(true); }} />}
+      {!logado && <LoginScreen onLogin={(u, admin) => { setUsuario(u); setIsAdmin(admin); setLogado(true); }} />}
 
       {logado && (
         <div>
@@ -1682,7 +1704,7 @@ export default function App() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ color: "#888", fontSize: 13 }}>{usuario}</span>
-              <button onClick={() => setLogado(false)} style={{
+              <button onClick={() => { setLogado(false); setIsAdmin(false); }} style={{
                 background: "transparent", border: "1px solid #444", color: "#888",
                 borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer",
                 display: "flex", alignItems: "center", gap: 6,
@@ -1708,15 +1730,17 @@ export default function App() {
                 <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
                   <LayoutDashboard size={14} /> Dashboard
                 </button>
-                <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
-                  <Globe size={14} /> Global
-                </button>
+                {isAdmin && (
+                  <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
+                    <Globe size={14} /> Global
+                  </button>
+                )}
               </div>
 
               {tab === "cliente" && <ClienteDashboard />}
               {tab === "comparacao" && <ComparacaoTab />}
               {tab === "dashboard" && <DashboardTab />}
-              {tab === "global" && <GlobalTab />}
+              {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}
         </div>

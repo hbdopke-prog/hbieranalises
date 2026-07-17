@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.1
+ * Versão: v2.2
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -49,17 +49,26 @@
  *        Executar como: Eu
  *        Quem pode acessar: Qualquer pessoa
  *   4. Copie a URL gerada (.../exec) e cole em VITE_GAS_URL
+ *
+ * LOGIN / ADMIN (v2.2):
+ * Crie uma aba chamada "usuarios" com colunas: usuario | senha | admin | nome
+ *   - usuario/senha: texto simples (comparação exata, sem hash - é uma proteção
+ *     básica pra uso interno, não é segurança de nível bancário).
+ *   - admin: SIM/TRUE/1 pra liberar acesso à aba "Global"; vazio ou NAO = usuário comum.
+ *   - nome: opcional, nome de exibição depois do login.
+ * O login vira uma chamada POST (não GET) pra não expor usuário/senha na URL.
  */
 
 const SHEET_FATURAMENTO = "faturamento";
 const SHEET_LITROS = "litros";
+const SHEET_USUARIOS = "usuarios";
 
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const faturamento = lerRelatorio(ss, SHEET_FATURAMENTO);
     const litros = lerRelatorio(ss, SHEET_LITROS);
-    const cadastro = lerCadastroClientes(ss); // mapa: codigo -> { nomeFantasia, grupo }
+    const cadastro = lerCadastroClientes(ss); // mapa: codigo -> { nomeFantasia, grupo, dataCriacao }
     const combinado = combinar(faturamento, litros, cadastro);
     return jsonResponse({
       ok: true,
@@ -69,6 +78,58 @@ function doGet(e) {
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+// POST é usado só pra login (usuario/senha nunca vão na URL)
+function doPost(e) {
+  try {
+    const corpo = JSON.parse(e.postData.contents);
+    if (corpo.action === "login") {
+      return jsonResponse(autenticar(corpo.usuario, corpo.senha));
+    }
+    return jsonResponse({ ok: false, erro: "Ação desconhecida." });
+  } catch (err) {
+    return jsonResponse({ ok: false, erro: String(err.message || err) });
+  }
+}
+
+// Valida usuario/senha contra a aba "usuarios". Devolve { ok, admin, nome }.
+function autenticar(usuario, senha) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_USUARIOS);
+  if (!sheet) return { ok: false, erro: 'Aba "' + SHEET_USUARIOS + '" não encontrada na planilha.' };
+
+  const valores = sheet.getDataRange().getValues();
+  if (valores.length < 2) return { ok: false, erro: "Nenhum usuário cadastrado na aba \"usuarios\"." };
+
+  const cabecalho = valores[0].map(function (c) { return String(c).trim().toLowerCase(); });
+  const idxUsuario = cabecalho.indexOf("usuario") !== -1 ? cabecalho.indexOf("usuario") : cabecalho.indexOf("usuário");
+  const idxSenha = cabecalho.indexOf("senha");
+  const idxAdmin = cabecalho.indexOf("admin");
+  const idxNome = cabecalho.indexOf("nome");
+
+  if (idxUsuario === -1 || idxSenha === -1) {
+    return { ok: false, erro: 'A aba "usuarios" precisa ter as colunas "usuario" e "senha".' };
+  }
+
+  const usuarioNorm = String(usuario || "").trim().toLowerCase();
+  if (!usuarioNorm) return { ok: false, erro: "Informe o usuário." };
+
+  for (let i = 1; i < valores.length; i++) {
+    const u = String(valores[i][idxUsuario] || "").trim().toLowerCase();
+    if (u !== usuarioNorm) continue;
+
+    const senhaCorreta = String(valores[i][idxSenha] || "");
+    if (senhaCorreta !== String(senha || "")) {
+      return { ok: false, erro: "Usuário ou senha inválidos." };
+    }
+
+    const admin = idxAdmin !== -1 && /^(sim|true|1|verdadeiro)$/i.test(String(valores[i][idxAdmin] || "").trim());
+    const nome = idxNome !== -1 && valores[i][idxNome] ? String(valores[i][idxNome]).trim() : usuario;
+    return { ok: true, admin: admin, nome: nome };
+  }
+
+  return { ok: false, erro: "Usuário ou senha inválidos." };
 }
 
 // Procura em TODAS as abas (menos faturamento/litros) por uma que tenha uma coluna

@@ -39,7 +39,20 @@ linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
 - **Data de criação do cliente (opcional)**: se a mesma aba de cadastro tiver uma coluna com cabeçalho "Data de Criação", "Data de Cadastro", "Data de Abertura" ou "Criado em" (data real ou texto DD/MM/AAAA), o app usa isso para mostrar **quantos clientes novos foram cadastrados por mês** (aba Dashboard). Sem essa coluna, essa seção simplesmente não aparece.
 
-## 2. Backend (Google Apps Script)
+## 2. Login e usuários admin
+
+Crie uma aba chamada **`usuarios`** com estas colunas:
+
+| usuario | senha | admin | nome |
+|---|---|---|---|
+| henrique | ******** | SIM | Henrique |
+| equipe | ******** | NAO | Equipe |
+
+- `admin` = SIM/TRUE/1 libera a aba **Global**; qualquer outro valor (ou vazio) deixa o usuário sem acesso a ela.
+- `nome` é opcional (aparece no canto superior direito depois do login).
+- **Atenção**: a senha fica em texto simples na planilha - é uma proteção básica adequada pra uso interno da equipe, não é criptografia de verdade. Não reutilize uma senha importante aqui.
+
+## 3. Backend (Google Apps Script)
 
 1. Na planilha: **Extensões > Apps Script**.
 2. Apague o conteúdo padrão e cole o arquivo `Code.gs` (raiz deste projeto).
@@ -52,7 +65,7 @@ linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
 Sempre que editar a planilha, não precisa reimplantar — só editar quando mudar o **código** do `Code.gs`.
 
-## 3. Front-end (local)
+## 4. Front-end (local)
 
 ```bash
 npm install
@@ -61,7 +74,7 @@ cp .env.example .env
 npm run dev
 ```
 
-## 4. Deploy no Vercel
+## 5. Deploy no Vercel
 
 1. Suba esta pasta para um repositório no GitHub.
 2. No Vercel: **Add New Project** > importe o repositório.
