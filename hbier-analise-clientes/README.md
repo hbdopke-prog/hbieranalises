@@ -10,21 +10,24 @@ outros apps HBier.
 
 ## 1. Planilha (Google Sheets)
 
-Crie 2 abas na planilha, com estes cabeçalhos exatos na linha 1:
+O app lê direto o relatório **"Faturamento Mês a Mês por Clientes"** exportado
+do ERP, sem precisar reformatar nada - só exportar/colar como está em 2 abas:
 
-**Aba "Faturamento"**
-| cliente | grupo | ano | mes | valor |
+- Aba **`faturamento`** → relatório com "Valor a Apresentar: Valor Cobrado"
+- Aba **`litros`** → mesmo relatório com "Valor a Apresentar: Litros"
+
+Layout esperado (linhas de metadado no topo, cabeçalho, depois uma linha por cliente):
+
+| Código | Cliente - Razão Social/Nome | 01/2023 | 02/2023 | ... |
 |---|---|---|---|---|
-| Bar do Zé | Bares | 2025 | 7 | 8500 |
+| 2078 | 1 MILLER COMÉRCIO DE ALIMENTOS LTDA | 1881,00 | 198,00 | ... |
 
-**Aba "Litros"** (mesma estrutura, `valor` em litros)
-| cliente | grupo | ano | mes | valor |
-|---|---|---|---|---|
-| Bar do Zé | Bares | 2025 | 7 | 950 |
+O script (`Code.gs`) acha a linha de cabeçalho automaticamente (procura por
+"Código" na coluna A e "Cliente" na coluna B), então não importa em qual
+linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
-- `grupo`: segmento do cliente (ex: Bares, Mercados, Restaurantes, Distribuidores) — usado na aba de Comparação para selecionar um grupo inteiro de uma vez.
-- `mes`: número de 1 a 12.
-- Atualize manualmente (semanalmente); o app sempre lê a versão mais recente, sem precisar reimplantar nada.
+- Atualize manualmente (semanalmente, colando o relatório atualizado); o app sempre lê a versão mais recente, sem precisar reimplantar nada.
+- **Grupo por cliente**: esse relatório não traz um grupo por linha (só um resumo textual no topo). A comparação por "Clientes" funciona normalmente; a comparação por "Grupo" fica disponível só quando tivermos uma forma de vincular cliente → grupo (ex: uma aba extra `Clientes` com `cliente | grupo`).
 
 ## 2. Backend (Google Apps Script)
 

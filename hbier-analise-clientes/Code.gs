@@ -1,21 +1,33 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v1.0
+ * Versão: v1.2
  *
- * Lê as abas "Faturamento" e "Litros" da planilha vinculada a este
- * script e devolve um JSON combinado por cliente/grupo/mês, no
- * formato consumido pelo front-end (Vercel).
+ * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
+ * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
+ * em R$ e outro em litros).
  *
- * Estrutura esperada de cada aba (linha 1 = cabeçalho, nessa ordem
- * ou em qualquer ordem - o script busca pelo nome da coluna):
- *   cliente | grupo | ano | mes | valor
+ * Layout real da planilha (linhas de metadado no topo, depois uma
+ * linha de cabeçalho, depois uma linha por cliente):
  *
- * - "cliente": nome do cliente (texto)
- * - "grupo": segmento/grupo do cliente (texto) - ex: Bares, Mercados...
- * - "ano": ano (número, ex: 2025)
- * - "mes": mês (número 1-12)
- * - "valor": faturamento (R$) na aba Faturamento, litros na aba Litros
+ *   Linha 1: título do relatório
+ *   Linha 3: Empresas
+ *   Linha 4: Grupo de Clientes (texto livre, não vinculado por linha)
+ *   Linha 5: Vendedores
+ *   Linha 6: Data do Faturamento (período do relatório)
+ *   Linha 7: Valor a Apresentar (Litros / Valor Cobrado)
+ *   Linha 9 (aprox.): cabeçalho -> Código | Cliente - Razão Social/Nome | 01/2023 | 02/2023 | ...
+ *   Linha 10+: uma linha por cliente, uma coluna por mês (MM/AAAA)
+ *
+ * O script NÃO depende do número exato da linha do cabeçalho - ele
+ * procura automaticamente a linha onde a coluna A contém "código" e
+ * a coluna B contém "cliente".
+ *
+ * OBS: não há uma coluna de "grupo" por cliente nesse relatório -
+ * a segmentação (linha 4) é só um resumo textual, sem vínculo direto
+ * com cada linha de cliente. Por isso o campo "grupo" fica vazio por
+ * enquanto. Se quiser habilitar a comparação por grupo, precisamos de
+ * uma aba extra tipo "Clientes" com colunas cliente | grupo.
  *
  * DEPLOY:
  *   1. Extensões > Apps Script na planilha do Google Sheets
@@ -23,20 +35,17 @@
  *   3. Implantar > Nova implantação > Tipo: App da Web
  *        Executar como: Eu
  *        Quem pode acessar: Qualquer pessoa
- *   4. Copie a URL gerada (.../exec) e cole em VITE_GAS_URL no .env do front-end
- *
- * Toda vez que atualizar manualmente a planilha, os dados já refletem
- * na próxima chamada - não precisa reimplantar o script.
+ *   4. Copie a URL gerada (.../exec) e cole em VITE_GAS_URL
  */
 
-const SHEET_FATURAMENTO = "Faturamento";
-const SHEET_LITROS = "Litros";
+const SHEET_FATURAMENTO = "faturamento";
+const SHEET_LITROS = "litros";
 
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const faturamento = lerAba(ss, SHEET_FATURAMENTO);
-    const litros = lerAba(ss, SHEET_LITROS);
+    const faturamento = lerRelatorio(ss, SHEET_FATURAMENTO);
+    const litros = lerRelatorio(ss, SHEET_LITROS);
     const combinado = combinar(faturamento, litros);
     return jsonResponse({
       ok: true,
@@ -48,45 +57,55 @@ function doGet(e) {
   }
 }
 
-function lerAba(ss, nomeAba) {
+// Lê o relatório "mês a mês por clientes" (formato largo) de uma aba
+function lerRelatorio(ss, nomeAba) {
   const sheet = ss.getSheetByName(nomeAba);
   if (!sheet) throw new Error('Aba "' + nomeAba + '" não encontrada na planilha.');
 
   const valores = sheet.getDataRange().getValues();
-  if (valores.length < 2) return [];
 
-  const cabecalho = valores[0].map(function (c) {
-    return String(c).trim().toLowerCase();
-  });
-  const linhas = valores.slice(1);
-
-  const idx = {
-    cliente: cabecalho.indexOf("cliente"),
-    grupo: cabecalho.indexOf("grupo"),
-    ano: cabecalho.indexOf("ano"),
-    mes: cabecalho.indexOf("mes"),
-    valor: cabecalho.indexOf("valor"),
-  };
-
-  ["cliente", "grupo", "ano", "mes", "valor"].forEach(function (campo) {
-    if (idx[campo] === -1) {
-      throw new Error('Coluna "' + campo + '" não encontrada na aba "' + nomeAba + '".');
+  // acha a linha de cabeçalho procurando "código" na coluna A e "cliente" na coluna B
+  let linhaCabecalho = -1;
+  for (let i = 0; i < valores.length; i++) {
+    const a = String(valores[i][0] || "").trim().toLowerCase();
+    const b = String(valores[i][1] || "").trim().toLowerCase();
+    if (a.indexOf("código") !== -1 && b.indexOf("cliente") !== -1) {
+      linhaCabecalho = i;
+      break;
     }
-  });
+  }
+  if (linhaCabecalho === -1) {
+    throw new Error('Não encontrei a linha de cabeçalho (colunas "Código" e "Cliente...") na aba "' + nomeAba + '".');
+  }
 
-  return linhas
-    .filter(function (linha) {
-      return linha[idx.cliente] !== "" && linha[idx.cliente] != null;
-    })
-    .map(function (linha) {
-      return {
-        cliente: String(linha[idx.cliente]).trim(),
-        grupo: String(linha[idx.grupo] || "").trim(),
-        ano: Number(linha[idx.ano]),
-        mes: Number(linha[idx.mes]),
-        valor: Number(linha[idx.valor]) || 0,
-      };
+  const cabecalho = valores[linhaCabecalho];
+
+  // colunas de mês: a partir da 3ª coluna (índice 2), formato MM/AAAA
+  const colunasMes = [];
+  for (let c = 2; c < cabecalho.length; c++) {
+    const texto = String(cabecalho[c] || "").trim();
+    const m = texto.match(/^(\d{1,2})\/(\d{4})$/);
+    if (m) {
+      colunasMes.push({ col: c, mes: parseInt(m[1], 10), ano: parseInt(m[2], 10) });
+    }
+  }
+  if (colunasMes.length === 0) {
+    throw new Error('Nenhuma coluna de mês (formato MM/AAAA) encontrada no cabeçalho da aba "' + nomeAba + '".');
+  }
+
+  // linhas de dados: da linha seguinte ao cabeçalho até o fim (ignora linhas sem nome de cliente)
+  const linhas = [];
+  for (let i = linhaCabecalho + 1; i < valores.length; i++) {
+    const cliente = String(valores[i][1] || "").trim();
+    if (!cliente) continue;
+    colunasMes.forEach(function (cm) {
+      const bruto = valores[i][cm.col];
+      const valor = typeof bruto === "number" ? bruto : (parseFloat(String(bruto).replace(/\./g, "").replace(",", ".")) || 0);
+      linhas.push({ cliente: cliente, grupo: "", ano: cm.ano, mes: cm.mes, valor: valor });
     });
+  }
+
+  return linhas;
 }
 
 // Junta faturamento + litros num único registro por cliente/ano/mes
@@ -103,7 +122,6 @@ function combinar(faturamentoRows, litrosRows) {
       mapa[chave] = { cliente: r.cliente, grupo: r.grupo, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].faturamento = r.valor;
-    if (r.grupo) mapa[chave].grupo = r.grupo;
   });
 
   litrosRows.forEach(function (r) {
@@ -112,7 +130,6 @@ function combinar(faturamentoRows, litrosRows) {
       mapa[chave] = { cliente: r.cliente, grupo: r.grupo, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0 };
     }
     mapa[chave].litros = r.valor;
-    if (r.grupo) mapa[chave].grupo = r.grupo;
   });
 
   const lista = Object.keys(mapa).map(function (k) {
