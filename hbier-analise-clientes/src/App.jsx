@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.5";
+const APP_VERSION = "v3.6";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -170,6 +170,14 @@ function construirSeriesPorAno(rows, campo) {
     return linha;
   });
   return { anos, dados };
+}
+
+// Monta o rótulo da legenda com o % de crescimento vs ano anterior (ex: "2026 (+18.1%)")
+function nomeComCrescimento(ano, variacaoPorAno) {
+  const v = variacaoPorAno[ano];
+  if (!v) return String(ano);
+  const sinal = v.pct >= 0 ? "+" : "";
+  return `${ano} (${sinal}${v.pct.toFixed(1)}%)`;
 }
 
 // -------------------- Contexto de dados --------------------
@@ -595,6 +603,8 @@ function ClienteDashboard() {
 
   const seriesFatCliente = construirSeriesPorAno(rowsFiltradas, "faturamento");
   const seriesLitCliente = construirSeriesPorAno(rowsFiltradas, "litros");
+  const variacaoFatPorAno = Object.fromEntries(mediasPorAno.map(m => [m.ano, m.variacaoFat]));
+  const variacaoLitPorAno = Object.fromEntries(mediasPorAno.map(m => [m.ano, m.variacaoLit]));
   const primeiroPeriodo = todasRows && todasRows.length ? todasRows[0].chave : "";
   const ultimoPeriodo = todasRows && todasRows.length ? todasRows[todasRows.length - 1].chave : "";
 
@@ -737,15 +747,15 @@ function ClienteDashboard() {
               <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
 
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={seriesFatCliente.dados}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" stroke="#888" fontSize={12} />
-                <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 13 }} />
                 {seriesFatCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoFatPorAno)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -758,30 +768,31 @@ function ClienteDashboard() {
               <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
 
-            {mediasPorAno.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento e Litros por Ano</div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={seriesLitCliente.dados}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend wrapperStyle={{ fontSize: 13 }} />
+                {seriesLitCliente.anos.map((ano, idx) => (
+                  <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoLitPorAno)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </Section>
+
+          {mediasPorAno.length > 0 && (
+            <Section title="Faturamento e Litros por Ano" icon={<Calendar size={18} color="#C69700" />}>
+              <div style={{ background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 10, padding: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {mediasPorAno.map(m => (
                     <CardAnualCompleto key={m.ano} dados={m} />
                   ))}
                 </div>
               </div>
-            )}
-
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={seriesLitCliente.dados}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" stroke="#888" fontSize={12} />
-                <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {seriesLitCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </Section>
+            </Section>
+          )}
 
           <Section title="Tabela" icon={<TableIcon size={18} color="#888" />}>
             <TabelaClienteMeses cliente={clientesSel.length === 1 ? labelDoCliente[clientesSel[0]] : `${clientesSel.length} clientes (somados)`} rows={rowsFiltradas} />
@@ -1156,7 +1167,7 @@ function ComparacaoTab() {
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -1166,8 +1177,8 @@ function ComparacaoTab() {
                 <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
                   <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
                 </Bar>
-                <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "top", fill: "#4caf6b", fontSize: 12, fontWeight: 700 }} />
-                <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "bottom", fill: "#e8c67a", fontSize: 12, fontWeight: 700 }} />
+                <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
               </BarChart>
             </ResponsiveContainer>
           </Section>
@@ -1176,7 +1187,7 @@ function ComparacaoTab() {
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <ReferenceLine y={0} stroke="#666" />
@@ -1194,7 +1205,7 @@ function ComparacaoTab() {
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
                 <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -1204,8 +1215,8 @@ function ComparacaoTab() {
                 <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
                   <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
                 </Line>
-                <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "top", fill: "#4caf6b", fontSize: 12, fontWeight: 700 }} />
-                <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "bottom", fill: "#e8c67a", fontSize: 12, fontWeight: 700 }} />
+                <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
               </LineChart>
             </ResponsiveContainer>
           </Section>
@@ -1214,7 +1225,7 @@ function ComparacaoTab() {
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                 <YAxis stroke="#888" fontSize={11} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
                 <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <ReferenceLine y={0} stroke="#666" />
@@ -1635,6 +1646,8 @@ function GlobalTab() {
 
   const seriesFat = construirSeriesPorAno(rowsGlobais, "faturamento");
   const seriesLit = construirSeriesPorAno(rowsGlobais, "litros");
+  const variacaoFatPorAnoGlobal = Object.fromEntries(mediasPorAno.map(m => [m.ano, m.variacaoFat]));
+  const variacaoLitPorAnoGlobal = Object.fromEntries(mediasPorAno.map(m => [m.ano, m.variacaoLit]));
   const chartGrupo = fatPorGrupo.map(g => ({ grupo: g.grupo, Faturamento: g.total }));
 
   const precoLitroGeral12m = precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros"));
@@ -1658,12 +1671,12 @@ function GlobalTab() {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={seriesFat.dados}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis dataKey="mes" stroke="#888" fontSize={12} />
-            <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+            <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+            <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
             <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 13 }} />
             {seriesFat.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoFatPorAnoGlobal)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -1673,12 +1686,12 @@ function GlobalTab() {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={seriesLit.dados}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis dataKey="mes" stroke="#888" fontSize={12} />
-            <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+            <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+            <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
             <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 13 }} />
             {seriesLit.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoLitPorAnoGlobal)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             ))}
           </LineChart>
         </ResponsiveContainer>
