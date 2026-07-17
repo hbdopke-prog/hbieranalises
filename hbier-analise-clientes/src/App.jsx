@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.4";
+const APP_VERSION = "v3.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -483,27 +483,61 @@ const chipBtnStyle = {
 function ClienteDashboard() {
   const { dados, nomes, periodos, labelDoCliente, razaoSocialDoCliente } = useData();
   const [busca, setBusca] = useState("");
-  const [clienteSel, setClienteSel] = useState(null);
+  const [clientesSel, setClientesSel] = useState([]);
   const [inicio, setInicio] = useState("");
   const [fim, setFim] = useState("");
   const [mesRefAno, setMesRefAno] = useState("");
 
   const sugestoes = useMemo(() => {
     if (!busca.trim()) return [];
-    return nomes.filter(c => (labelDoCliente[c] || "").toLowerCase().includes(busca.toLowerCase())).slice(0, 6);
-  }, [busca, nomes, labelDoCliente]);
+    return nomes
+      .filter(c => !clientesSel.includes(c) && (labelDoCliente[c] || "").toLowerCase().includes(busca.toLowerCase()))
+      .slice(0, 6);
+  }, [busca, nomes, labelDoCliente, clientesSel]);
 
-  const todasRows = clienteSel ? (dados[clienteSel] || []) : null;
+  // agrega os clientes selecionados (soma faturamento/litros mês a mês) - com 1 só, é o próprio cliente
+  const todasRows = useMemo(() => {
+    if (!clientesSel.length) return null;
+    if (clientesSel.length === 1) return dados[clientesSel[0]] || [];
+    const periodosSet = new Set();
+    clientesSel.forEach(c => (dados[c] || []).forEach(r => periodosSet.add(r.chave)));
+    const periodosOrdenados = [...periodosSet].sort();
+    return periodosOrdenados.map(chave => {
+      const [ano, mes] = chave.split("-").map(Number);
+      let faturamento = 0, litros = 0;
+      clientesSel.forEach(c => {
+        const row = (dados[c] || []).find(r => r.chave === chave);
+        if (row) { faturamento += row.faturamento; litros += row.litros; }
+      });
+      return { ano, mes, chave, faturamento, litros };
+    });
+  }, [clientesSel, dados]);
 
-  function selecionarCliente(codigo) {
-    setClienteSel(codigo);
-    setBusca(labelDoCliente[codigo] || codigo);
-    const rows = dados[codigo] || [];
-    setInicio(rows[0]?.chave || "");
-    setFim(rows[rows.length - 1]?.chave || "");
-    const { fechados } = separarMesEmAndamento(rows);
-    setMesRefAno(fechados.length ? fechados[fechados.length - 1].chave : "");
+  function adicionarCliente(codigo) {
+    setClientesSel(prev => prev.includes(codigo) ? prev : [...prev, codigo]);
+    setBusca("");
   }
+  function removerCliente(codigo) {
+    setClientesSel(prev => prev.filter(c => c !== codigo));
+  }
+  function limparClientes() {
+    setClientesSel([]);
+    setBusca("");
+  }
+
+  // recalcula o período padrão (início/fim/mês de referência) sempre que a seleção mudar
+  const clientesSelKey = clientesSel.join(",");
+  useEffect(() => {
+    if (!todasRows || !todasRows.length) {
+      setInicio(""); setFim(""); setMesRefAno("");
+      return;
+    }
+    setInicio(todasRows[0].chave);
+    setFim(todasRows[todasRows.length - 1].chave);
+    const { fechados } = separarMesEmAndamento(todasRows);
+    setMesRefAno(fechados.length ? fechados[fechados.length - 1].chave : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientesSelKey]);
 
   const rowsFiltradas = useMemo(() => {
     if (!todasRows || !inicio || !fim) return [];
@@ -566,17 +600,22 @@ function ClienteDashboard() {
 
   return (
     <div>
-      <div style={{ position: "relative", marginBottom: 20 }}>
+      <div style={{ position: "relative", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
           <Search size={16} color="#C69700" />
-          <input placeholder="Buscar cliente..." value={busca}
-            onChange={e => { setBusca(e.target.value); setClienteSel(null); }}
+          <input placeholder="Buscar cliente... (pode adicionar vários)" value={busca}
+            onChange={e => setBusca(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 14 }} />
+          {clientesSel.length > 0 && (
+            <button onClick={limparClientes} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+              Limpar seleção
+            </button>
+          )}
         </div>
         {sugestoes.length > 0 && (
           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
             {sugestoes.map(c => (
-              <div key={c} onClick={() => selecionarCliente(c)}
+              <div key={c} onClick={() => adicionarCliente(c)}
                 style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
@@ -590,25 +629,42 @@ function ClienteDashboard() {
         )}
       </div>
 
-      {!clienteSel && (
-        <div style={{ color: "#888", textAlign: "center", padding: "40px 0", fontSize: 14 }}>
-          Busque um cliente para visualizar faturamento e litros.
+      {clientesSel.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+          {clientesSel.map(c => (
+            <div key={c} style={{
+              display: "flex", alignItems: "center", gap: 6, background: "#1D1D1B", border: "1px solid #02601D",
+              borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
+            }}>
+              {labelDoCliente[c]}
+              <button onClick={() => removerCliente(c)} style={{
+                background: "#02601D", border: "none", color: "#fff", borderRadius: "50%",
+                width: 18, height: 18, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+              }}>×</button>
+            </div>
+          ))}
         </div>
       )}
 
-      {clienteSel && todasRows && todasRows.length === 0 && (
+      {clientesSel.length === 0 && (
         <div style={{ color: "#888", textAlign: "center", padding: "40px 0", fontSize: 14 }}>
-          Nenhum dado encontrado para este cliente.
+          Busque um ou mais clientes para visualizar faturamento e litros (a seleção é somada quando há mais de um).
         </div>
       )}
 
-      {clienteSel && todasRows && todasRows.length > 0 && (
+      {clientesSel.length > 0 && todasRows && todasRows.length === 0 && (
+        <div style={{ color: "#888", textAlign: "center", padding: "40px 0", fontSize: 14 }}>
+          Nenhum dado encontrado para os clientes selecionados.
+        </div>
+      )}
+
+      {clientesSel.length > 0 && todasRows && todasRows.length > 0 && (
         <>
           <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
-            {labelDoCliente[clienteSel]}
+            {clientesSel.length === 1 ? labelDoCliente[clientesSel[0]] : `${clientesSel.length} clientes (somados)`}
           </h2>
-          {razaoSocialDoCliente[clienteSel] && razaoSocialDoCliente[clienteSel] !== labelDoCliente[clienteSel] && (
-            <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>{razaoSocialDoCliente[clienteSel]}</div>
+          {clientesSel.length === 1 && razaoSocialDoCliente[clientesSel[0]] && razaoSocialDoCliente[clientesSel[0]] !== labelDoCliente[clientesSel[0]] && (
+            <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>{razaoSocialDoCliente[clientesSel[0]]}</div>
           )}
 
           <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
@@ -728,7 +784,7 @@ function ClienteDashboard() {
           </Section>
 
           <Section title="Tabela" icon={<TableIcon size={18} color="#888" />}>
-            <TabelaClienteMeses cliente={labelDoCliente[clienteSel]} rows={rowsFiltradas} />
+            <TabelaClienteMeses cliente={clientesSel.length === 1 ? labelDoCliente[clientesSel[0]] : `${clientesSel.length} clientes (somados)`} rows={rowsFiltradas} />
           </Section>
         </>
       )}
