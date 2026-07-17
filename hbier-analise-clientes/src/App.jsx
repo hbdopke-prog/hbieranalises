@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.0";
+const APP_VERSION = "v3.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -166,6 +166,7 @@ function processarDados(linhas) {
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
   const razaoSocialDoCliente = {}; // codigo -> razão social (info extra)
+  const dataCriacaoDoCliente = {}; // codigo -> "AAAA-MM-DD" (data de cadastro do cliente)
 
   linhas.forEach(r => {
     const codigo = String(r.codigo);
@@ -179,6 +180,7 @@ function processarDados(linhas) {
     if (r.grupo) grupoDoCliente[codigo] = r.grupo;
     labelDoCliente[codigo] = r.nomeFantasia || r.razaoSocial || codigo;
     razaoSocialDoCliente[codigo] = r.razaoSocial || "";
+    if (r.dataCriacao) dataCriacaoDoCliente[codigo] = r.dataCriacao;
   });
 
   Object.keys(porCliente).forEach(codigo => {
@@ -198,7 +200,7 @@ function processarDados(linhas) {
   Object.values(porCliente).forEach(rows => rows.forEach(r => periodosSet.add(r.chave)));
   const periodos = [...periodosSet].sort();
 
-  return { dados: porCliente, nomes, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente };
+  return { dados: porCliente, nomes, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente };
 }
 
 // -------------------- Componentes visuais --------------------
@@ -1186,10 +1188,12 @@ function calcularMetricasCliente(rowsBrutas, mesRefAno) {
     const m1 = janelaAnoAnterior(rows, mesRefAno, 1);
     const m3 = janelaAnoAnterior(rows, mesRefAno, 3);
     const m6 = janelaAnoAnterior(rows, mesRefAno, 6);
+    const m12 = janelaAnoAnterior(rows, mesRefAno, 12);
     comparacaoAno = {
       m1: janela(m1.atual, m1.anoAnterior),
       m3: janela(m3.atual, m3.anoAnterior),
       m6: janela(m6.atual, m6.anoAnterior),
+      m12: janela(m12.atual, m12.anoAnterior),
     };
   }
 
@@ -1256,6 +1260,8 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
               fat={metricas.comparacaoAno.m3.fat} lit={metricas.comparacaoAno.m3.lit} precoLitro={metricas.comparacaoAno.m3.precoLitro} varFat={metricas.comparacaoAno.m3.varFat} varLit={metricas.comparacaoAno.m3.varLit} />
             <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.comparacaoAno.m6.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m6.periodoAnteriorTexto}
               fat={metricas.comparacaoAno.m6.fat} lit={metricas.comparacaoAno.m6.lit} precoLitro={metricas.comparacaoAno.m6.precoLitro} varFat={metricas.comparacaoAno.m6.varFat} varLit={metricas.comparacaoAno.m6.varLit} />
+            <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.comparacaoAno.m12.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m12.periodoAnteriorTexto}
+              fat={metricas.comparacaoAno.m12.fat} lit={metricas.comparacaoAno.m12.lit} precoLitro={metricas.comparacaoAno.m12.precoLitro} varFat={metricas.comparacaoAno.m12.varFat} varLit={metricas.comparacaoAno.m12.varLit} />
           </div>
         </div>
       )}
@@ -1293,12 +1299,14 @@ function TabelaHeatmapGrupos({ linhas }) {
 }
 
 function DashboardTab() {
-  const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
+  const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente, dataCriacaoDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState([]);
   const [todos, setTodos] = useState(true);
   const [buscaCliente, setBuscaCliente] = useState("");
   const periodosFechados = periodos.filter(p => p !== chaveMesAtualReal());
   const [mesRefAno, setMesRefAno] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
+  const [inicioNovos, setInicioNovos] = useState(() => periodos.includes("2025-01") ? "2025-01" : (periodos[0] || ""));
+  const [fimNovos, setFimNovos] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
 
   function toggleGrupoFiltro(g) {
     setTodos(false);
@@ -1317,6 +1325,19 @@ function DashboardTab() {
   const clientesExibidos = buscaCliente.trim()
     ? clientesComMetricas.filter(c => (labelDoCliente[c.nome] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : clientesComMetricas;
+
+  // novos clientes cadastrados por mês, no período selecionado
+  const novosClientesPorMes = useMemo(() => {
+    if (!inicioNovos || !fimNovos) return [];
+    const mesesRange = periodos.filter(p => p >= inicioNovos && p <= fimNovos);
+    return mesesRange.map(mes => {
+      const clientesDoMes = nomes.filter(codigo => (dataCriacaoDoCliente[codigo] || "").slice(0, 7) === mes);
+      return { mes, quantidade: clientesDoMes.length, clientes: clientesDoMes.map(c => labelDoCliente[c]) };
+    });
+  }, [inicioNovos, fimNovos, periodos, nomes, dataCriacaoDoCliente, labelDoCliente]);
+
+  const totalNovosClientes = novosClientesPorMes.reduce((s, m) => s + m.quantidade, 0);
+  const temDataCriacao = Object.keys(dataCriacaoDoCliente).length > 0;
 
   const linhasHeatmap = useMemo(() => {
     const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
@@ -1367,6 +1388,40 @@ function DashboardTab() {
         </div>
       </div>
 
+      {temDataCriacao && (
+        <Section title="Novos Clientes" icon={<Users size={18} color="#C69700" />}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioNovos} onSelecionar={setInicioNovos} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimNovos} onSelecionar={setFimNovos} placeholder="Fim" />
+          </div>
+
+          <StatCard label={`Total novos clientes (${periodoTexto(novosClientesPorMes.map(m => ({ chave: m.mes })))})`} value={String(totalNovosClientes)} icon={<Users size={14} />} />
+
+          <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8, marginTop: 16 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 600 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Mês</th>
+                  {novosClientesPorMes.map(m => <th key={m.mes} style={thStyle}>{labelMes(m.mes)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>Novos clientes</td>
+                  {novosClientesPorMes.map(m => (
+                    <td key={m.mes} style={{ ...tdStyle, fontWeight: m.quantidade > 0 ? 700 : 400, color: m.quantidade > 0 ? "#4caf6b" : "#666" }}>
+                      {m.quantidade}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+
       <Section title="Comparação mês a mês por grupo · Faturamento" icon={<AlertTriangle size={16} color="#C69700" />}>
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
           🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). A última coluna pode ser um mês ainda em andamento — compare com cautela.
@@ -1389,6 +1444,185 @@ function DashboardTab() {
           <CardClienteDashboard key={c.nome} posicao={c.posicao} nome={labelDoCliente[c.nome]} metricas={c.metricas} />
         ))}
       </Section>
+    </div>
+  );
+}
+
+function GlobalTab() {
+  const { dados, nomes, periodos, grupos, clientesPorGrupo, dataCriacaoDoCliente } = useData();
+
+  // agrega todos os clientes num "cliente virtual" - a empresa toda, mês a mês
+  const rowsGlobais = useMemo(() => {
+    return periodos.map(chave => {
+      const [ano, mes] = chave.split("-").map(Number);
+      let faturamento = 0, litros = 0;
+      nomes.forEach(codigo => {
+        const row = (dados[codigo] || []).find(r => r.chave === chave);
+        if (row) { faturamento += row.faturamento; litros += row.litros; }
+      });
+      return { ano, mes, chave, faturamento, litros };
+    });
+  }, [dados, nomes, periodos]);
+
+  const { fechados: rowsFechadas, emAndamento } = useMemo(() => separarMesEmAndamento(rowsGlobais), [rowsGlobais]);
+
+  const ultimos3 = rowsFechadas.slice(-3);
+  const ultimos6 = rowsFechadas.slice(-6);
+  const ultimos12 = rowsFechadas.slice(-12);
+
+  const [mesRefAno, setMesRefAno] = useState(() => rowsFechadas.length ? rowsFechadas[rowsFechadas.length - 1].chave : "");
+
+  const janelasAno = useMemo(() => {
+    if (!rowsFechadas.length || !mesRefAno) return null;
+    return {
+      m1: janelaAnoAnterior(rowsFechadas, mesRefAno, 1),
+      m3: janelaAnoAnterior(rowsFechadas, mesRefAno, 3),
+      m6: janelaAnoAnterior(rowsFechadas, mesRefAno, 6),
+      m12: janelaAnoAnterior(rowsFechadas, mesRefAno, 12),
+    };
+  }, [rowsFechadas, mesRefAno]);
+
+  const mediasPorAno = useMemo(() => {
+    if (!rowsFechadas.length) return [];
+    const anos = [...new Set(rowsFechadas.map(r => r.ano))].sort((a, b) => a - b);
+    return anos.map((ano, idx) => {
+      const rowsDoAno = rowsFechadas.filter(r => r.ano === ano);
+      const rowsAnoAnterior = idx > 0 ? rowsFechadas.filter(r => r.ano === anos[idx - 1]) : [];
+      const mediaFatAno = media(rowsDoAno, "faturamento");
+      const mediaLitAno = media(rowsDoAno, "litros");
+      return {
+        ano, meses: rowsDoAno.length,
+        totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
+        mediaFat: mediaFatAno, mediaLit: mediaLitAno,
+        variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
+        variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
+      };
+    });
+  }, [rowsFechadas]);
+
+  // clientes ativos no último mês fechado (faturaram ou tiraram litros)
+  const ultimoMesFechado = rowsFechadas[rowsFechadas.length - 1];
+  const clientesAtivos = useMemo(() => {
+    if (!ultimoMesFechado) return 0;
+    return nomes.filter(codigo => {
+      const row = (dados[codigo] || []).find(r => r.chave === ultimoMesFechado.chave);
+      return row && (row.faturamento > 0 || row.litros > 0);
+    }).length;
+  }, [nomes, dados, ultimoMesFechado]);
+
+  const novosClientes12m = useMemo(() => {
+    if (!Object.keys(dataCriacaoDoCliente).length) return null;
+    const chaves12 = ultimos12.map(r => r.chave);
+    return nomes.filter(codigo => chaves12.includes((dataCriacaoDoCliente[codigo] || "").slice(0, 7))).length;
+  }, [nomes, dataCriacaoDoCliente, ultimos12]);
+
+  // faturamento por grupo, últimos 12 meses fechados
+  const fatPorGrupo = useMemo(() => {
+    const chaves12 = new Set(ultimos12.map(r => r.chave));
+    return grupos.map(g => {
+      let total = 0;
+      (clientesPorGrupo[g] || []).forEach(codigo => {
+        (dados[codigo] || []).forEach(r => { if (chaves12.has(r.chave)) total += r.faturamento; });
+      });
+      return { grupo: g, total };
+    }).sort((a, b) => b.total - a.total);
+  }, [grupos, clientesPorGrupo, dados, ultimos12]);
+
+  const chartEvolucaoFat = rowsGlobais.map(r => ({ mes: labelMes(r.chave), Faturamento: r.faturamento }));
+  const chartEvolucaoLit = rowsGlobais.map(r => ({ mes: labelMes(r.chave), Litros: r.litros }));
+  const chartGrupo = fatPorGrupo.map(g => ({ grupo: g.grupo, Faturamento: g.total }));
+
+  const precoLitroGeral12m = precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros"));
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
+        <StatCard label="Litros (12 meses)" value={fmtLitros(soma(ultimos12, "litros"))} icon={<Droplets size={14} />} />
+        <StatCard label="Preço médio geral/L (12 meses)" value={fmtPrecoLitro(precoLitroGeral12m)} icon={<Droplets size={14} />} />
+        <StatCard label={`Clientes ativos (${ultimoMesFechado ? labelMes(ultimoMesFechado.chave) : "-"})`} value={String(clientesAtivos)} icon={<Users size={14} />} />
+        <StatCard label="Total de clientes cadastrados" value={String(nomes.length)} icon={<Users size={14} />} />
+        {novosClientes12m != null && (
+          <StatCard label="Novos clientes (12 meses)" value={String(novosClientes12m)} icon={<Users size={14} />} />
+        )}
+      </div>
+
+      <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
+
+      <Section title="Evolução Mensal · Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={chartEvolucaoFat}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+            <XAxis dataKey="mes" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+            <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+            <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+            <Line type="monotone" dataKey="Faturamento" stroke="#02601D" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Section>
+
+      <Section title="Evolução Mensal · Litros" icon={<Droplets size={18} color="#C69700" />}>
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={chartEvolucaoLit}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+            <XAxis dataKey="mes" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+            <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+            <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+            <Line type="monotone" dataKey="Litros" stroke="#C69700" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Section>
+
+      <Section title="Comparação Ano a Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
+          <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+        </div>
+
+        {janelasAno && (
+          <>
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+              <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+              <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+            </div>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
+              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
+              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
+              <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
+            </div>
+          </>
+        )}
+      </Section>
+
+      {mediasPorAno.length > 0 && (
+        <Section title="Faturamento e Litros por Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {mediasPorAno.map(m => <CardAnualCompleto key={m.ano} dados={m} />)}
+          </div>
+        </Section>
+      )}
+
+      {fatPorGrupo.length > 0 && (
+        <Section title="Faturamento por Grupo (últimos 12 meses)" icon={<Layers size={18} color="#C69700" />}>
+          <ResponsiveContainer width="100%" height={Math.max(200, fatPorGrupo.length * 40)}>
+            <BarChart data={chartGrupo} layout="vertical" margin={{ left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis type="number" stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+              <YAxis type="category" dataKey="grupo" stroke="#888" fontSize={11} width={160} />
+              <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+              <Bar dataKey="Faturamento" fill="#02601D" radius={[0,4,4,0]}>
+                <LabelList dataKey="Faturamento" position="right" formatter={v => fmtMoeda(v)} style={{ fontSize: 10, fill: "#8fd19e" }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Section>
+      )}
     </div>
   );
 }
@@ -1474,11 +1708,15 @@ export default function App() {
                 <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
                   <LayoutDashboard size={14} /> Dashboard
                 </button>
+                <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
+                  <Globe size={14} /> Global
+                </button>
               </div>
 
               {tab === "cliente" && <ClienteDashboard />}
               {tab === "comparacao" && <ComparacaoTab />}
               {tab === "dashboard" && <DashboardTab />}
+              {tab === "global" && <GlobalTab />}
             </DataContext.Provider>
           )}
         </div>

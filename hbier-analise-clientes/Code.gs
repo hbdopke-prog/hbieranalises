@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.0
+ * Versão: v2.1
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -72,11 +72,13 @@ function doGet(e) {
 }
 
 // Procura em TODAS as abas (menos faturamento/litros) por uma que tenha uma coluna
-// "Código" + uma coluna de nome fantasia/apelido (e opcionalmente grupo/categoria).
-// Retorna um mapa: { codigo: { nomeFantasia, grupo } }. Se não encontrar, devolve {}.
+// "Código" + uma coluna de nome fantasia/apelido (e opcionalmente grupo/categoria e
+// data de criação/cadastro). Retorna um mapa: { codigo: { nomeFantasia, grupo, dataCriacao } }.
+// dataCriacao vem no formato "AAAA-MM-DD". Se não encontrar nenhuma aba assim, devolve {}.
 function lerCadastroClientes(ss) {
   const sheets = ss.getSheets();
   const conhecidas = [SHEET_FATURAMENTO.toLowerCase(), SHEET_LITROS.toLowerCase()];
+  const timezone = ss.getSpreadsheetTimeZone();
 
   for (let s = 0; s < sheets.length; s++) {
     const sheet = sheets[s];
@@ -86,12 +88,13 @@ function lerCadastroClientes(ss) {
     const limiteLinhas = Math.min(valores.length, 15);
 
     for (let i = 0; i < limiteLinhas; i++) {
-      let idxCodigo = -1, idxFantasia = -1, idxGrupo = -1;
+      let idxCodigo = -1, idxFantasia = -1, idxGrupo = -1, idxDataCriacao = -1;
       valores[i].forEach(function (celula, c) {
         const texto = String(celula || "").trim().toLowerCase();
         if (idxCodigo === -1 && /(código|codigo)/.test(texto)) idxCodigo = c;
         if (idxFantasia === -1 && /(fantasia|apelido)/.test(texto)) idxFantasia = c;
         if (idxGrupo === -1 && /(categoria|grupo|segmento)/.test(texto)) idxGrupo = c;
+        if (idxDataCriacao === -1 && /(data.*(cria|cadastr|abertur|inclus)|criado em|cadastrado em)/.test(texto)) idxDataCriacao = c;
       });
 
       // precisa pelo menos de Código + (Fantasia ou Grupo) pra essa aba valer como cadastro
@@ -102,7 +105,8 @@ function lerCadastroClientes(ss) {
           if (!codigo) continue;
           const nomeFantasia = idxFantasia !== -1 ? String(valores[r][idxFantasia] || "").trim() : "";
           const grupo = idxGrupo !== -1 ? String(valores[r][idxGrupo] || "").trim() : "";
-          mapa[codigo] = { nomeFantasia: nomeFantasia, grupo: grupo };
+          const dataCriacao = idxDataCriacao !== -1 ? paraDataISO(valores[r][idxDataCriacao], timezone) : "";
+          mapa[codigo] = { nomeFantasia: nomeFantasia, grupo: grupo, dataCriacao: dataCriacao };
         }
         return mapa;
       }
@@ -110,6 +114,21 @@ function lerCadastroClientes(ss) {
   }
 
   return {};
+}
+
+// Converte uma célula (data real ou texto DD/MM/AAAA) pra "AAAA-MM-DD". Devolve "" se não der pra ler.
+function paraDataISO(bruto, timezone) {
+  if (Object.prototype.toString.call(bruto) === "[object Date]" && !isNaN(bruto)) {
+    return Utilities.formatDate(bruto, timezone, "yyyy-MM-dd");
+  }
+  const texto = String(bruto || "").trim();
+  const m = texto.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) {
+    const dia = m[1].padStart(2, "0");
+    const mes = m[2].padStart(2, "0");
+    return m[3] + "-" + mes + "-" + dia;
+  }
+  return "";
 }
 
 // Lê o relatório "mês a mês por clientes" (formato largo) de uma aba
@@ -206,7 +225,8 @@ function combinar(faturamentoRows, litrosRows, cadastro) {
     const info = cadastro[codigo];
     const nomeFantasia = (info && info.nomeFantasia) ? info.nomeFantasia : razaoSocialFallback;
     const grupo = info ? info.grupo : "";
-    return { nomeFantasia: nomeFantasia, grupo: grupo || "" };
+    const dataCriacao = info ? info.dataCriacao : "";
+    return { nomeFantasia: nomeFantasia, grupo: grupo || "", dataCriacao: dataCriacao || "" };
   }
 
   const mapa = {};
@@ -217,7 +237,7 @@ function combinar(faturamentoRows, litrosRows, cadastro) {
       const info = infoCadastro(r.codigo, r.razaoSocial);
       mapa[chave] = {
         codigo: r.codigo, razaoSocial: r.razaoSocial, nomeFantasia: info.nomeFantasia, grupo: info.grupo,
-        ano: r.ano, mes: r.mes, faturamento: 0, litros: 0,
+        dataCriacao: info.dataCriacao, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0,
       };
     }
     mapa[chave].faturamento = r.valor;
@@ -229,7 +249,7 @@ function combinar(faturamentoRows, litrosRows, cadastro) {
       const info = infoCadastro(r.codigo, r.razaoSocial);
       mapa[chave] = {
         codigo: r.codigo, razaoSocial: r.razaoSocial, nomeFantasia: info.nomeFantasia, grupo: info.grupo,
-        ano: r.ano, mes: r.mes, faturamento: 0, litros: 0,
+        dataCriacao: info.dataCriacao, ano: r.ano, mes: r.mes, faturamento: 0, litros: 0,
       };
     }
     mapa[chave].litros = r.valor;

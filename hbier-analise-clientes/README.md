@@ -37,6 +37,8 @@ linha exata ela esteja nem quantas linhas de metadado vêm antes.
 
   O app casa pelo **Código**, então o Nome Fantasia pode ser diferente mesmo quando a Razão Social é igual nas duas linhas. Se um código não estiver nessa aba, o app usa a Razão Social do relatório como nome de exibição (fallback). Se a aba inteira não existir, o app funciona normalmente, só sem nome fantasia/grupo.
 
+- **Data de criação do cliente (opcional)**: se a mesma aba de cadastro tiver uma coluna com cabeçalho "Data de Criação", "Data de Cadastro", "Data de Abertura" ou "Criado em" (data real ou texto DD/MM/AAAA), o app usa isso para mostrar **quantos clientes novos foram cadastrados por mês** (aba Dashboard). Sem essa coluna, essa seção simplesmente não aparece.
+
 ## 2. Backend (Google Apps Script)
 
 1. Na planilha: **Extensões > Apps Script**.
