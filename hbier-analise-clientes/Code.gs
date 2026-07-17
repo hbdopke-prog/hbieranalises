@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v1.2
+ * Versão: v1.3
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -80,17 +80,47 @@ function lerRelatorio(ss, nomeAba) {
 
   const cabecalho = valores[linhaCabecalho];
 
-  // colunas de mês: a partir da 3ª coluna (índice 2), formato MM/AAAA
+  // colunas de mês: a partir da 3ª coluna (índice 2).
+  // aceita tanto data real (célula formatada como MM/AAAA) quanto texto "01/2023" ou "01-2023"
   const colunasMes = [];
   for (let c = 2; c < cabecalho.length; c++) {
-    const texto = String(cabecalho[c] || "").trim();
-    const m = texto.match(/^(\d{1,2})\/(\d{4})$/);
-    if (m) {
-      colunasMes.push({ col: c, mes: parseInt(m[1], 10), ano: parseInt(m[2], 10) });
+    const bruto = cabecalho[c];
+    let mes = null, ano = null;
+
+    if (Object.prototype.toString.call(bruto) === "[object Date]" && !isNaN(bruto)) {
+      mes = bruto.getMonth() + 1;
+      ano = bruto.getFullYear();
+    } else {
+      const texto = String(bruto || "").trim();
+      const m = texto.match(/^(\d{1,2})[\/\-](\d{4})$/) || texto.match(/^(\d{4})[\/\-](\d{1,2})$/);
+      if (m) {
+        // detecta se veio "MM/AAAA" ou "AAAA/MM" pelo tamanho do primeiro grupo
+        if (m[1].length === 4) { ano = parseInt(m[1], 10); mes = parseInt(m[2], 10); }
+        else { mes = parseInt(m[1], 10); ano = parseInt(m[2], 10); }
+      }
+    }
+
+    if (mes && ano && mes >= 1 && mes <= 12) {
+      colunasMes.push({ col: c, mes: mes, ano: ano });
     }
   }
   if (colunasMes.length === 0) {
-    throw new Error('Nenhuma coluna de mês (formato MM/AAAA) encontrada no cabeçalho da aba "' + nomeAba + '".');
+    throw new Error('Nenhuma coluna de mês reconhecida no cabeçalho da aba "' + nomeAba + '". Verifique se as colunas de meses usam datas ou texto no formato MM/AAAA.');
+  }
+
+  // converte um valor de célula (número, texto com R$/vírgula, data, vazio) num número
+  function paraNumero(bruto) {
+    if (typeof bruto === "number") return bruto;
+    if (bruto === "" || bruto === null || bruto === undefined) return 0;
+    let texto = String(bruto).trim();
+    if (texto === "" || texto === "-") return 0;
+    texto = texto.replace(/[R$\s]/g, "");
+    // remove separador de milhar (ponto) e troca vírgula decimal por ponto
+    if (texto.indexOf(",") !== -1) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    }
+    const n = parseFloat(texto);
+    return isNaN(n) ? 0 : n;
   }
 
   // linhas de dados: da linha seguinte ao cabeçalho até o fim (ignora linhas sem nome de cliente)
@@ -99,8 +129,7 @@ function lerRelatorio(ss, nomeAba) {
     const cliente = String(valores[i][1] || "").trim();
     if (!cliente) continue;
     colunasMes.forEach(function (cm) {
-      const bruto = valores[i][cm.col];
-      const valor = typeof bruto === "number" ? bruto : (parseFloat(String(bruto).replace(/\./g, "").replace(",", ".")) || 0);
+      const valor = paraNumero(valores[i][cm.col]);
       linhas.push({ cliente: cliente, grupo: "", ano: cm.ano, mes: cm.mes, valor: valor });
     });
   }
