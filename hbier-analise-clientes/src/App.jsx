@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v2.0";
+const APP_VERSION = "v2.3";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -58,6 +58,72 @@ function separarMesEmAndamento(rows) {
   return { fechados: rows, emAndamento: null };
 }
 
+// Projeta o total do mês em andamento por regra de três simples (ritmo atual x dias do mês),
+// e compara essa estimativa com o mesmo mês do ano passado e com a média dos últimos 3 meses fechados.
+function calcularProjecaoMesAndamento(emAndamentoRow, rowsFechados) {
+  if (!emAndamentoRow) return null;
+  const diasNoMes = new Date(emAndamentoRow.ano, emAndamentoRow.mes, 0).getDate();
+  const hoje = new Date();
+  const diaAtual = Math.min(Math.max(hoje.getDate(), 1), diasNoMes);
+  const fator = diasNoMes / diaAtual;
+  const estFat = emAndamentoRow.faturamento * fator;
+  const estLit = emAndamentoRow.litros * fator;
+
+  const mesmoMesAnoPassado = rowsFechados.find(r => r.ano === emAndamentoRow.ano - 1 && r.mes === emAndamentoRow.mes);
+  const ultimos3 = rowsFechados.slice(-3);
+  const mediaFat3 = ultimos3.length ? media(ultimos3, "faturamento") : null;
+  const mediaLit3 = ultimos3.length ? media(ultimos3, "litros") : null;
+
+  return {
+    estFat, estLit, diaAtual, diasNoMes,
+    mesmoMesAnoPassadoTexto: mesmoMesAnoPassado ? labelMes(mesmoMesAnoPassado.chave) : null,
+    variacaoAnoPassadoFat: mesmoMesAnoPassado ? calcularVariacao(estFat, mesmoMesAnoPassado.faturamento) : null,
+    variacaoAnoPassadoLit: mesmoMesAnoPassado ? calcularVariacao(estLit, mesmoMesAnoPassado.litros) : null,
+    variacaoMedia3Fat: mediaFat3 != null ? calcularVariacao(estFat, mediaFat3) : null,
+    variacaoMedia3Lit: mediaLit3 != null ? calcularVariacao(estLit, mediaLit3) : null,
+  };
+}
+
+// Aviso do mês em andamento, com projeção linear e comparação vs mesmo mês do ano
+// passado e vs média dos últimos 3 meses fechados.
+function AvisoMesAndamento({ emAndamento, rowsFechados }) {
+  if (!emAndamento) return null;
+  const projecao = calcularProjecaoMesAndamento(emAndamento, rowsFechados);
+
+  return (
+    <div style={{ color: "#888", fontSize: 11, marginBottom: 10, background: "#141412", border: "1px dashed #444", borderRadius: 6, padding: "8px 10px" }}>
+      <div style={{ marginBottom: projecao ? 6 : 0 }}>
+        ⏳ {labelMes(emAndamento.chave)} em andamento (dia {projecao?.diaAtual ?? "?"} de {projecao?.diasNoMes ?? "?"}): {fmtMoeda(emAndamento.faturamento)} · {fmtLitros(emAndamento.litros)} até o momento
+      </div>
+      {projecao && (
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ color: "#666", fontSize: 10 }}>Projeção pro mês fechar (ritmo atual)</div>
+            <div style={{ color: "#fff", fontSize: 13, fontWeight: 800 }}>{fmtMoeda(projecao.estFat)} · {fmtLitros(projecao.estLit)}</div>
+          </div>
+          {projecao.mesmoMesAnoPassadoTexto && (
+            <div>
+              <div style={{ color: "#666", fontSize: 10 }}>vs {projecao.mesmoMesAnoPassadoTexto} (ano passado)</div>
+              <BadgeTendencia variacao={projecao.variacaoAnoPassadoFat} formatador={fmtMoeda} periodoTexto="" />
+              <BadgeTendencia variacao={projecao.variacaoAnoPassadoLit} formatador={fmtLitros} periodoTexto="" />
+            </div>
+          )}
+          {projecao.variacaoMedia3Fat && (
+            <div>
+              <div style={{ color: "#666", fontSize: 10 }}>vs média últimos 3 meses</div>
+              <BadgeTendencia variacao={projecao.variacaoMedia3Fat} formatador={fmtMoeda} periodoTexto="" />
+              <BadgeTendencia variacao={projecao.variacaoMedia3Lit} formatador={fmtLitros} periodoTexto="" />
+            </div>
+          )}
+        </div>
+      )}
+      <div style={{ color: "#555", fontSize: 9, marginTop: 6 }}>
+        Projeção é só uma estimativa linear (não usada nos cálculos de crescimento abaixo).
+      </div>
+    </div>
+  );
+}
+
 // Preço médio por litro (faturamento / litros). Retorna null se não houver litros.
 function precoMedioLitro(fat, lit) {
   if (!lit) return null;
@@ -70,6 +136,19 @@ function fmtPrecoLitro(v) {
 function periodoTexto(rows) {
   if (!rows || !rows.length) return "";
   return rows.length === 1 ? labelMes(rows[0].chave) : `${labelMes(rows[0].chave)}–${labelMes(rows[rows.length - 1].chave)}`;
+}
+
+// Pega os N meses terminando em "chaveReferencia" (ex: últimos 3 meses até Jun/26) e os
+// mesmos N meses-calendário do ano anterior (ex: Abr–Jun/25), pra comparação sazonal "ano a ano".
+function janelaAnoAnterior(rows, chaveReferencia, n) {
+  const idx = rows.findIndex(r => r.chave === chaveReferencia);
+  if (idx === -1) return { atual: [], anoAnterior: [] };
+  const inicioIdx = Math.max(0, idx - n + 1);
+  const atual = rows.slice(inicioIdx, idx + 1);
+  const anoAnterior = atual
+    .map(r => rows.find(x => x.ano === r.ano - 1 && x.mes === r.mes))
+    .filter(Boolean);
+  return { atual, anoAnterior };
 }
 
 // -------------------- Contexto de dados --------------------
@@ -121,13 +200,20 @@ function calcularVariacao(atual, anterior) {
   return { diff, pct };
 }
 
-// Badge colorido de crescimento/queda/estável (verde/vermelho/amarelo), com texto opcional do período avaliado
+// Escala de cores usada em todo o app pra crescimento/queda:
+// > +10% verde · 0% a +10% amarelo · 0% a -10% laranja · < -10% vermelho
+function classificarTendencia(pct) {
+  if (pct > 10) return { cor: "#4caf6b", corFundo: "rgba(76,175,107,0.28)", Icon: ArrowUp, texto: "Crescimento" };
+  if (pct >= 0) return { cor: "#e8c400", corFundo: "rgba(232,196,0,0.22)", Icon: ArrowUp, texto: "Crescimento leve" };
+  if (pct >= -10) return { cor: "#f0883e", corFundo: "rgba(240,136,62,0.22)", Icon: ArrowDown, texto: "Queda leve" };
+  return { cor: "#e0645a", corFundo: "rgba(224,101,90,0.28)", Icon: ArrowDown, texto: "Queda" };
+}
+
+// Badge colorido de crescimento/queda (verde/amarelo/laranja/vermelho), com texto opcional do período avaliado
 function BadgeTendencia({ variacao, formatador, periodoTexto }) {
   if (!variacao) return null;
   const { diff, pct } = variacao;
-  let cor = "#C69700", Icon = Minus, texto = "Estável";
-  if (pct > 1) { cor = "#4caf6b"; Icon = ArrowUp; texto = "Crescimento"; }
-  else if (pct < -1) { cor = "#e0645a"; Icon = ArrowDown; texto = "Queda"; }
+  const { cor, Icon, texto } = classificarTendencia(pct);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: cor, fontSize: 12, fontWeight: 700 }}>
@@ -207,6 +293,36 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
   );
 }
 
+// Card de ano-calendário mostrando Faturamento e Litros juntos (total + média/mês),
+// com crescimento/queda vs o ano anterior (baseado na média/mês, justo mesmo com ano parcial)
+function CardAnualCompleto({ dados }) {
+  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit } = dados;
+  return (
+    <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
+        <Calendar size={14} /> Ano {ano}{meses < 12 ? ` (${meses} meses fechados)` : ""}
+      </div>
+      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Faturamento total</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>{fmtMoeda(totalFat)}</div>
+          <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>Média/mês: {fmtMoeda(mediaFat)}</div>
+          <BadgeTendencia variacao={variacaoFat} formatador={fmtMoeda} periodoTexto={variacaoFat ? `média/mês vs ${ano - 1}` : ""} />
+        </div>
+        <div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Litros total</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>{fmtLitros(totalLit)}</div>
+          <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>Média/mês: {fmtLitros(mediaLit)}</div>
+          <BadgeTendencia variacao={variacaoLit} formatador={fmtLitros} periodoTexto={variacaoLit ? `média/mês vs ${ano - 1}` : ""} />
+        </div>
+        <div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Preço médio/L</div>
+          <div style={{ color: "#C69700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Section({ title, icon, children }) {
   return (
@@ -316,6 +432,7 @@ function ClienteDashboard() {
   const [clienteSel, setClienteSel] = useState(null);
   const [inicio, setInicio] = useState("");
   const [fim, setFim] = useState("");
+  const [mesRefAno, setMesRefAno] = useState("");
 
   const sugestoes = useMemo(() => {
     if (!busca.trim()) return [];
@@ -330,6 +447,8 @@ function ClienteDashboard() {
     const rows = dados[nome] || [];
     setInicio(rows[0]?.chave || "");
     setFim(rows[rows.length - 1]?.chave || "");
+    const { fechados } = separarMesEmAndamento(rows);
+    setMesRefAno(fechados.length ? fechados[fechados.length - 1].chave : "");
   }
 
   const rowsFiltradas = useMemo(() => {
@@ -347,11 +466,23 @@ function ClienteDashboard() {
   const ultimos12 = rowsFechadas.slice(-12);
   const anteriores3 = rowsFechadas.slice(-6, -3);
   const anteriores6 = rowsFechadas.slice(-12, -6);
+  const anteriores12 = rowsFechadas.slice(-24, -12);
 
   const variacaoFat3 = anteriores3.length ? calcularVariacao(media(ultimos3, "faturamento"), media(anteriores3, "faturamento")) : null;
   const variacaoLit3 = anteriores3.length ? calcularVariacao(media(ultimos3, "litros"), media(anteriores3, "litros")) : null;
   const variacaoFat6 = anteriores6.length ? calcularVariacao(media(ultimos6, "faturamento"), media(anteriores6, "faturamento")) : null;
   const variacaoLit6 = anteriores6.length ? calcularVariacao(media(ultimos6, "litros"), media(anteriores6, "litros")) : null;
+
+  // comparações ano a ano (mesmo mês/meses do ano anterior), a partir do mês de referência selecionável
+  const janelasAno = useMemo(() => {
+    if (!rowsFechadas.length || !mesRefAno) return null;
+    return {
+      m1: janelaAnoAnterior(rowsFechadas, mesRefAno, 1),
+      m3: janelaAnoAnterior(rowsFechadas, mesRefAno, 3),
+      m6: janelaAnoAnterior(rowsFechadas, mesRefAno, 6),
+      m12: janelaAnoAnterior(rowsFechadas, mesRefAno, 12),
+    };
+  }, [rowsFechadas, mesRefAno]);
 
   // médias por ano-calendário (ex: 2023, 2024, 2025...), com crescimento vs o ano anterior
   const mediasPorAno = useMemo(() => {
@@ -364,7 +495,10 @@ function ClienteDashboard() {
       const mediaLitAno = media(rowsDoAno, "litros");
       return {
         ano, meses: rowsDoAno.length,
+        totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
+        // variação calculada em cima da MÉDIA mensal (não do total), pra ser justa mesmo quando
+        // o ano corrente ainda não fechou todos os 12 meses
         variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
         variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
       };
@@ -416,11 +550,7 @@ function ClienteDashboard() {
             {clienteSel}
           </h2>
 
-          {emAndamento && (
-            <div style={{ color: "#888", fontSize: 12, marginBottom: 14, background: "#1D1D1B", border: "1px dashed #444", borderRadius: 6, padding: "8px 12px", display: "inline-block" }}>
-              ⏳ {labelMes(emAndamento.chave)} ainda está em andamento (mês não fechou): {fmtMoeda(emAndamento.faturamento)} · {fmtLitros(emAndamento.litros)} até o momento — os cálculos de média e crescimento abaixo usam só meses já fechados, pra não distorcer a comparação.
-            </div>
-          )}
+          <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
@@ -433,30 +563,62 @@ function ClienteDashboard() {
 
           <Section title="Preço médio por litro" icon={<Droplets size={18} color="#C69700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <StatCard label="Últimos 3 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos3, "faturamento"), soma(ultimos3, "litros")))} icon={<Droplets size={14} />} />
-              <StatCard label="Últimos 6 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos6, "faturamento"), soma(ultimos6, "litros")))} icon={<Droplets size={14} />} />
-              <StatCard label="Últimos 12 meses" value={fmtPrecoLitro(precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros")))} icon={<Droplets size={14} />} />
+              <StatCard label={`Últimos 3 meses (${periodoTexto(ultimos3)})`}
+                value={fmtPrecoLitro(precoMedioLitro(soma(ultimos3, "faturamento"), soma(ultimos3, "litros")))} icon={<Droplets size={14} />}
+                badge={<BadgeTendencia
+                  variacao={anteriores3.length ? calcularVariacao(precoMedioLitro(soma(ultimos3,"faturamento"),soma(ultimos3,"litros")), precoMedioLitro(soma(anteriores3,"faturamento"),soma(anteriores3,"litros"))) : null}
+                  formatador={fmtPrecoLitro} periodoTexto={anteriores3.length ? `vs ${periodoTexto(anteriores3)}` : ""} />} />
+              <StatCard label={`Últimos 6 meses (${periodoTexto(ultimos6)})`}
+                value={fmtPrecoLitro(precoMedioLitro(soma(ultimos6, "faturamento"), soma(ultimos6, "litros")))} icon={<Droplets size={14} />}
+                badge={<BadgeTendencia
+                  variacao={anteriores6.length ? calcularVariacao(precoMedioLitro(soma(ultimos6,"faturamento"),soma(ultimos6,"litros")), precoMedioLitro(soma(anteriores6,"faturamento"),soma(anteriores6,"litros"))) : null}
+                  formatador={fmtPrecoLitro} periodoTexto={anteriores6.length ? `vs ${periodoTexto(anteriores6)}` : ""} />} />
+              <StatCard label={`Últimos 12 meses (${periodoTexto(ultimos12)})`}
+                value={fmtPrecoLitro(precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros")))} icon={<Droplets size={14} />}
+                badge={<BadgeTendencia
+                  variacao={anteriores12.length ? calcularVariacao(precoMedioLitro(soma(ultimos12,"faturamento"),soma(ultimos12,"litros")), precoMedioLitro(soma(anteriores12,"faturamento"),soma(anteriores12,"litros"))) : null}
+                  formatador={fmtPrecoLitro} periodoTexto={anteriores12.length ? `vs ${periodoTexto(anteriores12)}` : ""} />} />
             </div>
+          </Section>
+
+          <Section title="Comparação Ano a Ano" icon={<Calendar size={18} color="#C69700" />}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
+              <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+              <span style={{ color: "#666", fontSize: 11 }}>
+                {mesRefAno && `comparando com ${labelMes(mesRefAno).split("/")[0]}/${(parseInt(mesRefAno.split("-")[0],10)-1).toString().slice(2)} (mesmo mês do ano anterior)`}
+              </span>
+            </div>
+
+            {!janelasAno && <div style={{ color: "#888", fontSize: 13 }}>Selecione um mês de referência.</div>}
+
+            {janelasAno && (
+              <>
+                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                  <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                  <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                  <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                  <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                </div>
+
+                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
+                  <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
+                  <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
+                  <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
+                </div>
+              </>
+            )}
           </Section>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="faturamento" formatador={fmtMoeda} />
               <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="faturamento" formatador={fmtMoeda} />
-              <StatCard label="Média 12 meses" value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
+              <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
-
-            {mediasPorAno.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Médias anuais</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  {mediasPorAno.map(m => (
-                    <StatCard key={m.ano} label={`Média anual ${m.ano}${m.meses < 12 ? ` (${m.meses} meses)` : ""}`} value={fmtMoeda(m.mediaFat)} icon={<Calendar size={14} />}
-                      badge={<BadgeTendencia variacao={m.variacaoFat} formatador={fmtMoeda} periodoTexto={m.variacaoFat ? `vs ${m.ano - 1}` : ""} />} />
-                  ))}
-                </div>
-              </div>
-            )}
 
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={chartData}>
@@ -473,16 +635,15 @@ function ClienteDashboard() {
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="litros" formatador={fmtLitros} />
               <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="litros" formatador={fmtLitros} />
-              <StatCard label="Média 12 meses" value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
+              <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
 
             {mediasPorAno.length > 0 && (
               <div style={{ marginBottom: 16 }}>
-                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Médias anuais</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento e Litros por Ano</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {mediasPorAno.map(m => (
-                    <StatCard key={m.ano} label={`Média anual ${m.ano}${m.meses < 12 ? ` (${m.meses} meses)` : ""}`} value={fmtLitros(m.mediaLit)} icon={<Calendar size={14} />}
-                      badge={<BadgeTendencia variacao={m.variacaoLit} formatador={fmtLitros} periodoTexto={m.variacaoLit ? `vs ${m.ano - 1}` : ""} />} />
+                    <CardAnualCompleto key={m.ano} dados={m} />
                   ))}
                 </div>
               </div>
@@ -982,7 +1143,7 @@ function rotuloCompactoGeral(v, unidade) {
   return Math.abs(v) >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : fmtMoeda(v);
 }
 
-function calcularMetricasCliente(rowsBrutas) {
+function calcularMetricasCliente(rowsBrutas, mesRefAno) {
   const { fechados: rows, emAndamento } = separarMesEmAndamento(rowsBrutas);
   const n = rows.length;
   const atual = rows[n - 1];
@@ -1004,6 +1165,18 @@ function calcularMetricasCliente(rowsBrutas) {
     };
   }
 
+  let comparacaoAno = null;
+  if (mesRefAno && rows.some(r => r.chave === mesRefAno)) {
+    const m1 = janelaAnoAnterior(rows, mesRefAno, 1);
+    const m3 = janelaAnoAnterior(rows, mesRefAno, 3);
+    const m6 = janelaAnoAnterior(rows, mesRefAno, 6);
+    comparacaoAno = {
+      m1: janela(m1.atual, m1.anoAnterior),
+      m3: janela(m3.atual, m3.anoAnterior),
+      m6: janela(m6.atual, m6.anoAnterior),
+    };
+  }
+
   return {
     ultimoMesFechado: atual ? {
       fat: atual.faturamento, lit: atual.litros, precoLitro: precoMedioLitro(atual.faturamento, atual.litros),
@@ -1011,13 +1184,12 @@ function calcularMetricasCliente(rowsBrutas) {
       varLit: anterior ? calcularVariacao(atual.litros, anterior.litros) : null,
       mesTexto: labelMes(atual.chave),
     } : null,
-    emAndamento: emAndamento ? {
-      fat: emAndamento.faturamento, lit: emAndamento.litros, precoLitro: precoMedioLitro(emAndamento.faturamento, emAndamento.litros),
-      mesTexto: labelMes(emAndamento.chave),
-    } : null,
+    emAndamentoRow: emAndamento,
+    rowsFechados: rows,
     j3: janela(j3, j3Prev),
     j6: janela(j6, j6Prev),
     j12: janela(j12, j12Prev),
+    comparacaoAno,
   };
 }
 
@@ -1043,11 +1215,7 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
       <div style={{ color: "#C69700", fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
         #{posicao} · {nome}
       </div>
-      {metricas.emAndamento && (
-        <div style={{ color: "#888", fontSize: 11, marginBottom: 10, background: "#141412", border: "1px dashed #444", borderRadius: 6, padding: "5px 8px", display: "inline-block" }}>
-          {metricas.emAndamento.mesTexto} em andamento (mês ainda não fechou): {fmtMoeda(metricas.emAndamento.fat)} · {fmtLitros(metricas.emAndamento.lit)} · {fmtPrecoLitro(metricas.emAndamento.precoLitro)} — parcial, não comparado
-        </div>
-      )}
+      <AvisoMesAndamento emAndamento={metricas.emAndamentoRow} rowsFechados={metricas.rowsFechados} />
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
         {metricas.ultimoMesFechado && (
           <JanelaMetrica label={`Último mês fechado`} periodoTexto={metricas.ultimoMesFechado.mesTexto}
@@ -1061,6 +1229,20 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
         <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.j12.periodoTexto} periodoAnteriorTexto={metricas.j12.periodoAnteriorTexto}
           fat={metricas.j12.fat} lit={metricas.j12.lit} precoLitro={metricas.j12.precoLitro} varFat={metricas.j12.varFat} varLit={metricas.j12.varLit} />
       </div>
+
+      {metricas.comparacaoAno && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
+          <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>vs mesmo período do ano anterior</div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <JanelaMetrica label="Este mês" periodoTexto={metricas.comparacaoAno.m1.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m1.periodoAnteriorTexto}
+              fat={metricas.comparacaoAno.m1.fat} lit={metricas.comparacaoAno.m1.lit} precoLitro={metricas.comparacaoAno.m1.precoLitro} varFat={metricas.comparacaoAno.m1.varFat} varLit={metricas.comparacaoAno.m1.varLit} />
+            <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.comparacaoAno.m3.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m3.periodoAnteriorTexto}
+              fat={metricas.comparacaoAno.m3.fat} lit={metricas.comparacaoAno.m3.lit} precoLitro={metricas.comparacaoAno.m3.precoLitro} varFat={metricas.comparacaoAno.m3.varFat} varLit={metricas.comparacaoAno.m3.varLit} />
+            <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.comparacaoAno.m6.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m6.periodoAnteriorTexto}
+              fat={metricas.comparacaoAno.m6.fat} lit={metricas.comparacaoAno.m6.lit} precoLitro={metricas.comparacaoAno.m6.precoLitro} varFat={metricas.comparacaoAno.m6.varFat} varLit={metricas.comparacaoAno.m6.varLit} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1083,12 +1265,7 @@ function TabelaHeatmapGrupos({ linhas }) {
               {linha.valores.map((v, idx) => {
                 const anterior = idx > 0 ? linha.valores[idx - 1].fat : null;
                 const variacao = anterior != null ? calcularVariacao(v.fat, anterior) : null;
-                let bg = "transparent";
-                if (variacao) {
-                  if (variacao.pct > 1) bg = "rgba(76,175,107,0.25)";
-                  else if (variacao.pct < -1) bg = "rgba(224,101,90,0.25)";
-                  else bg = "rgba(198,151,0,0.2)";
-                }
+                const bg = variacao ? classificarTendencia(variacao.pct).corFundo : "transparent";
                 return <td key={v.periodo} style={{ ...tdStyle, background: bg }}>{v.fat ? rotuloCompactoGeral(v.fat) : "-"}</td>;
               })}
             </tr>
@@ -1104,6 +1281,8 @@ function DashboardTab() {
   const [gruposSel, setGruposSel] = useState([]);
   const [todos, setTodos] = useState(true);
   const [buscaCliente, setBuscaCliente] = useState("");
+  const periodosFechados = periodos.filter(p => p !== chaveMesAtualReal());
+  const [mesRefAno, setMesRefAno] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
 
   function toggleGrupoFiltro(g) {
     setTodos(false);
@@ -1114,10 +1293,10 @@ function DashboardTab() {
 
   const clientesComMetricas = useMemo(() => {
     return clientesFiltrados
-      .map(nome => ({ nome, metricas: calcularMetricasCliente(dados[nome] || []) }))
+      .map(nome => ({ nome, metricas: calcularMetricasCliente(dados[nome] || [], mesRefAno) }))
       .sort((a, b) => b.metricas.j12.fat - a.metricas.j12.fat)
       .map((c, idx) => ({ ...c, posicao: idx + 1 }));
-  }, [clientesFiltrados, dados]);
+  }, [clientesFiltrados, dados, mesRefAno]);
 
   const clientesExibidos = buscaCliente.trim()
     ? clientesComMetricas.filter(c => c.nome.toLowerCase().includes(buscaCliente.toLowerCase()))
@@ -1161,16 +1340,20 @@ function DashboardTab() {
             </label>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
           <Search size={14} color="#C69700" />
           <input placeholder="Buscar um cliente específico dentro do ranking..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês de referência (comparação ano a ano):</span>
+          <MonthPicker periodosDisponiveis={periodosFechados} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
         </div>
       </div>
 
       <Section title="Comparação mês a mês por grupo · Faturamento" icon={<AlertTriangle size={16} color="#C69700" />}>
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 crescimento vs mês anterior · 🔴 queda vs mês anterior · 🟡 estável (±1%). A última coluna pode ser um mês ainda em andamento — compare com cautela.
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). A última coluna pode ser um mês ainda em andamento — compare com cautela.
         </div>
         <TabelaHeatmapGrupos linhas={linhasHeatmap} />
       </Section>
