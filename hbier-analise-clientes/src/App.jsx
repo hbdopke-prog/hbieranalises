@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, createContext, useContext } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine,
+  ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v1.5";
+const APP_VERSION = "v1.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -36,6 +36,13 @@ function labelMes(chave) {
 function media(rows, campo) {
   if (!rows.length) return 0;
   return rows.reduce((s,r) => s + r[campo], 0) / rows.length;
+}
+function soma(rows, campo) {
+  return rows.reduce((s,r) => s + r[campo], 0);
+}
+function periodoTexto(rows) {
+  if (!rows || !rows.length) return "";
+  return rows.length === 1 ? labelMes(rows[0].chave) : `${labelMes(rows[0].chave)}–${labelMes(rows[rows.length - 1].chave)}`;
 }
 
 // -------------------- Contexto de dados --------------------
@@ -79,28 +86,55 @@ function processarDados(linhas) {
 }
 
 // -------------------- Componentes visuais --------------------
-function StatCard({ label, value, icon }) {
+// Calcula diferença/variação percentual entre dois valores (atual vs anterior)
+function calcularVariacao(atual, anterior) {
+  if (anterior == null) return null;
+  const diff = atual - anterior;
+  const pct = anterior !== 0 ? (diff / Math.abs(anterior)) * 100 : (atual === 0 ? 0 : 100);
+  return { diff, pct };
+}
+
+// Badge colorido de crescimento/queda/estável (verde/vermelho/amarelo), com texto opcional do período avaliado
+function BadgeTendencia({ variacao, formatador, periodoTexto }) {
+  if (!variacao) return null;
+  const { diff, pct } = variacao;
+  let cor = "#C69700", Icon = Minus, texto = "Estável";
+  if (pct > 1) { cor = "#4caf6b"; Icon = ArrowUp; texto = "Crescimento"; }
+  else if (pct < -1) { cor = "#e0645a"; Icon = ArrowDown; texto = "Queda"; }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: cor, fontSize: 12, fontWeight: 700 }}>
+        <Icon size={12} /> {texto} · {formatador ? formatador(Math.abs(diff)) : Math.abs(diff)} ({pct >= 0 ? "+" : ""}{pct.toFixed(1)}%)
+      </span>
+      {periodoTexto && <span style={{ color: "#666", fontSize: 10 }}>({periodoTexto})</span>}
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, badge }) {
   return (
     <div style={{
       background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
       flex: "1 1 160px", minWidth: 160, border: "1px solid #33332f",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 12, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4, lineHeight: 1.4 }}>
         {icon}{label}
       </div>
-      <div style={{ color: "#fff", fontSize: 19, fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: 0.5 }}>
+      <div style={{ color: "#fff", fontSize: 22, fontWeight: 800, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.2 }}>
         {value}
       </div>
+      {badge}
     </div>
   );
 }
+
 
 function Section({ title, icon, children }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h3 style={{
-        color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 22,
-        letterSpacing: 1, display: "flex", alignItems: "center", gap: 8,
+        color: "#fff", fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 16,
+        fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8,
         borderBottom: "2px solid #02601D", paddingBottom: 8, marginBottom: 14,
       }}>
         {icon}{title}
@@ -230,6 +264,31 @@ function ClienteDashboard() {
   const ultimos3 = todasRows ? todasRows.slice(-3) : [];
   const ultimos6 = todasRows ? todasRows.slice(-6) : [];
   const ultimos12 = todasRows ? todasRows.slice(-12) : [];
+  const anteriores3 = todasRows ? todasRows.slice(-6, -3) : [];
+  const anteriores6 = todasRows ? todasRows.slice(-12, -6) : [];
+
+  const variacaoFat3 = anteriores3.length ? calcularVariacao(media(ultimos3, "faturamento"), media(anteriores3, "faturamento")) : null;
+  const variacaoLit3 = anteriores3.length ? calcularVariacao(media(ultimos3, "litros"), media(anteriores3, "litros")) : null;
+  const variacaoFat6 = anteriores6.length ? calcularVariacao(media(ultimos6, "faturamento"), media(anteriores6, "faturamento")) : null;
+  const variacaoLit6 = anteriores6.length ? calcularVariacao(media(ultimos6, "litros"), media(anteriores6, "litros")) : null;
+
+  // médias por ano-calendário (ex: 2023, 2024, 2025...), com crescimento vs o ano anterior
+  const mediasPorAno = useMemo(() => {
+    if (!todasRows) return [];
+    const anos = [...new Set(todasRows.map(r => r.ano))].sort((a, b) => a - b);
+    return anos.map((ano, idx) => {
+      const rowsDoAno = todasRows.filter(r => r.ano === ano);
+      const rowsAnoAnterior = idx > 0 ? todasRows.filter(r => r.ano === anos[idx - 1]) : [];
+      const mediaFatAno = media(rowsDoAno, "faturamento");
+      const mediaLitAno = media(rowsDoAno, "litros");
+      return {
+        ano, meses: rowsDoAno.length,
+        mediaFat: mediaFatAno, mediaLit: mediaLitAno,
+        variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
+        variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
+      };
+    });
+  }, [todasRows]);
 
   const chartData = rowsFiltradas.map(r => ({ mes: labelMes(r.chave), Faturamento: r.faturamento, Litros: r.litros }));
   const primeiroPeriodo = todasRows && todasRows.length ? todasRows[0].chave : "";
@@ -287,10 +346,25 @@ function ClienteDashboard() {
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <StatCard label="Média 3 meses" value={fmtMoeda(media(ultimos3, "faturamento"))} icon={<TrendingUp size={14} />} />
-              <StatCard label="Média 6 meses" value={fmtMoeda(media(ultimos6, "faturamento"))} icon={<TrendingUp size={14} />} />
-              <StatCard label="Média anual" value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
+              <StatCard label="Média 3 meses" value={fmtMoeda(media(ultimos3, "faturamento"))} icon={<TrendingUp size={14} />}
+                badge={<BadgeTendencia variacao={variacaoFat3} formatador={fmtMoeda} periodoTexto={anteriores3.length ? `${periodoTexto(ultimos3)} vs ${periodoTexto(anteriores3)}` : ""} />} />
+              <StatCard label="Média 6 meses" value={fmtMoeda(media(ultimos6, "faturamento"))} icon={<TrendingUp size={14} />}
+                badge={<BadgeTendencia variacao={variacaoFat6} formatador={fmtMoeda} periodoTexto={anteriores6.length ? `${periodoTexto(ultimos6)} vs ${periodoTexto(anteriores6)}` : ""} />} />
+              <StatCard label="Média 12 meses" value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
+
+            {mediasPorAno.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Médias anuais</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {mediasPorAno.map(m => (
+                    <StatCard key={m.ano} label={`Média anual ${m.ano}${m.meses < 12 ? ` (${m.meses} meses)` : ""}`} value={fmtMoeda(m.mediaFat)} icon={<Calendar size={14} />}
+                      badge={<BadgeTendencia variacao={m.variacaoFat} formatador={fmtMoeda} periodoTexto={m.variacaoFat ? `vs ${m.ano - 1}` : ""} />} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -304,10 +378,25 @@ function ClienteDashboard() {
 
           <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-              <StatCard label="Média 3 meses" value={fmtLitros(media(ultimos3, "litros"))} icon={<Droplets size={14} />} />
-              <StatCard label="Média 6 meses" value={fmtLitros(media(ultimos6, "litros"))} icon={<Droplets size={14} />} />
-              <StatCard label="Média anual" value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
+              <StatCard label="Média 3 meses" value={fmtLitros(media(ultimos3, "litros"))} icon={<Droplets size={14} />}
+                badge={<BadgeTendencia variacao={variacaoLit3} formatador={fmtLitros} periodoTexto={anteriores3.length ? `${periodoTexto(ultimos3)} vs ${periodoTexto(anteriores3)}` : ""} />} />
+              <StatCard label="Média 6 meses" value={fmtLitros(media(ultimos6, "litros"))} icon={<Droplets size={14} />}
+                badge={<BadgeTendencia variacao={variacaoLit6} formatador={fmtLitros} periodoTexto={anteriores6.length ? `${periodoTexto(ultimos6)} vs ${periodoTexto(anteriores6)}` : ""} />} />
+              <StatCard label="Média 12 meses" value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
+
+            {mediasPorAno.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Médias anuais</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {mediasPorAno.map(m => (
+                    <StatCard key={m.ano} label={`Média anual ${m.ano}${m.meses < 12 ? ` (${m.meses} meses)` : ""}`} value={fmtLitros(m.mediaLit)} icon={<Calendar size={14} />}
+                      badge={<BadgeTendencia variacao={m.variacaoLit} formatador={fmtLitros} periodoTexto={m.variacaoLit ? `vs ${m.ano - 1}` : ""} />} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
@@ -431,10 +520,26 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
     ? nomes.filter(n => n.toLowerCase().includes(buscaCliente.toLowerCase()))
     : nomes;
 
+  function limparSelecao() {
+    setSelecionados([]);
+    setGruposSel([]);
+    setBuscaCliente("");
+    setInicio("");
+    setFim("");
+  }
+
   return (
     <div style={{ flex: 1, minWidth: 280, background: "#1D1D1B", borderRadius: 10, padding: 16, border: `1px solid ${cor}` }}>
-      <div style={{ color: cor, fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 0.5, marginBottom: 10 }}>
-        {titulo}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ color: cor, fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 0.5 }}>
+          {titulo}
+        </div>
+        <button onClick={limparSelecao} style={{
+          background: "transparent", border: "1px solid #444", color: "#888",
+          borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer",
+        }}>
+          Limpar seleção
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
@@ -498,6 +603,30 @@ function mediaSimples(valores) {
   return validos.reduce((s, v) => s + v, 0) / validos.length;
 }
 
+function CardComparativo({ titulo, valorA, valorB, variacao, formatador, icon }) {
+  return (
+    <div style={{
+      background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
+      flex: "1 1 220px", minWidth: 220, border: "1px solid #33332f",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>
+        {icon}{titulo}
+      </div>
+      <div style={{ display: "flex", gap: 20, marginBottom: 8 }}>
+        <div>
+          <div style={{ color: "#4caf6b", fontSize: 11, fontWeight: 700 }}>A</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(valorA)}</div>
+        </div>
+        <div>
+          <div style={{ color: "#e8c67a", fontSize: 11, fontWeight: 700 }}>B</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(valorB)}</div>
+        </div>
+      </div>
+      <BadgeTendencia variacao={variacao} formatador={formatador} periodoTexto="A em relação a B" />
+    </div>
+  );
+}
+
 function ComparacaoTab() {
   const { dados, periodos } = useData();
   const [modoA, setModoA] = useState("clientes");
@@ -534,6 +663,14 @@ function ComparacaoTab() {
   const labelA = modoA === "grupo" && gruposA.length ? `Grupo: ${gruposA.join(" + ")}` : (selA.length > 1 ? `${selA.length} clientes (A)` : (selA[0] || "A"));
   const labelB = modoB === "grupo" && gruposB.length ? `Grupo: ${gruposB.join(" + ")}` : (selB.length > 1 ? `${selB.length} clientes (B)` : (selB[0] || "B"));
 
+  // versão curta pra caber nos cards de estatística (o nome completo continua na legenda/tooltip do gráfico)
+  const labelACurto = modoA === "grupo" && gruposA.length
+    ? (gruposA.length > 1 ? `${gruposA.length} grupos (A)` : gruposA[0])
+    : labelA;
+  const labelBCurto = modoB === "grupo" && gruposB.length
+    ? (gruposB.length > 1 ? `${gruposB.length} grupos (B)` : gruposB[0])
+    : labelB;
+
   // rótulo real de cada ponto do gráfico (data de A e/ou de B, já que os períodos podem ser de anos diferentes)
   const maxLen = Math.max(rowsA.length, rowsB.length);
   const chartFat = [], chartLit = [];
@@ -541,8 +678,8 @@ function ComparacaoTab() {
     const dataA = rowsA[i] ? labelMes(rowsA[i].chave) : null;
     const dataB = rowsB[i] ? labelMes(rowsB[i].chave) : null;
     const periodo = dataA && dataB ? (dataA === dataB ? dataA : `${dataA} / ${dataB}`) : (dataA || dataB || `M${i + 1}`);
-    chartFat.push({ periodo, faturamentoA: rowsA[i]?.faturamento ?? null, faturamentoB: rowsB[i]?.faturamento ?? null });
-    chartLit.push({ periodo, litrosA: rowsA[i]?.litros ?? null, litrosB: rowsB[i]?.litros ?? null });
+    chartFat.push({ periodo, faturamentoA: rowsA[i]?.faturamento ?? null, faturamentoB: rowsB[i]?.faturamento ?? null, diferencaFat: (rowsA[i] && rowsB[i]) ? (rowsA[i].faturamento - rowsB[i].faturamento) : null });
+    chartLit.push({ periodo, litrosA: rowsA[i]?.litros ?? null, litrosB: rowsB[i]?.litros ?? null, diferencaLit: (rowsA[i] && rowsB[i]) ? (rowsA[i].litros - rowsB[i].litros) : null });
   }
 
   const totFatA = rowsA.reduce((s,r)=>s+r.faturamento,0);
@@ -555,7 +692,20 @@ function ComparacaoTab() {
   const mediaLitA = mediaSimples(rowsA.map(r => r.litros));
   const mediaLitB = mediaSimples(rowsB.map(r => r.litros));
 
+  const media3FatA = mediaSimples(rowsA.slice(-3).map(r => r.faturamento));
+  const media3FatB = mediaSimples(rowsB.slice(-3).map(r => r.faturamento));
+  const media3LitA = mediaSimples(rowsA.slice(-3).map(r => r.litros));
+  const media3LitB = mediaSimples(rowsB.slice(-3).map(r => r.litros));
+
   const pronto = rowsA.length > 0 && rowsB.length > 0;
+
+  // A vs B: quanto A está acima/abaixo de B, em cada métrica
+  const compTotalFat = pronto ? calcularVariacao(totFatA, totFatB) : null;
+  const compTotalLit = pronto ? calcularVariacao(totLitA, totLitB) : null;
+  const compMediaFat = pronto ? calcularVariacao(mediaFatA, mediaFatB) : null;
+  const compMediaLit = pronto ? calcularVariacao(mediaLitA, mediaLitB) : null;
+  const compMedia3Fat = pronto ? calcularVariacao(media3FatA, media3FatB) : null;
+  const compMedia3Lit = pronto ? calcularVariacao(media3LitA, media3LitB) : null;
 
   function rotuloCompactoMoeda(v) {
     if (v == null) return "";
@@ -566,6 +716,16 @@ function ComparacaoTab() {
     if (v == null) return "";
     if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k L`;
     return `${Math.round(v)} L`;
+  }
+  function rotuloDiferencaMoeda(v) {
+    if (v == null) return "";
+    const sinal = v > 0 ? "+" : "";
+    return `${sinal}${rotuloCompactoMoeda(v)}`;
+  }
+  function rotuloDiferencaLitros(v) {
+    if (v == null) return "";
+    const sinal = v > 0 ? "+" : "";
+    return `${sinal}${rotuloCompactoLitros(v)}`;
   }
 
   return (
@@ -587,12 +747,30 @@ function ComparacaoTab() {
 
       {pronto && (
         <>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-            <StatCard label={`${labelA} · Faturamento total`} value={fmtMoeda(totFatA)} icon={<TrendingUp size={14} />} />
-            <StatCard label={`${labelB} · Faturamento total`} value={fmtMoeda(totFatB)} icon={<TrendingUp size={14} />} />
-            <StatCard label={`${labelA} · Litros total`} value={fmtLitros(totLitA)} icon={<Droplets size={14} />} />
-            <StatCard label={`${labelB} · Litros total`} value={fmtLitros(totLitB)} icon={<Droplets size={14} />} />
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <StatCard label={`${labelACurto} · Faturamento total`} value={fmtMoeda(totFatA)} icon={<TrendingUp size={14} />} />
+            <StatCard label={`${labelBCurto} · Faturamento total`} value={fmtMoeda(totFatB)} icon={<TrendingUp size={14} />} />
+            <StatCard label={`${labelACurto} · Litros total`} value={fmtLitros(totLitA)} icon={<Droplets size={14} />} />
+            <StatCard label={`${labelBCurto} · Litros total`} value={fmtLitros(totLitB)} icon={<Droplets size={14} />} />
           </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+            <StatCard label={`${labelACurto} · Média 3 meses (Fat.)`} value={fmtMoeda(media3FatA)} icon={<TrendingUp size={14} />} />
+            <StatCard label={`${labelBCurto} · Média 3 meses (Fat.)`} value={fmtMoeda(media3FatB)} icon={<TrendingUp size={14} />} />
+            <StatCard label={`${labelACurto} · Média 3 meses (Lit.)`} value={fmtLitros(media3LitA)} icon={<Droplets size={14} />} />
+            <StatCard label={`${labelBCurto} · Média 3 meses (Lit.)`} value={fmtLitros(media3LitB)} icon={<Droplets size={14} />} />
+          </div>
+
+          <Section title="Comparativo A vs B" icon={<GitCompareArrows size={18} color="#C69700" />}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <CardComparativo titulo="Faturamento · Média 3 meses" valorA={media3FatA} valorB={media3FatB} variacao={compMedia3Fat} formatador={fmtMoeda} icon={<TrendingUp size={13} />} />
+              <CardComparativo titulo="Faturamento · Média do período" valorA={mediaFatA} valorB={mediaFatB} variacao={compMediaFat} formatador={fmtMoeda} icon={<TrendingUp size={13} />} />
+              <CardComparativo titulo="Faturamento · Total do período" valorA={totFatA} valorB={totFatB} variacao={compTotalFat} formatador={fmtMoeda} icon={<TrendingUp size={13} />} />
+              <CardComparativo titulo="Litros · Média 3 meses" valorA={media3LitA} valorB={media3LitB} variacao={compMedia3Lit} formatador={fmtLitros} icon={<Droplets size={13} />} />
+              <CardComparativo titulo="Litros · Média do período" valorA={mediaLitA} valorB={mediaLitB} variacao={compMediaLit} formatador={fmtLitros} icon={<Droplets size={13} />} />
+              <CardComparativo titulo="Litros · Total do período" valorA={totLitA} valorB={totLitB} variacao={compTotalLit} formatador={fmtLitros} icon={<Droplets size={13} />} />
+            </div>
+          </Section>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
             <ResponsiveContainer width="100%" height={260}>
@@ -602,13 +780,31 @@ function ComparacaoTab() {
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <ReferenceLine y={mediaFatA} stroke="#02601D" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 10 }} />
-                <ReferenceLine y={mediaFatB} stroke="#C69700" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#C69700", fontSize: 10 }} />
                 <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
                   <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
                 </Bar>
                 <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
                   <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
+                </Bar>
+                <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "top", fill: "#4caf6b", fontSize: 12, fontWeight: 700 }} />
+                <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "bottom", fill: "#e8c67a", fontSize: 12, fontWeight: 700 }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Section>
+
+          <Section title="Diferença mês a mês (A − B) · Faturamento" icon={<GitCompareArrows size={16} color="#888" />}>
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <YAxis stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <ReferenceLine y={0} stroke="#666" />
+                <Bar dataKey="diferencaFat" radius={[3,3,3,3]}>
+                  <LabelList dataKey="diferencaFat" position="top" formatter={rotuloDiferencaMoeda} style={{ fontSize: 10, fill: "#ccc" }} />
+                  {chartFat.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.diferencaFat == null ? "#555" : (entry.diferencaFat >= 0 ? "#4caf6b" : "#e0645a")} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -622,15 +818,33 @@ function ComparacaoTab() {
                 <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
                 <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <ReferenceLine y={mediaLitA} stroke="#02601D" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 10 }} />
-                <ReferenceLine y={mediaLitB} stroke="#C69700" strokeDasharray="4 4" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#C69700", fontSize: 10 }} />
                 <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
                   <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
                 </Line>
                 <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
                   <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
                 </Line>
+                <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "top", fill: "#4caf6b", fontSize: 12, fontWeight: 700 }} />
+                <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "bottom", fill: "#e8c67a", fontSize: 12, fontWeight: 700 }} />
               </LineChart>
+            </ResponsiveContainer>
+          </Section>
+
+          <Section title="Diferença mês a mês (A − B) · Litros" icon={<GitCompareArrows size={16} color="#888" />}>
+            <ResponsiveContainer width="100%" height={170}>
+              <BarChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="periodo" stroke="#888" fontSize={11} interval="preserveStartEnd" />
+                <YAxis stroke="#888" fontSize={11} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
+                <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <ReferenceLine y={0} stroke="#666" />
+                <Bar dataKey="diferencaLit" radius={[3,3,3,3]}>
+                  <LabelList dataKey="diferencaLit" position="top" formatter={rotuloDiferencaLitros} style={{ fontSize: 10, fill: "#ccc" }} />
+                  {chartLit.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.diferencaLit == null ? "#555" : (entry.diferencaLit >= 0 ? "#4caf6b" : "#e0645a")} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </Section>
         </>
@@ -660,6 +874,188 @@ function CarregandoDados({ onRetry, mensagem }) {
           <div style={{ fontSize: 14 }}>Carregando dados da planilha...</div>
         </>
       )}
+    </div>
+  );
+}
+
+function rotuloCompactoGeral(v, unidade) {
+  if (v == null) return "-";
+  if (unidade === "L") {
+    return Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k L` : `${Math.round(v)} L`;
+  }
+  return Math.abs(v) >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : fmtMoeda(v);
+}
+
+function calcularMetricasCliente(rows) {
+  const n = rows.length;
+  const atual = rows[n - 1];
+  const anterior = rows[n - 2];
+
+  const j3 = rows.slice(-3), j3Prev = rows.slice(-6, -3);
+  const j6 = rows.slice(-6), j6Prev = rows.slice(-12, -6);
+  const j12 = rows.slice(-12), j12Prev = rows.slice(-24, -12);
+
+  return {
+    atual: {
+      fat: atual?.faturamento ?? 0, lit: atual?.litros ?? 0,
+      varFat: anterior ? calcularVariacao(atual.faturamento, anterior.faturamento) : null,
+      varLit: anterior ? calcularVariacao(atual.litros, anterior.litros) : null,
+    },
+    j3: {
+      fat: soma(j3, "faturamento"), lit: soma(j3, "litros"),
+      varFat: j3Prev.length ? calcularVariacao(soma(j3, "faturamento"), soma(j3Prev, "faturamento")) : null,
+      varLit: j3Prev.length ? calcularVariacao(soma(j3, "litros"), soma(j3Prev, "litros")) : null,
+    },
+    j6: {
+      fat: soma(j6, "faturamento"), lit: soma(j6, "litros"),
+      varFat: j6Prev.length ? calcularVariacao(soma(j6, "faturamento"), soma(j6Prev, "faturamento")) : null,
+      varLit: j6Prev.length ? calcularVariacao(soma(j6, "litros"), soma(j6Prev, "litros")) : null,
+    },
+    j12: {
+      fat: soma(j12, "faturamento"), lit: soma(j12, "litros"),
+      varFat: j12Prev.length ? calcularVariacao(soma(j12, "faturamento"), soma(j12Prev, "faturamento")) : null,
+      varLit: j12Prev.length ? calcularVariacao(soma(j12, "litros"), soma(j12Prev, "litros")) : null,
+    },
+  };
+}
+
+function JanelaMetrica({ label, fat, lit, varFat, varLit }) {
+  return (
+    <div style={{ minWidth: 165, flex: "1 1 165px" }}>
+      <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>{label}</div>
+      <div style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>{fmtMoeda(fat)}</div>
+      <BadgeTendencia variacao={varFat} formatador={fmtMoeda} />
+      <div style={{ color: "#ddd", fontSize: 13, fontWeight: 700, marginTop: 6 }}>{fmtLitros(lit)}</div>
+      <BadgeTendencia variacao={varLit} formatador={fmtLitros} />
+    </div>
+  );
+}
+
+function CardClienteDashboard({ posicao, nome, metricas }) {
+  return (
+    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 16, marginBottom: 10 }}>
+      <div style={{ color: "#C69700", fontWeight: 800, fontSize: 14, marginBottom: 10 }}>
+        #{posicao} · {nome}
+      </div>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <JanelaMetrica label="Mês atual" fat={metricas.atual.fat} lit={metricas.atual.lit} varFat={metricas.atual.varFat} varLit={metricas.atual.varLit} />
+        <JanelaMetrica label="Últimos 3 meses" fat={metricas.j3.fat} lit={metricas.j3.lit} varFat={metricas.j3.varFat} varLit={metricas.j3.varLit} />
+        <JanelaMetrica label="Últimos 6 meses" fat={metricas.j6.fat} lit={metricas.j6.lit} varFat={metricas.j6.varFat} varLit={metricas.j6.varLit} />
+        <JanelaMetrica label="Últimos 12 meses" fat={metricas.j12.fat} lit={metricas.j12.lit} varFat={metricas.j12.varFat} varLit={metricas.j12.varLit} />
+      </div>
+    </div>
+  );
+}
+
+// Heatmap: linhas = grupos (+ "Sem grupo"), colunas = meses, cor da célula = crescimento/queda vs mês anterior
+function TabelaHeatmapGrupos({ linhas }) {
+  return (
+    <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+        <thead>
+          <tr>
+            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2 }}>Grupo</th>
+            {linhas[0]?.valores.map(v => <th key={v.periodo} style={thStyle}>{labelMes(v.periodo)}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map(linha => (
+            <tr key={linha.categoria}>
+              <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+              {linha.valores.map((v, idx) => {
+                const anterior = idx > 0 ? linha.valores[idx - 1].fat : null;
+                const variacao = anterior != null ? calcularVariacao(v.fat, anterior) : null;
+                let bg = "transparent";
+                if (variacao) {
+                  if (variacao.pct > 1) bg = "rgba(76,175,107,0.25)";
+                  else if (variacao.pct < -1) bg = "rgba(224,101,90,0.25)";
+                  else bg = "rgba(198,151,0,0.2)";
+                }
+                return <td key={v.periodo} style={{ ...tdStyle, background: bg }}>{v.fat ? rotuloCompactoGeral(v.fat) : "-"}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DashboardTab() {
+  const { dados, nomes, grupos, clientesPorGrupo, periodos } = useData();
+  const [gruposSel, setGruposSel] = useState([]);
+  const [todos, setTodos] = useState(true);
+
+  function toggleGrupoFiltro(g) {
+    setTodos(false);
+    setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+
+  const clientesFiltrados = todos ? nomes : [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
+
+  const clientesComMetricas = useMemo(() => {
+    return clientesFiltrados
+      .map(nome => ({ nome, metricas: calcularMetricasCliente(dados[nome] || []) }))
+      .sort((a, b) => b.metricas.j12.fat - a.metricas.j12.fat);
+  }, [clientesFiltrados, dados]);
+
+  const linhasHeatmap = useMemo(() => {
+    const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
+    const semGrupo = nomes.filter(n => !nomesComGrupo.has(n));
+    const categorias = [...grupos];
+    if (semGrupo.length) categorias.push("Sem grupo");
+
+    return categorias.map(cat => {
+      const clientesCat = cat === "Sem grupo" ? semGrupo : clientesPorGrupo[cat];
+      const valores = periodos.map(p => {
+        let fat = 0;
+        clientesCat.forEach(nome => {
+          const row = (dados[nome] || []).find(r => r.chave === p);
+          if (row) fat += row.faturamento;
+        });
+        return { periodo: p, fat };
+      });
+      return { categoria: cat, valores };
+    });
+  }, [grupos, clientesPorGrupo, nomes, periodos, dados]);
+
+  return (
+    <div>
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Layers size={13} /> Filtrar por grupo:
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={todos} onChange={() => { setTodos(true); setGruposSel([]); }} />
+            Todos ({nomes.length})
+          </label>
+          {grupos.map(g => (
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={!todos && gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
+              {g} ({clientesPorGrupo[g].length})
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <Section title="Comparação mês a mês por grupo · Faturamento" icon={<AlertTriangle size={16} color="#C69700" />}>
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
+          🟢 crescimento vs mês anterior · 🔴 queda vs mês anterior · 🟡 estável (±1%)
+        </div>
+        <TabelaHeatmapGrupos linhas={linhasHeatmap} />
+      </Section>
+
+      <Section title={`Melhores Clientes (${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
+        {clientesComMetricas.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
+            Selecione ao menos um grupo, ou marque "Todos".
+          </div>
+        )}
+        {clientesComMetricas.map((c, idx) => (
+          <CardClienteDashboard key={c.nome} posicao={idx + 1} nome={c.nome} metricas={c.metricas} />
+        ))}
+      </Section>
     </div>
   );
 }
@@ -742,9 +1138,14 @@ export default function App() {
                 <button onClick={() => setTab("comparacao")} style={tabStyle(tab === "comparacao")}>
                   <GitCompareArrows size={14} /> Comparação
                 </button>
+                <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
+                  <LayoutDashboard size={14} /> Dashboard
+                </button>
               </div>
 
-              {tab === "cliente" ? <ClienteDashboard /> : <ComparacaoTab />}
+              {tab === "cliente" && <ClienteDashboard />}
+              {tab === "comparacao" && <ComparacaoTab />}
+              {tab === "dashboard" && <DashboardTab />}
             </DataContext.Provider>
           )}
         </div>
