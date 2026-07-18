@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, createContext, useContext } from "
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
+  PieChart, Pie,
 } from "recharts";
 import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe } from "lucide-react";
 
@@ -18,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.8";
+const APP_VERSION = "v4.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -367,7 +368,7 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
 
 // Card de ano-calendário mostrando Faturamento e Litros juntos (total + média/mês),
 // com crescimento/queda vs o ano anterior (baseado na média/mês, justo mesmo com ano parcial)
-function CardAnualCompleto({ dados }) {
+function CardAnualCompleto({ dados, projecao }) {
   const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit } = dados;
   return (
     <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
@@ -392,6 +393,28 @@ function CardAnualCompleto({ dados }) {
           <div style={{ color: "#C69700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
         </div>
       </div>
+
+      {projecao && projecao.meses > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #444" }}>
+          <div style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>
+            📈 Projeção dos {projecao.meses} meses restantes ({projecao.pct}% do que {ano - 1} fez nesses mesmos meses):
+          </div>
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: "#666", fontSize: 10 }}>+ Faturamento projetado</div>
+              <div style={{ color: "#C69700", fontSize: 15, fontWeight: 700 }}>+ {fmtMoeda(projecao.fat)}</div>
+            </div>
+            <div>
+              <div style={{ color: "#666", fontSize: 10 }}>+ Litros projetados</div>
+              <div style={{ color: "#C69700", fontSize: 15, fontWeight: 700 }}>+ {fmtLitros(projecao.lit)}</div>
+            </div>
+            <div>
+              <div style={{ color: "#666", fontSize: 10 }}>Total com projeção</div>
+              <div style={{ color: "#fff", fontSize: 15, fontWeight: 800 }}>{fmtMoeda(totalFat + projecao.fat)} · {fmtLitros(totalLit + projecao.lit)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1370,6 +1393,38 @@ function calcularMetricasCliente(rowsBrutas, mesRefAno) {
   };
 }
 
+// Pega os N clientes com maior/menor variação (crescimento ou queda) segundo um seletor de variação
+function topN(clientesComMetricas, seletor, n, ordem) {
+  return clientesComMetricas
+    .map(c => ({ nome: c.nome, variacao: seletor(c.metricas) }))
+    .filter(c => c.variacao != null)
+    .sort((a, b) => ordem === "desc" ? b.variacao.pct - a.variacao.pct : a.variacao.pct - b.variacao.pct)
+    .slice(0, n);
+}
+
+function ListaTop10({ titulo, itens, formatador, labelDoCliente }) {
+  return (
+    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 300px", minWidth: 300 }}>
+      <div style={{ color: "#C69700", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo}</div>
+      {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Sem dados suficientes pra esse comparativo.</div>}
+      {itens.map((item, idx) => {
+        const { cor, Icon } = classificarTendencia(item.variacao.pct);
+        return (
+          <div key={item.nome} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+            padding: "6px 0", borderBottom: idx < itens.length - 1 ? "1px solid #262624" : "none", fontSize: 12,
+          }}>
+            <span style={{ color: "#fff" }}>{idx + 1}. {labelDoCliente[item.nome]}</span>
+            <span style={{ color: cor, fontWeight: 700, display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
+              <Icon size={11} /> {item.variacao.pct >= 0 ? "+" : ""}{item.variacao.pct.toFixed(1)}% ({formatador(Math.abs(item.variacao.diff))})
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function JanelaMetrica({ label, fat, lit, precoLitro, varFat, varLit, periodoTexto: pTexto, periodoAnteriorTexto }) {
   return (
     <div style={{ minWidth: 175, flex: "1 1 175px" }}>
@@ -1483,6 +1538,16 @@ function DashboardTab() {
     ? clientesComMetricas.filter(c => (labelDoCliente[c.nome] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : clientesComMetricas;
 
+  // Top 10 maiores crescimentos e maiores quedas (faturamento e litros, vs mês anterior e vs mesmo mês ano anterior)
+  const top10FatMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, 10, "desc");
+  const top10FatMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, 10, "asc");
+  const top10FatAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, 10, "desc");
+  const top10FatAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, 10, "asc");
+  const top10LitMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, 10, "desc");
+  const top10LitMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, 10, "asc");
+  const top10LitAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, 10, "desc");
+  const top10LitAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, 10, "asc");
+
   // novos clientes cadastrados por mês, no período selecionado
   const novosClientesPorMes = useMemo(() => {
     if (!inicioNovos || !fimNovos) return [];
@@ -1584,6 +1649,24 @@ function DashboardTab() {
           🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). A última coluna pode ser um mês ainda em andamento — compare com cautela.
         </div>
         <TabelaHeatmapGrupos linhas={linhasHeatmap} />
+      </Section>
+
+      <Section title="Top 10 · Maiores Crescimentos" icon={<ArrowUp size={18} color="#4caf6b" />}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <ListaTop10 titulo="Faturamento vs mês anterior" itens={top10FatMesCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Faturamento vs mesmo mês ano anterior" itens={top10FatAnoCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Litros vs mês anterior" itens={top10LitMesCresc} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Litros vs mesmo mês ano anterior" itens={top10LitAnoCresc} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+        </div>
+      </Section>
+
+      <Section title="Top 10 · Maiores Quedas" icon={<ArrowDown size={18} color="#e0645a" />}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <ListaTop10 titulo="Faturamento vs mês anterior" itens={top10FatMesQueda} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Faturamento vs mesmo mês ano anterior" itens={top10FatAnoQueda} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Litros vs mês anterior" itens={top10LitMesQueda} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+          <ListaTop10 titulo="Litros vs mesmo mês ano anterior" itens={top10LitAnoQueda} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+        </div>
       </Section>
 
       <Section title={`Melhores Clientes (${clientesExibidos.length} de ${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
@@ -1693,6 +1776,54 @@ function GlobalTab() {
 
   const precoLitroGeral12m = precoMedioLitro(soma(ultimos12, "faturamento"), soma(ultimos12, "litros"));
 
+  // projeção dos meses restantes do ano corrente (parcial), baseada nos mesmos meses do ano anterior x %
+  const [pctProjecao, setPctProjecao] = useState(100);
+  const projecaoAnoParcial = useMemo(() => {
+    if (!mediasPorAno.length) return null;
+    const ultimoAno = mediasPorAno[mediasPorAno.length - 1];
+    if (ultimoAno.meses >= 12) return null;
+    let fat = 0, lit = 0, meses = 0;
+    for (let m = ultimoAno.meses + 1; m <= 12; m++) {
+      const rowAnoAnterior = rowsFechadas.find(r => r.ano === ultimoAno.ano - 1 && r.mes === m);
+      if (rowAnoAnterior) {
+        fat += rowAnoAnterior.faturamento * (pctProjecao / 100);
+        lit += rowAnoAnterior.litros * (pctProjecao / 100);
+        meses++;
+      }
+    }
+    return { ano: ultimoAno.ano, fat, lit, meses, pct: pctProjecao };
+  }, [mediasPorAno, rowsFechadas, pctProjecao]);
+
+  // gráficos de pizza: faturamento/litros por grupo, com período e grupos selecionáveis
+  const [gruposSelPizza, setGruposSelPizza] = useState(() => [...grupos]);
+  const [inicioPizza, setInicioPizza] = useState(() => ultimos12[0]?.chave || "");
+  const [fimPizza, setFimPizza] = useState(() => ultimos12[ultimos12.length - 1]?.chave || "");
+
+  function toggleGrupoPizza(g) {
+    setGruposSelPizza(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+  function marcarTodosPizza() {
+    setGruposSelPizza([...grupos]);
+  }
+  function desmarcarTodosPizza() {
+    setGruposSelPizza([]);
+  }
+
+  const dadosPizza = useMemo(() => {
+    if (!inicioPizza || !fimPizza) return [];
+    const chaves = new Set(periodos.filter(p => p >= inicioPizza && p <= fimPizza));
+    return gruposSelPizza.map(g => {
+      let fat = 0, lit = 0;
+      (clientesPorGrupo[g] || []).forEach(codigo => {
+        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+      });
+      return { grupo: g, fat, lit };
+    }).filter(d => d.fat > 0 || d.lit > 0);
+  }, [gruposSelPizza, inicioPizza, fimPizza, periodos, clientesPorGrupo, dados]);
+
+  const totalFatPizza = dadosPizza.reduce((s, d) => s + d.fat, 0);
+  const totalLitPizza = dadosPizza.reduce((s, d) => s + d.lit, 0);
+
   return (
     <div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
@@ -1773,11 +1904,94 @@ function GlobalTab() {
 
       {mediasPorAno.length > 0 && (
         <Section title="Faturamento e Litros por Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
+          {projecaoAnoParcial && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>% do ano anterior usado na projeção dos meses restantes:</span>
+              <input type="number" min="0" max="200" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(200, Number(e.target.value) || 0)))}
+                style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+              <span style={{ color: "#666", fontSize: 11 }}>% (100% = igual ao mesmo período do ano anterior)</span>
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {mediasPorAno.map(m => <CardAnualCompleto key={m.ano} dados={m} />)}
+            {mediasPorAno.map((m, idx) => (
+              <CardAnualCompleto key={m.ano} dados={m} projecao={idx === mediasPorAno.length - 1 ? projecaoAnoParcial : null} />
+            ))}
           </div>
         </Section>
       )}
+
+      <Section title="Faturamento e Litros por Grupo (pizza)" icon={<Layers size={18} color="#C69700" />}>
+        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioPizza} onSelecionar={setInicioPizza} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimPizza} onSelecionar={setFimPizza} placeholder="Fim" />
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Grupos:</span>
+            <button onClick={marcarTodosPizza} style={chipBtnStyle}>Marcar todos</button>
+            <button onClick={desmarcarTodosPizza} style={chipBtnStyle}>Desmarcar todos</button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {grupos.map(g => (
+              <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+                <input type="checkbox" checked={gruposSelPizza.includes(g)} onChange={() => toggleGrupoPizza(g)} />
+                {g}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <StatCard label="Total Faturamento (amostra selecionada)" value={fmtMoeda(totalFatPizza)} icon={<TrendingUp size={14} />} />
+          <StatCard label="Total Litros (amostra selecionada)" value={fmtLitros(totalLitPizza)} icon={<Droplets size={14} />} />
+        </div>
+
+        {dadosPizza.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
+            Nenhum grupo selecionado (ou sem dados no período escolhido).
+          </div>
+        )}
+
+        {dadosPizza.length > 0 && (
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 420px", minWidth: 340 }}>
+              <div style={{ color: "#888", fontSize: 12, marginBottom: 8, textAlign: "center", textTransform: "uppercase", letterSpacing: 0.4 }}>Faturamento por grupo</div>
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie data={dadosPizza} dataKey="fat" nameKey="grupo" cx="38%" cy="50%" outerRadius={105}>
+                    {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
+                  </Pie>
+                  <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }}
+                    formatter={(value, entry) => {
+                      const pct = totalFatPizza ? (entry.payload.fat / totalFatPizza * 100) : 0;
+                      return `${value} (${pct.toFixed(1)}%)`;
+                    }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ flex: "1 1 420px", minWidth: 340 }}>
+              <div style={{ color: "#888", fontSize: 12, marginBottom: 8, textAlign: "center", textTransform: "uppercase", letterSpacing: 0.4 }}>Litros por grupo</div>
+              <ResponsiveContainer width="100%" height={320}>
+                <PieChart>
+                  <Pie data={dadosPizza} dataKey="lit" nameKey="grupo" cx="38%" cy="50%" outerRadius={105}>
+                    {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
+                  </Pie>
+                  <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }}
+                    formatter={(value, entry) => {
+                      const pct = totalLitPizza ? (entry.payload.lit / totalLitPizza * 100) : 0;
+                      return `${value} (${pct.toFixed(1)}%)`;
+                    }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </Section>
 
       {fatPorGrupo.length > 0 && (
         <Section title="Faturamento por Grupo (últimos 12 meses)" icon={<Layers size={18} color="#C69700" />}>
