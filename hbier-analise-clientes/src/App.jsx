@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.3";
+const APP_VERSION = "v4.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -307,7 +307,12 @@ function processarDados(linhas) {
   Object.values(porCliente).forEach(rows => rows.forEach(r => periodosSet.add(r.chave)));
   const periodos = [...periodosSet].sort();
 
-  return { dados: porCliente, nomes, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente };
+  // lista de clientes pra BUSCA/seleção individual - exclui os grupos pesados (Venda Online,
+  // Consumo Direto): eles continuam entrando nos totais/grupos normalmente, só não aparecem
+  // pra seleção individual, já que não fazem sentido de olhar um por um.
+  const nomesVisiveis = nomes.filter(codigo => !grupoEhPesado(grupoDoCliente[codigo]));
+
+  return { dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente };
 }
 
 // -------------------- Componentes visuais --------------------
@@ -589,7 +594,7 @@ const chipBtnStyle = {
 };
 
 function ClienteDashboard() {
-  const { dados, nomes, periodos, labelDoCliente, razaoSocialDoCliente } = useData();
+  const { dados, nomes, nomesVisiveis, periodos, labelDoCliente, razaoSocialDoCliente } = useData();
   const [busca, setBusca] = useState("");
   const [clientesSel, setClientesSel] = useState([]);
   const [inicio, setInicio] = useState("");
@@ -598,10 +603,10 @@ function ClienteDashboard() {
 
   const sugestoes = useMemo(() => {
     if (!busca.trim()) return [];
-    return nomes
+    return nomesVisiveis
       .filter(c => !clientesSel.includes(c) && (labelDoCliente[c] || "").toLowerCase().includes(busca.toLowerCase()))
       .slice(0, 6);
-  }, [busca, nomes, labelDoCliente, clientesSel]);
+  }, [busca, nomesVisiveis, labelDoCliente, clientesSel]);
 
   // agrega os clientes selecionados (soma faturamento/litros mês a mês) - com 1 só, é o próprio cliente
   const todasRows = useMemo(() => {
@@ -991,7 +996,7 @@ function SeletorPeriodo({ ativo, inicio, fim, onInicio, onFim }) {
 }
 
 function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecionados, gruposSel, setGruposSel, inicio, setInicio, fim, setFim }) {
-  const { nomes, grupos, clientesPorGrupo, labelDoCliente } = useData();
+  const { nomes, nomesVisiveis, grupos, clientesPorGrupo, labelDoCliente } = useData();
   const [buscaCliente, setBuscaCliente] = useState("");
 
   function toggleCliente(nome) {
@@ -1009,8 +1014,8 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
 
   const ativo = selecionados.length > 0;
   const nomesFiltrados = buscaCliente.trim()
-    ? nomes.filter(n => (labelDoCliente[n] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
-    : nomes;
+    ? nomesVisiveis.filter(n => (labelDoCliente[n] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
+    : nomesVisiveis;
 
   function limparSelecao() {
     setSelecionados([]);
