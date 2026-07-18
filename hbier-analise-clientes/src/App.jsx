@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.7";
+const APP_VERSION = "v3.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -740,35 +740,37 @@ function ClienteDashboard() {
           </Section>
 
           <Section title="Comparação Ano a Ano" icon={<Calendar size={18} color="#C69700" />}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
-              <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
-              <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
-              <span style={{ color: "#666", fontSize: 11 }}>
-                {mesRefAno && `comparando com ${labelMes(mesRefAno).split("/")[0]}/${(parseInt(mesRefAno.split("-")[0],10)-1).toString().slice(2)} (mesmo mês do ano anterior)`}
-              </span>
+            <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+                <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
+                <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+                <span style={{ color: "#666", fontSize: 11 }}>
+                  {mesRefAno && `comparando com ${labelMes(mesRefAno).split("/")[0]}/${(parseInt(mesRefAno.split("-")[0],10)-1).toString().slice(2)} (mesmo mês do ano anterior)`}
+                </span>
+              </div>
+
+              {!janelasAno && <div style={{ color: "#888", fontSize: 13 }}>Selecione um mês de referência.</div>}
+
+              {janelasAno && (
+                <>
+                  <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                    <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                    <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                    <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                    <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                  </div>
+
+                  <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
+                    <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
+                    <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
+                    <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
+                  </div>
+                </>
+              )}
             </div>
-
-            {!janelasAno && <div style={{ color: "#888", fontSize: 13 }}>Selecione um mês de referência.</div>}
-
-            {janelasAno && (
-              <>
-                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-                  <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                  <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                  <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                  <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                </div>
-
-                <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros</div>
-                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                  <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
-                  <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
-                  <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
-                  <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
-                </div>
-              </>
-            )}
           </Section>
 
           <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
@@ -778,18 +780,20 @@ function ClienteDashboard() {
               <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtMoeda(media(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={seriesFatCliente.dados}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                {seriesFatCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={seriesFatCliente.dados}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+                  <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
+                  <Legend wrapperStyle={{ fontSize: 13 }} />
+                  {seriesFatCliente.anos.map((ano, idx) => (
+                    <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </Section>
 
           <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
@@ -799,18 +803,20 @@ function ClienteDashboard() {
               <StatCard label={`Média 12 meses (${periodoTexto(ultimos12)})`} value={fmtLitros(media(ultimos12, "litros"))} icon={<Droplets size={14} />} />
             </div>
 
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={seriesLitCliente.dados}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                {seriesLitCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={seriesLitCliente.dados}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+                  <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                  <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
+                  <Legend wrapperStyle={{ fontSize: 13 }} />
+                  {seriesLitCliente.anos.map((ano, idx) => (
+                    <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </Section>
 
           {mediasPorAno.length > 0 && (
@@ -1194,81 +1200,85 @@ function ComparacaoTab() {
             </div>
           </Section>
 
-          <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
-                <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
-                  <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
-                </Bar>
-                <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
-                  <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
-                </Bar>
-                <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
-                <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Section>
+          <div style={{ background: "rgba(76,175,107,0.05)", border: "1px solid rgba(76,175,107,0.2)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+            <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
+                  <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
+                    <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                  </Bar>
+                  <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
+                    <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
+                  </Bar>
+                  <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                  <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Section>
 
-          <Section title="Diferença mês a mês (A − B) · Faturamento" icon={<GitCompareArrows size={16} color="#888" />}>
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
-                <YAxis stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <ReferenceLine y={0} stroke="#666" />
-                <Bar dataKey="diferencaFat" radius={[3,3,3,3]}>
-                  <LabelList dataKey="diferencaFat" position="top" formatter={rotuloDiferencaMoeda} style={{ fontSize: 10, fill: "#ccc" }} />
-                  {chartFat.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.diferencaFat == null ? "#555" : (entry.diferencaFat >= 0 ? "#4caf6b" : "#e0645a")} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Section>
+            <Section title="Diferença mês a mês (A − B) · Faturamento" icon={<GitCompareArrows size={16} color="#888" />}>
+              <ResponsiveContainer width="100%" height={170}>
+                <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
+                  <YAxis stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <ReferenceLine y={0} stroke="#666" />
+                  <Bar dataKey="diferencaFat" radius={[3,3,3,3]}>
+                    <LabelList dataKey="diferencaFat" position="top" formatter={rotuloDiferencaMoeda} style={{ fontSize: 10, fill: "#ccc" }} />
+                    {chartFat.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.diferencaFat == null ? "#555" : (entry.diferencaFat >= 0 ? "#4caf6b" : "#e0645a")} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Section>
+          </div>
 
-          <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
-                <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
-                  <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
-                </Line>
-                <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
-                  <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
-                </Line>
-                <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
-                <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </Section>
+          <div style={{ background: "rgba(74,144,217,0.05)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 16 }}>
+            <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
+                  <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
+                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
+                    <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                  </Line>
+                  <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
+                    <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
+                  </Line>
+                  <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                  <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Section>
 
-          <Section title="Diferença mês a mês (A − B) · Litros" icon={<GitCompareArrows size={16} color="#888" />}>
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
-                <YAxis stroke="#888" fontSize={11} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <ReferenceLine y={0} stroke="#666" />
-                <Bar dataKey="diferencaLit" radius={[3,3,3,3]}>
-                  <LabelList dataKey="diferencaLit" position="top" formatter={rotuloDiferencaLitros} style={{ fontSize: 10, fill: "#ccc" }} />
-                  {chartLit.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.diferencaLit == null ? "#555" : (entry.diferencaLit >= 0 ? "#4caf6b" : "#e0645a")} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Section>
+            <Section title="Diferença mês a mês (A − B) · Litros" icon={<GitCompareArrows size={16} color="#888" />}>
+              <ResponsiveContainer width="100%" height={170}>
+                <BarChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
+                  <YAxis stroke="#888" fontSize={11} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
+                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <ReferenceLine y={0} stroke="#666" />
+                  <Bar dataKey="diferencaLit" radius={[3,3,3,3]}>
+                    <LabelList dataKey="diferencaLit" position="top" formatter={rotuloDiferencaLitros} style={{ fontSize: 10, fill: "#ccc" }} />
+                    {chartLit.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.diferencaLit == null ? "#555" : (entry.diferencaLit >= 0 ? "#4caf6b" : "#e0645a")} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Section>
+          </div>
         </>
       )}
     </div>
@@ -1383,7 +1393,7 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
         #{posicao} · {nome}
       </div>
       <AvisoMesAndamento emAndamento={metricas.emAndamentoRow} rowsFechados={metricas.rowsFechados} />
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+      <div style={{ background: "rgba(74,144,217,0.06)", border: "1px solid rgba(74,144,217,0.22)", borderRadius: 10, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
         {metricas.ultimoMesFechado && (
           <JanelaMetrica label={`Último mês fechado`} periodoTexto={metricas.ultimoMesFechado.mesTexto}
             fat={metricas.ultimoMesFechado.fat} lit={metricas.ultimoMesFechado.lit} precoLitro={metricas.ultimoMesFechado.precoLitro}
@@ -1400,7 +1410,7 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
       {metricas.comparacaoAno && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
           <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>vs mesmo período do ano anterior</div>
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ background: "rgba(224,101,90,0.06)", border: "1px solid rgba(224,101,90,0.22)", borderRadius: 10, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
             <JanelaMetrica label="Este mês" periodoTexto={metricas.comparacaoAno.m1.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m1.periodoAnteriorTexto}
               fat={metricas.comparacaoAno.m1.fat} lit={metricas.comparacaoAno.m1.lit} precoLitro={metricas.comparacaoAno.m1.precoLitro} varFat={metricas.comparacaoAno.m1.varFat} varLit={metricas.comparacaoAno.m1.varLit} />
             <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.comparacaoAno.m3.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m3.periodoAnteriorTexto}
@@ -1699,60 +1709,66 @@ function GlobalTab() {
       <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
 
       <Section title="Evolução Mensal · Faturamento (por ano)" icon={<TrendingUp size={18} color="#02601D" />}>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={seriesFat.dados}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
-            <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-            <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
-            <Legend wrapperStyle={{ fontSize: 13 }} />
-            {seriesFat.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={seriesFat.dados}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+              <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+              <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
+              <Legend wrapperStyle={{ fontSize: 13 }} />
+              {seriesFat.anos.map((ano, idx) => (
+                <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </Section>
 
       <Section title="Evolução Mensal · Litros (por ano)" icon={<Droplets size={18} color="#C69700" />}>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={seriesLit.dados}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-            <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
-            <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-            <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
-            <Legend wrapperStyle={{ fontSize: 13 }} />
-            {seriesLit.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-            ))}
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={seriesLit.dados}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+              <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+              <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
+              <Legend wrapperStyle={{ fontSize: 13 }} />
+              {seriesLit.anos.map((ano, idx) => (
+                <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              ))}
           </LineChart>
         </ResponsiveContainer>
+        </div>
       </Section>
 
       <Section title="Comparação Ano a Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
-          <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
-          <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+        <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
+            <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+          </div>
+
+          {janelasAno && (
+            <>
+              <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+              </div>
+
+              <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
+              </div>
+            </>
+          )}
         </div>
-
-        {janelasAno && (
-          <>
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-              <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-              <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-            </div>
-
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros</div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
-              <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
-              <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
-              <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
-            </div>
-          </>
-        )}
       </Section>
 
       {mediasPorAno.length > 0 && (
