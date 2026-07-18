@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.1";
+const APP_VERSION = "v4.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1859,16 +1859,54 @@ function GlobalTab() {
   const totalFatPizza = dadosPizza.reduce((s, d) => s + d.fat, 0);
   const totalLitPizza = dadosPizza.reduce((s, d) => s + d.lit, 0);
 
+  // comparativo dos cards de topo vs mesmo período do ano passado (usa a mesma janela de
+  // 12 meses ancorada no mês de referência, já calculada em janelasAno.m12)
+  const anoAnterior12 = janelasAno ? janelasAno.m12.anoAnterior : [];
+  const variacaoFat12 = anoAnterior12.length ? calcularVariacao(soma(ultimos12, "faturamento"), soma(anoAnterior12, "faturamento")) : null;
+  const variacaoLit12 = anoAnterior12.length ? calcularVariacao(soma(ultimos12, "litros"), soma(anoAnterior12, "litros")) : null;
+  const precoLitroAnoAnterior12 = anoAnterior12.length ? precoMedioLitro(soma(anoAnterior12, "faturamento"), soma(anoAnterior12, "litros")) : null;
+  const variacaoPrecoLitro12 = precoLitroAnoAnterior12 != null ? calcularVariacao(precoLitroGeral12m, precoLitroAnoAnterior12) : null;
+
+  const mesmoMesAnoPassado = ultimoMesFechado ? rowsFechadas.find(r => r.ano === ultimoMesFechado.ano - 1 && r.mes === ultimoMesFechado.mes) : null;
+  const clientesAtivosAnoPassado = useMemo(() => {
+    if (!mesmoMesAnoPassado) return null;
+    return nomes.filter(codigo => {
+      const row = (dados[codigo] || []).find(r => r.chave === mesmoMesAnoPassado.chave);
+      return row && (row.faturamento > 0 || row.litros > 0);
+    }).length;
+  }, [nomes, dados, mesmoMesAnoPassado]);
+  const variacaoClientesAtivos = clientesAtivosAnoPassado != null ? calcularVariacao(clientesAtivos, clientesAtivosAnoPassado) : null;
+
+  const chaveAnoPassadoRef = mesmoMesAnoPassado ? mesmoMesAnoPassado.chave : null;
+  const totalClientesAnoPassado = useMemo(() => {
+    if (!chaveAnoPassadoRef) return null;
+    return nomes.filter(codigo => (dados[codigo] || []).some(r => r.chave <= chaveAnoPassadoRef)).length;
+  }, [nomes, dados, chaveAnoPassadoRef]);
+  const variacaoTotalClientes = totalClientesAnoPassado != null ? calcularVariacao(nomes.length, totalClientesAnoPassado) : null;
+
+  const novosClientesAnoPassado12m = useMemo(() => {
+    if (!Object.keys(dataCriacaoDoCliente).length || !anoAnterior12.length) return null;
+    const chaves = anoAnterior12.map(r => r.chave);
+    return nomes.filter(codigo => chaves.includes((dataCriacaoDoCliente[codigo] || "").slice(0, 7))).length;
+  }, [nomes, dataCriacaoDoCliente, anoAnterior12]);
+  const variacaoNovosClientes = (novosClientes12m != null && novosClientesAnoPassado12m != null) ? calcularVariacao(novosClientes12m, novosClientesAnoPassado12m) : null;
+
   return (
     <div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />} />
-        <StatCard label="Litros (12 meses)" value={fmtLitros(soma(ultimos12, "litros"))} icon={<Droplets size={14} />} />
-        <StatCard label="Preço médio geral/L (12 meses)" value={fmtPrecoLitro(precoLitroGeral12m)} icon={<Droplets size={14} />} />
-        <StatCard label={`Clientes ativos (${ultimoMesFechado ? labelMes(ultimoMesFechado.chave) : "-"})`} value={String(clientesAtivos)} icon={<Users size={14} />} />
-        <StatCard label="Total de clientes cadastrados" value={String(nomes.length)} icon={<Users size={14} />} />
+        <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />}
+          badge={<BadgeTendencia variacao={variacaoFat12} formatador={fmtMoeda} periodoTexto="vs mesmos 12 meses ano passado" />} />
+        <StatCard label="Litros (12 meses)" value={fmtLitros(soma(ultimos12, "litros"))} icon={<Droplets size={14} />}
+          badge={<BadgeTendencia variacao={variacaoLit12} formatador={fmtLitros} periodoTexto="vs mesmos 12 meses ano passado" />} />
+        <StatCard label="Preço médio geral/L (12 meses)" value={fmtPrecoLitro(precoLitroGeral12m)} icon={<Droplets size={14} />}
+          badge={<BadgeTendencia variacao={variacaoPrecoLitro12} formatador={fmtPrecoLitro} periodoTexto="vs mesmos 12 meses ano passado" />} />
+        <StatCard label={`Clientes ativos (${ultimoMesFechado ? labelMes(ultimoMesFechado.chave) : "-"})`} value={String(clientesAtivos)} icon={<Users size={14} />}
+          badge={<BadgeTendencia variacao={variacaoClientesAtivos} formatador={v => String(Math.round(v))} periodoTexto={mesmoMesAnoPassado ? `vs ${labelMes(mesmoMesAnoPassado.chave)}` : ""} />} />
+        <StatCard label="Total de clientes cadastrados" value={String(nomes.length)} icon={<Users size={14} />}
+          badge={<BadgeTendencia variacao={variacaoTotalClientes} formatador={v => String(Math.round(v))} periodoTexto={mesmoMesAnoPassado ? `vs ${labelMes(mesmoMesAnoPassado.chave)}` : ""} />} />
         {novosClientes12m != null && (
-          <StatCard label="Novos clientes (12 meses)" value={String(novosClientes12m)} icon={<Users size={14} />} />
+          <StatCard label="Novos clientes (12 meses)" value={String(novosClientes12m)} icon={<Users size={14} />}
+            badge={<BadgeTendencia variacao={variacaoNovosClientes} formatador={v => String(Math.round(v))} periodoTexto="vs mesmos 12 meses ano passado" />} />
         )}
       </div>
 
