@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.4";
+const APP_VERSION = "v4.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1406,7 +1406,7 @@ function calcularMetricasCliente(rowsBrutas, mesRefAno) {
     const fat = soma(rowsJanela, "faturamento");
     const lit = soma(rowsJanela, "litros");
     return {
-      fat, lit, precoLitro: precoMedioLitro(fat, lit),
+      fat, lit, meses: rowsJanela.length, precoLitro: precoMedioLitro(fat, lit),
       varFat: rowsAnteriores.length ? calcularVariacao(fat, soma(rowsAnteriores, "faturamento")) : null,
       varLit: rowsAnteriores.length ? calcularVariacao(lit, soma(rowsAnteriores, "litros")) : null,
       periodoTexto: rowsJanela.length ? periodoTexto(rowsJanela) : "",
@@ -1430,7 +1430,7 @@ function calcularMetricasCliente(rowsBrutas, mesRefAno) {
 
   return {
     ultimoMesFechado: atual ? {
-      fat: atual.faturamento, lit: atual.litros, precoLitro: precoMedioLitro(atual.faturamento, atual.litros),
+      fat: atual.faturamento, lit: atual.litros, meses: 1, precoLitro: precoMedioLitro(atual.faturamento, atual.litros),
       varFat: anterior ? calcularVariacao(atual.faturamento, anterior.faturamento) : null,
       varLit: anterior ? calcularVariacao(atual.litros, anterior.litros) : null,
       mesTexto: labelMes(atual.chave),
@@ -1476,16 +1476,22 @@ function ListaTop10({ titulo, itens, formatador, labelDoCliente }) {
   );
 }
 
-function JanelaMetrica({ label, fat, lit, precoLitro, varFat, varLit, periodoTexto: pTexto, periodoAnteriorTexto }) {
+function JanelaMetrica({ label, fat, lit, precoLitro, varFat, varLit, periodoTexto: pTexto, periodoAnteriorTexto, meses }) {
+  const mediaFat = meses > 1 ? fat / meses : null;
+  const mediaLit = meses > 1 ? lit / meses : null;
   return (
     <div style={{ minWidth: 175, flex: "1 1 175px" }}>
       <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 }}>
         {label}{pTexto && <span style={{ textTransform: "none", color: "#555" }}> ({pTexto})</span>}
       </div>
       <div style={{ color: "#666", fontSize: 9, marginBottom: 2 }}>Total no período</div>
-      <div style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>{fmtMoeda(fat)}</div>
+      <div style={{ color: "#fff", fontSize: 14, fontWeight: 800 }}>
+        {fmtMoeda(fat)}{mediaFat != null && <span style={{ color: "#888", fontSize: 10, fontWeight: 400 }}> ({fmtMoeda(mediaFat)} média/mês)</span>}
+      </div>
       <BadgeTendencia variacao={varFat} formatador={fmtMoeda} periodoTexto={periodoAnteriorTexto ? `vs ${periodoAnteriorTexto}` : ""} />
-      <div style={{ color: "#ddd", fontSize: 13, fontWeight: 700, marginTop: 6 }}>{fmtLitros(lit)}</div>
+      <div style={{ color: "#ddd", fontSize: 13, fontWeight: 700, marginTop: 6 }}>
+        {fmtLitros(lit)}{mediaLit != null && <span style={{ color: "#888", fontSize: 10, fontWeight: 400 }}> ({fmtLitros(mediaLit)} média/mês)</span>}
+      </div>
       <BadgeTendencia variacao={varLit} formatador={fmtLitros} periodoTexto={periodoAnteriorTexto ? `vs ${periodoAnteriorTexto}` : ""} />
       <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginTop: 6 }}>{fmtPrecoLitro(precoLitro)}</div>
     </div>
@@ -1501,15 +1507,15 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
       <AvisoMesAndamento emAndamento={metricas.emAndamentoRow} rowsFechados={metricas.rowsFechados} />
       <div style={{ background: "rgba(74,144,217,0.06)", border: "1px solid rgba(74,144,217,0.22)", borderRadius: 10, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
         {metricas.ultimoMesFechado && (
-          <JanelaMetrica label={`Último mês fechado`} periodoTexto={metricas.ultimoMesFechado.mesTexto}
+          <JanelaMetrica label={`Último mês fechado`} periodoTexto={metricas.ultimoMesFechado.mesTexto} meses={metricas.ultimoMesFechado.meses}
             fat={metricas.ultimoMesFechado.fat} lit={metricas.ultimoMesFechado.lit} precoLitro={metricas.ultimoMesFechado.precoLitro}
             varFat={metricas.ultimoMesFechado.varFat} varLit={metricas.ultimoMesFechado.varLit} periodoAnteriorTexto="mês anterior" />
         )}
-        <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.j3.periodoTexto} periodoAnteriorTexto={metricas.j3.periodoAnteriorTexto}
+        <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.j3.periodoTexto} periodoAnteriorTexto={metricas.j3.periodoAnteriorTexto} meses={metricas.j3.meses}
           fat={metricas.j3.fat} lit={metricas.j3.lit} precoLitro={metricas.j3.precoLitro} varFat={metricas.j3.varFat} varLit={metricas.j3.varLit} />
-        <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.j6.periodoTexto} periodoAnteriorTexto={metricas.j6.periodoAnteriorTexto}
+        <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.j6.periodoTexto} periodoAnteriorTexto={metricas.j6.periodoAnteriorTexto} meses={metricas.j6.meses}
           fat={metricas.j6.fat} lit={metricas.j6.lit} precoLitro={metricas.j6.precoLitro} varFat={metricas.j6.varFat} varLit={metricas.j6.varLit} />
-        <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.j12.periodoTexto} periodoAnteriorTexto={metricas.j12.periodoAnteriorTexto}
+        <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.j12.periodoTexto} periodoAnteriorTexto={metricas.j12.periodoAnteriorTexto} meses={metricas.j12.meses}
           fat={metricas.j12.fat} lit={metricas.j12.lit} precoLitro={metricas.j12.precoLitro} varFat={metricas.j12.varFat} varLit={metricas.j12.varLit} />
       </div>
 
@@ -1517,13 +1523,13 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
           <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>vs mesmo período do ano anterior</div>
           <div style={{ background: "rgba(224,101,90,0.06)", border: "1px solid rgba(224,101,90,0.22)", borderRadius: 10, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <JanelaMetrica label="Este mês" periodoTexto={metricas.comparacaoAno.m1.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m1.periodoAnteriorTexto}
+            <JanelaMetrica label="Este mês" periodoTexto={metricas.comparacaoAno.m1.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m1.periodoAnteriorTexto} meses={metricas.comparacaoAno.m1.meses}
               fat={metricas.comparacaoAno.m1.fat} lit={metricas.comparacaoAno.m1.lit} precoLitro={metricas.comparacaoAno.m1.precoLitro} varFat={metricas.comparacaoAno.m1.varFat} varLit={metricas.comparacaoAno.m1.varLit} />
-            <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.comparacaoAno.m3.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m3.periodoAnteriorTexto}
+            <JanelaMetrica label="Últimos 3 meses" periodoTexto={metricas.comparacaoAno.m3.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m3.periodoAnteriorTexto} meses={metricas.comparacaoAno.m3.meses}
               fat={metricas.comparacaoAno.m3.fat} lit={metricas.comparacaoAno.m3.lit} precoLitro={metricas.comparacaoAno.m3.precoLitro} varFat={metricas.comparacaoAno.m3.varFat} varLit={metricas.comparacaoAno.m3.varLit} />
-            <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.comparacaoAno.m6.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m6.periodoAnteriorTexto}
+            <JanelaMetrica label="Últimos 6 meses" periodoTexto={metricas.comparacaoAno.m6.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m6.periodoAnteriorTexto} meses={metricas.comparacaoAno.m6.meses}
               fat={metricas.comparacaoAno.m6.fat} lit={metricas.comparacaoAno.m6.lit} precoLitro={metricas.comparacaoAno.m6.precoLitro} varFat={metricas.comparacaoAno.m6.varFat} varLit={metricas.comparacaoAno.m6.varLit} />
-            <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.comparacaoAno.m12.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m12.periodoAnteriorTexto}
+            <JanelaMetrica label="Últimos 12 meses" periodoTexto={metricas.comparacaoAno.m12.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m12.periodoAnteriorTexto} meses={metricas.comparacaoAno.m12.meses}
               fat={metricas.comparacaoAno.m12.fat} lit={metricas.comparacaoAno.m12.lit} precoLitro={metricas.comparacaoAno.m12.precoLitro} varFat={metricas.comparacaoAno.m12.varFat} varLit={metricas.comparacaoAno.m12.varLit} />
           </div>
         </div>
