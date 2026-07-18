@@ -18,7 +18,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v3.6";
+const APP_VERSION = "v3.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -178,6 +178,37 @@ function nomeComCrescimento(ano, variacaoPorAno) {
   if (!v) return String(ano);
   const sinal = v.pct >= 0 ? "+" : "";
   return `${ano} (${sinal}${v.pct.toFixed(1)}%)`;
+}
+
+// Tooltip customizado pro gráfico "12 meses x 1 linha por ano": mostra o valor de cada
+// ano naquele mês e o % vs o MESMO MÊS do ano anterior (não a média do ano inteiro).
+function TooltipPorAno({ active, label, payload, formatador }) {
+  if (!active || !payload || !payload.length) return null;
+  const porAno = {};
+  payload.forEach(p => { porAno[Number(p.dataKey)] = p.value; });
+  const anosOrdenados = Object.keys(porAno).map(Number).sort((a, b) => a - b);
+
+  return (
+    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "10px 12px" }}>
+      <div style={{ color: "#fff", fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{label}</div>
+      {anosOrdenados.map(ano => {
+        const valor = porAno[ano];
+        const valorAnoAnterior = porAno[ano - 1];
+        const cor = payload.find(p => Number(p.dataKey) === ano)?.color || "#fff";
+        let sufixo = "";
+        if (valor != null && valorAnoAnterior != null) {
+          const variacao = calcularVariacao(valor, valorAnoAnterior);
+          const sinal = variacao.pct >= 0 ? "+" : "";
+          sufixo = ` (${sinal}${variacao.pct.toFixed(1)}% vs ${ano - 1})`;
+        }
+        return (
+          <div key={ano} style={{ color: cor, fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+            {ano}: {valor == null ? "-" : formatador(valor)}{sufixo}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // -------------------- Contexto de dados --------------------
@@ -752,10 +783,10 @@ function ClienteDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
                 {seriesFatCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoFatPorAno)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -773,10 +804,10 @@ function ClienteDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
                 {seriesLitCliente.anos.map((ano, idx) => (
-                  <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoLitPorAno)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -1673,10 +1704,10 @@ function GlobalTab() {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
             <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-            <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+            <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
             <Legend wrapperStyle={{ fontSize: 13 }} />
             {seriesFat.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoFatPorAnoGlobal)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -1688,10 +1719,10 @@ function GlobalTab() {
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
             <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-            <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+            <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
             <Legend wrapperStyle={{ fontSize: 13 }} />
             {seriesLit.anos.map((ano, idx) => (
-              <Line key={ano} type="monotone" dataKey={ano} name={nomeComCrescimento(ano, variacaoLitPorAnoGlobal)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
             ))}
           </LineChart>
         </ResponsiveContainer>
