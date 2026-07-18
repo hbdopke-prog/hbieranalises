@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.0";
+const APP_VERSION = "v4.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -156,6 +156,41 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
 function corDoAno(idx) {
   return PALETA_ANOS[idx % PALETA_ANOS.length];
+}
+
+// Legenda padrão do app: texto sempre branco (o padrão do recharts colore o texto igual à
+// série, o que fica ilegível no fundo escuro) - usada em gráficos de linha/barra.
+function LegendaBranca({ payload }) {
+  if (!payload) return null;
+  return (
+    <ul style={{ listStyle: "none", margin: "8px 0 0", padding: 0, display: "flex", flexWrap: "wrap", gap: "4px 18px", justifyContent: "center" }}>
+      {payload.map((entry, idx) => (
+        <li key={idx} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+          <span style={{ width: 10, height: 10, background: entry.color, display: "inline-block", borderRadius: 2, flexShrink: 0 }} />
+          <span style={{ color: "#fff" }}>{entry.value}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// Legenda lateral pros gráficos de pizza: texto branco + % de cada fatia sobre o total
+function LegendaPizza({ payload, total, campo }) {
+  if (!payload) return null;
+  return (
+    <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      {payload.map((entry, idx) => {
+        const valor = entry.payload ? entry.payload[campo] : 0;
+        const pct = total ? (valor / total * 100) : 0;
+        return (
+          <li key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, fontSize: 12 }}>
+            <span style={{ width: 10, height: 10, background: entry.color, display: "inline-block", borderRadius: 2, flexShrink: 0 }} />
+            <span style={{ color: "#fff" }}>{entry.value} ({pct.toFixed(1)}%)</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 // Transforma uma série cronológica em "12 meses no eixo X, uma linha por ano" -
@@ -810,7 +845,7 @@ function ClienteDashboard() {
                   <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
                   <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                   <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
-                  <Legend wrapperStyle={{ fontSize: 13 }} />
+                  <Legend content={<LegendaBranca />} />
                   {seriesFatCliente.anos.map((ano, idx) => (
                     <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                   ))}
@@ -833,7 +868,7 @@ function ClienteDashboard() {
                   <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
                   <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
                   <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
-                  <Legend wrapperStyle={{ fontSize: 13 }} />
+                  <Legend content={<LegendaBranca />} />
                   {seriesLitCliente.anos.map((ano, idx) => (
                     <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                   ))}
@@ -1231,7 +1266,7 @@ function ComparacaoTab() {
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Legend content={<LegendaBranca />} />
                   <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
                     <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
                   </Bar>
@@ -1271,7 +1306,7 @@ function ComparacaoTab() {
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
                   <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Legend content={<LegendaBranca />} />
                   <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
                     <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
                   </Line>
@@ -1847,7 +1882,7 @@ function GlobalTab() {
               <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
               <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
               <Tooltip content={<TooltipPorAno formatador={fmtMoeda} />} />
-              <Legend wrapperStyle={{ fontSize: 13 }} />
+              <Legend content={<LegendaBranca />} />
               {seriesFat.anos.map((ano, idx) => (
                 <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
               ))}
@@ -1864,7 +1899,7 @@ function GlobalTab() {
               <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
               <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
               <Tooltip content={<TooltipPorAno formatador={fmtLitros} />} />
-              <Legend wrapperStyle={{ fontSize: 13 }} />
+              <Legend content={<LegendaBranca />} />
               {seriesLit.anos.map((ano, idx) => (
                 <Line key={ano} type="monotone" dataKey={ano} name={String(ano)} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
               ))}
@@ -1964,11 +1999,7 @@ function GlobalTab() {
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
                   <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }}
-                    formatter={(value, entry) => {
-                      const pct = totalFatPizza ? (entry.payload.fat / totalFatPizza * 100) : 0;
-                      return `${value} (${pct.toFixed(1)}%)`;
-                    }} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalFatPizza} campo="fat" />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -1981,11 +2012,7 @@ function GlobalTab() {
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
                   <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }}
-                    formatter={(value, entry) => {
-                      const pct = totalLitPizza ? (entry.payload.lit / totalLitPizza * 100) : 0;
-                      return `${value} (${pct.toFixed(1)}%)`;
-                    }} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalLitPizza} campo="lit" />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
