@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.2";
+const APP_VERSION = "v4.3";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -154,6 +154,17 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 
 // Paleta de cores pra distinguir anos sobrepostos no mesmo gráfico (12 meses no eixo X)
 const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
+// Grupos que pesam muito nos filtros "Todos" (ex: consumo interno, muitos clientes de baixo valor)
+// e por isso ficam DE FORA da seleção padrão. O usuário ainda pode marcá-los manualmente.
+const GRUPOS_PESADOS = ["VENDA ONLINE", "5. VENDA CONSUMO DIRETO HBIER"];
+function grupoEhPesado(g) {
+  const norm = (g || "").trim().toUpperCase();
+  return GRUPOS_PESADOS.some(x => norm === x.toUpperCase());
+}
+function gruposPadrao(grupos) {
+  return grupos.filter(g => !grupoEhPesado(g));
+}
+
 function corDoAno(idx) {
   return PALETA_ANOS[idx % PALETA_ANOS.length];
 }
@@ -1036,9 +1047,9 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
         <div style={{ maxHeight: 140, overflowY: "auto", border: "1px solid #333", borderRadius: 6, padding: "6px 8px" }}>
           {grupos.length === 0 && <div style={{ color: "#666", fontSize: 12, padding: "4px 0" }}>Nenhum grupo cadastrado ainda.</div>}
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupo(g)} />
-              {g} ({clientesPorGrupo[g].length})
+              {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
           ))}
         </div>
@@ -1547,8 +1558,7 @@ function TabelaHeatmapGrupos({ linhas }) {
 
 function DashboardTab() {
   const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente, dataCriacaoDoCliente } = useData();
-  const [gruposSel, setGruposSel] = useState([]);
-  const [todos, setTodos] = useState(true);
+  const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
   const [buscaCliente, setBuscaCliente] = useState("");
   const periodosFechados = periodos.filter(p => p !== chaveMesAtualReal());
   const [mesRefAno, setMesRefAno] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
@@ -1556,11 +1566,19 @@ function DashboardTab() {
   const [fimNovos, setFimNovos] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
 
   function toggleGrupoFiltro(g) {
-    setTodos(false);
     setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   }
+  function marcarTodosGrupos() {
+    setGruposSel([...grupos]);
+  }
+  function marcarPadraoGrupos() {
+    setGruposSel(gruposPadrao(grupos));
+  }
+  function desmarcarTodosGrupos() {
+    setGruposSel([]);
+  }
 
-  const clientesFiltrados = todos ? nomes : [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
+  const clientesFiltrados = [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
 
   const clientesComMetricas = useMemo(() => {
     return clientesFiltrados
@@ -1620,17 +1638,18 @@ function DashboardTab() {
     <div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-          <Layers size={13} /> Filtrar por grupo:
+          <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados):
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button onClick={marcarPadraoGrupos} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
+          <button onClick={marcarTodosGrupos} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosGrupos} style={chipBtnStyle}>Desmarcar todos</button>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
-            <input type="checkbox" checked={todos} onChange={() => { setTodos(true); setGruposSel([]); }} />
-            Todos ({nomes.length})
-          </label>
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
-              <input type="checkbox" checked={!todos && gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
-              {g} ({clientesPorGrupo[g].length})
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
+              {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
           ))}
         </div>
@@ -1707,7 +1726,7 @@ function DashboardTab() {
       <Section title={`Melhores Clientes (${clientesExibidos.length} de ${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
         {clientesComMetricas.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
-            Selecione ao menos um grupo, ou marque "Todos".
+            Selecione ao menos um grupo, ou clique em "Marcar todos".
           </div>
         )}
         {clientesComMetricas.length > 0 && clientesExibidos.length === 0 && (
@@ -1830,12 +1849,15 @@ function GlobalTab() {
   }, [mediasPorAno, rowsFechadas, pctProjecao]);
 
   // gráficos de pizza: faturamento/litros por grupo, com período e grupos selecionáveis
-  const [gruposSelPizza, setGruposSelPizza] = useState(() => [...grupos]);
+  const [gruposSelPizza, setGruposSelPizza] = useState(() => gruposPadrao(grupos));
   const [inicioPizza, setInicioPizza] = useState(() => ultimos12[0]?.chave || "");
   const [fimPizza, setFimPizza] = useState(() => ultimos12[ultimos12.length - 1]?.chave || "");
 
   function toggleGrupoPizza(g) {
     setGruposSelPizza(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+  function marcarPadraoPizza() {
+    setGruposSelPizza(gruposPadrao(grupos));
   }
   function marcarTodosPizza() {
     setGruposSelPizza([...grupos]);
@@ -2003,14 +2025,15 @@ function GlobalTab() {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ color: "#888", fontSize: 12 }}>Grupos:</span>
+            <button onClick={marcarPadraoPizza} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
             <button onClick={marcarTodosPizza} style={chipBtnStyle}>Marcar todos</button>
             <button onClick={desmarcarTodosPizza} style={chipBtnStyle}>Desmarcar todos</button>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {grupos.map(g => (
-              <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+              <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
                 <input type="checkbox" checked={gruposSelPizza.includes(g)} onChange={() => toggleGrupoPizza(g)} />
-                {g}
+                {g}{grupoEhPesado(g) ? " ⚠" : ""}
               </label>
             ))}
           </div>
