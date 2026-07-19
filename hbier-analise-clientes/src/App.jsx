@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.5";
+const APP_VERSION = "v4.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -536,7 +536,7 @@ function LoginScreen({ onLogin }) {
     <div style={{ minHeight: 420, display: "flex", alignItems: "center", justifyContent: "center", background: "#1D1D1B", borderRadius: 12, padding: 24 }}>
       <div style={{ width: 300, textAlign: "center" }}>
         <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 34, letterSpacing: 1.5, marginBottom: 4 }}>
-          HBIER <span style={{ color: "#C69700" }}>ANÁLISE</span>
+          HBIER <span style={{ color: "#C69700" }}>BI</span>
         </div>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 18 }}>{APP_VERSION}</div>
         <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} disabled={carregando} />
@@ -2111,6 +2111,155 @@ function GlobalTab() {
   );
 }
 
+function MesTab() {
+  const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
+  const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [ordenacao, setOrdenacao] = useState("litros"); // 'litros' | 'faturamento' | 'precoLitro'
+  const [expandido, setExpandido] = useState(false);
+
+  const mesAtualReal = chaveMesAtualReal();
+  const [mesSelecionado, setMesSelecionado] = useState(() =>
+    periodos.includes(mesAtualReal) ? mesAtualReal : (periodos[periodos.length - 1] || "")
+  );
+
+  function toggleGrupoFiltro(g) {
+    setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+  function marcarPadraoGrupos() { setGruposSel(gruposPadrao(grupos)); }
+  function marcarTodosGrupos() { setGruposSel([...grupos]); }
+  function desmarcarTodosGrupos() { setGruposSel([]); }
+
+  const clientesFiltrados = [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
+
+  const clientesMes = useMemo(() => {
+    if (!mesSelecionado) return [];
+    return clientesFiltrados
+      .map(codigo => {
+        const row = (dados[codigo] || []).find(r => r.chave === mesSelecionado);
+        if (!row || (row.faturamento <= 0 && row.litros <= 0)) return null;
+        return { codigo, fat: row.faturamento, lit: row.litros, precoLitro: precoMedioLitro(row.faturamento, row.litros) };
+      })
+      .filter(Boolean);
+  }, [clientesFiltrados, dados, mesSelecionado]);
+
+  const clientesOrdenados = useMemo(() => {
+    const campo = ordenacao === "litros" ? "lit" : ordenacao === "faturamento" ? "fat" : "precoLitro";
+    return [...clientesMes].sort((a, b) => (b[campo] || 0) - (a[campo] || 0));
+  }, [clientesMes, ordenacao]);
+
+  const clientesExibidos = buscaCliente.trim()
+    ? clientesOrdenados.filter(c => (labelDoCliente[c.codigo] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
+    : clientesOrdenados;
+
+  const LIMITE_PADRAO = 30;
+  const clientesVisiveisNaLista = expandido ? clientesExibidos : clientesExibidos.slice(0, LIMITE_PADRAO);
+
+  const totalLit = clientesMes.reduce((s, c) => s + c.lit, 0);
+  const totalFat = clientesMes.reduce((s, c) => s + c.fat, 0);
+  const precoLitroGeral = precoMedioLitro(totalFat, totalLit);
+  const emAndamento = mesSelecionado === mesAtualReal;
+
+  return (
+    <div>
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês:</span>
+          <MonthPicker periodosDisponiveis={periodos} valor={mesSelecionado} onSelecionar={setMesSelecionado} placeholder="Selecionar mês" />
+          {emAndamento && <span style={{ color: "#888", fontSize: 11 }}>⏳ mês em andamento — dados parciais até hoje</span>}
+        </div>
+
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Layers size={13} /> Categoria ({clientesFiltrados.length} clientes selecionados):
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button onClick={marcarPadraoGrupos} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
+          <button onClick={marcarTodosGrupos} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosGrupos} style={chipBtnStyle}>Desmarcar todos</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          {grupos.map(g => (
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
+              {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
+            </label>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+          <Search size={14} color="#C69700" />
+          <input placeholder="Buscar um cliente específico dentro da lista..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <StatCard label={`Litros (${mesSelecionado ? labelMes(mesSelecionado) : "-"})`} value={fmtLitros(totalLit)} icon={<Droplets size={14} />} />
+        <StatCard label={`Faturamento (${mesSelecionado ? labelMes(mesSelecionado) : "-"})`} value={fmtMoeda(totalFat)} icon={<TrendingUp size={14} />} />
+        <StatCard label="Preço médio geral/L" value={fmtPrecoLitro(precoLitroGeral)} icon={<Droplets size={14} />} />
+        <StatCard label="Clientes com venda no mês" value={String(clientesMes.length)} icon={<Users size={14} />} />
+      </div>
+
+      <Section title={`Top Clientes do Mês${mesSelecionado ? " · " + labelMes(mesSelecionado) : ""}`} icon={<Trophy size={18} color="#C69700" />}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <button onClick={() => setOrdenacao("litros")} style={modoBtnStyle(ordenacao === "litros", "#C69700")}>
+            <Droplets size={13} /> Litros
+          </button>
+          <button onClick={() => setOrdenacao("faturamento")} style={modoBtnStyle(ordenacao === "faturamento", "#02601D")}>
+            <TrendingUp size={13} /> Faturamento
+          </button>
+          <button onClick={() => setOrdenacao("precoLitro")} style={modoBtnStyle(ordenacao === "precoLitro", "#4a90d9")}>
+            <Droplets size={13} /> Preço/L
+          </button>
+        </div>
+
+        {clientesMes.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
+            Nenhum cliente com venda nesse mês, com esse filtro de categoria.
+          </div>
+        )}
+
+        {clientesMes.length > 0 && (
+          <>
+            <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>#</th>
+                    <th style={thStyle}>Cliente</th>
+                    <th style={{ ...thStyle, color: ordenacao === "litros" ? "#C69700" : "#fff" }}>Litros</th>
+                    <th style={{ ...thStyle, color: ordenacao === "faturamento" ? "#C69700" : "#fff" }}>Faturamento</th>
+                    <th style={{ ...thStyle, color: ordenacao === "precoLitro" ? "#C69700" : "#fff" }}>Preço/L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientesVisiveisNaLista.map((c, idx) => (
+                    <tr key={c.codigo}>
+                      <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
+                      <td style={{ ...tdStyle, color: "#fff", fontWeight: 600 }}>{labelDoCliente[c.codigo]}</td>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C69700" : "#ddd" }}>{fmtLitros(c.lit)}</td>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#4caf6b" : "#ddd" }}>{fmtMoeda(c.fat)}</td>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "precoLitro" ? 800 : 400, color: ordenacao === "precoLitro" ? "#4a90d9" : "#ddd" }}>{fmtPrecoLitro(c.precoLitro)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {clientesExibidos.length > LIMITE_PADRAO && (
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button onClick={() => setExpandido(e => !e)} style={chipBtnStyle}>
+                  {expandido ? "Mostrar menos" : `Ver todos (${clientesExibidos.length} clientes)`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </Section>
+    </div>
+  );
+}
+
 export default function App() {
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
@@ -2162,7 +2311,7 @@ export default function App() {
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 1 }}>
-              HBIER <span style={{ color: "#C69700" }}>ANÁLISE</span>
+              HBIER <span style={{ color: "#C69700" }}>BI</span>
               <span style={{ color: "#555", fontSize: 12, marginLeft: 10, fontFamily: "system-ui" }}>{APP_VERSION}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2193,6 +2342,9 @@ export default function App() {
                 <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
                   <LayoutDashboard size={14} /> Dashboard
                 </button>
+                <button onClick={() => setTab("mes")} style={tabStyle(tab === "mes")}>
+                  <Calendar size={14} /> Mês
+                </button>
                 {isAdmin && (
                   <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
                     <Globe size={14} /> Global
@@ -2203,6 +2355,7 @@ export default function App() {
               {tab === "cliente" && <ClienteDashboard />}
               {tab === "comparacao" && <ComparacaoTab />}
               {tab === "dashboard" && <DashboardTab />}
+              {tab === "mes" && <MesTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}
