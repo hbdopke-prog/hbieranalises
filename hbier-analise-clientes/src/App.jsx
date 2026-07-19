@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.7";
+const APP_VERSION = "v4.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2117,9 +2117,18 @@ function MesTab() {
   const [buscaCliente, setBuscaCliente] = useState("");
   const [ordenacao, setOrdenacao] = useState("litros"); // 'litros' | 'faturamento' | 'precoLitro'
   const [expandido, setExpandido] = useState(false);
+  const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
 
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
+    periodos.includes(mesAtualReal) ? mesAtualReal : (periodos[periodos.length - 1] || "")
+  );
+
+  const chaveJaneiroAnoAtual = `${new Date().getFullYear()}-01`;
+  const [inicioPeriodo, setInicioPeriodo] = useState(() =>
+    periodos.includes(chaveJaneiroAnoAtual) ? chaveJaneiroAnoAtual : (periodos[0] || "")
+  );
+  const [fimPeriodo, setFimPeriodo] = useState(() =>
     periodos.includes(mesAtualReal) ? mesAtualReal : (periodos[periodos.length - 1] || "")
   );
 
@@ -2132,16 +2141,25 @@ function MesTab() {
 
   const clientesFiltrados = [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
 
+  // chaves de período consideradas: um mês só, ou o intervalo inteiro no modo período
+  const chavesConsideradas = useMemo(() => {
+    if (modo === "mes") return mesSelecionado ? [mesSelecionado] : [];
+    if (!inicioPeriodo || !fimPeriodo) return [];
+    return periodos.filter(p => p >= inicioPeriodo && p <= fimPeriodo);
+  }, [modo, mesSelecionado, inicioPeriodo, fimPeriodo, periodos]);
+
   const clientesMes = useMemo(() => {
-    if (!mesSelecionado) return [];
+    if (!chavesConsideradas.length) return [];
+    const chaves = new Set(chavesConsideradas);
     return clientesFiltrados
       .map(codigo => {
-        const row = (dados[codigo] || []).find(r => r.chave === mesSelecionado);
-        if (!row || (row.faturamento <= 0 && row.litros <= 0)) return null;
-        return { codigo, fat: row.faturamento, lit: row.litros, precoLitro: precoMedioLitro(row.faturamento, row.litros) };
+        let fat = 0, lit = 0;
+        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+        if (fat <= 0 && lit <= 0) return null;
+        return { codigo, fat, lit, precoLitro: precoMedioLitro(fat, lit) };
       })
       .filter(Boolean);
-  }, [clientesFiltrados, dados, mesSelecionado]);
+  }, [clientesFiltrados, dados, chavesConsideradas]);
 
   const clientesOrdenados = useMemo(() => {
     const campo = ordenacao === "litros" ? "lit" : ordenacao === "faturamento" ? "fat" : "precoLitro";
@@ -2158,16 +2176,38 @@ function MesTab() {
   const totalLit = clientesMes.reduce((s, c) => s + c.lit, 0);
   const totalFat = clientesMes.reduce((s, c) => s + c.fat, 0);
   const precoLitroGeral = precoMedioLitro(totalFat, totalLit);
-  const emAndamento = mesSelecionado === mesAtualReal;
+  const emAndamento = modo === "mes" ? mesSelecionado === mesAtualReal : fimPeriodo === mesAtualReal;
+  const rotuloPeriodo = modo === "mes"
+    ? (mesSelecionado ? labelMes(mesSelecionado) : "-")
+    : (inicioPeriodo && fimPeriodo ? `${labelMes(inicioPeriodo)}–${labelMes(fimPeriodo)}` : "-");
 
   return (
     <div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês:</span>
-          <MonthPicker periodosDisponiveis={periodos} valor={mesSelecionado} onSelecionar={setMesSelecionado} placeholder="Selecionar mês" />
-          {emAndamento && <span style={{ color: "#888", fontSize: 11 }}>⏳ mês em andamento — dados parciais até hoje</span>}
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setModo("mes")} style={modoBtnStyle(modo === "mes", "#C69700")}>
+            <Calendar size={13} /> Mês único
+          </button>
+          <button onClick={() => setModo("periodo")} style={modoBtnStyle(modo === "periodo", "#C69700")}>
+            <Calendar size={13} /> Período
+          </button>
         </div>
+
+        {modo === "mes" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={mesSelecionado} onSelecionar={setMesSelecionado} placeholder="Selecionar mês" />
+            {emAndamento && <span style={{ color: "#888", fontSize: 11 }}>⏳ mês em andamento — dados parciais até hoje</span>}
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioPeriodo} onSelecionar={setInicioPeriodo} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimPeriodo} onSelecionar={setFimPeriodo} placeholder="Fim" />
+            {emAndamento && <span style={{ color: "#888", fontSize: 11 }}>⏳ o mês final ainda está em andamento — dados parciais até hoje</span>}
+          </div>
+        )}
 
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Layers size={13} /> Categoria ({clientesFiltrados.length} clientes selecionados):
@@ -2194,13 +2234,13 @@ function MesTab() {
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label={`Litros (${mesSelecionado ? labelMes(mesSelecionado) : "-"})`} value={fmtLitros(totalLit)} icon={<Droplets size={14} />} />
-        <StatCard label={`Faturamento (${mesSelecionado ? labelMes(mesSelecionado) : "-"})`} value={fmtMoeda(totalFat)} icon={<TrendingUp size={14} />} />
+        <StatCard label={`Litros (${rotuloPeriodo})`} value={fmtLitros(totalLit)} icon={<Droplets size={14} />} />
+        <StatCard label={`Faturamento (${rotuloPeriodo})`} value={fmtMoeda(totalFat)} icon={<TrendingUp size={14} />} />
         <StatCard label="Preço médio geral/L" value={fmtPrecoLitro(precoLitroGeral)} icon={<Droplets size={14} />} />
-        <StatCard label="Clientes com venda no mês" value={String(clientesMes.length)} icon={<Users size={14} />} />
+        <StatCard label="Clientes com venda no período" value={String(clientesMes.length)} icon={<Users size={14} />} />
       </div>
 
-      <Section title={`Top Clientes do Mês${mesSelecionado ? " · " + labelMes(mesSelecionado) : ""}`} icon={<Trophy size={18} color="#C69700" />}>
+      <Section title={`Top Clientes · ${rotuloPeriodo}`} icon={<Trophy size={18} color="#C69700" />}>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button onClick={() => setOrdenacao("litros")} style={modoBtnStyle(ordenacao === "litros", "#C69700")}>
             <Droplets size={13} /> Litros
@@ -2215,7 +2255,7 @@ function MesTab() {
 
         {clientesMes.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
-            Nenhum cliente com venda nesse mês, com esse filtro de categoria.
+            Nenhum cliente com venda nesse período, com esse filtro de categoria.
           </div>
         )}
 
