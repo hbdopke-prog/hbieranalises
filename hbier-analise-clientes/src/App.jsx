@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.8";
+const APP_VERSION = "v4.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1453,6 +1453,17 @@ function topN(clientesComMetricas, seletor, n, ordem) {
     .slice(0, n);
 }
 
+// % pequeno e colorido pra usar inline ao lado de um valor (ex: "15.337 L (+12.3%)")
+function PctInline({ variacao }) {
+  if (!variacao) return null;
+  const { cor } = classificarTendencia(variacao.pct);
+  return (
+    <span style={{ color: cor, fontSize: 10, fontWeight: 700, marginLeft: 5 }}>
+      ({variacao.pct >= 0 ? "+" : ""}{variacao.pct.toFixed(1)}%)
+    </span>
+  );
+}
+
 function ListaTop10({ titulo, itens, formatador, labelDoCliente }) {
   return (
     <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 300px", minWidth: 300 }}>
@@ -2148,18 +2159,37 @@ function MesTab() {
     return periodos.filter(p => p >= inicioPeriodo && p <= fimPeriodo);
   }, [modo, mesSelecionado, inicioPeriodo, fimPeriodo, periodos]);
 
+  // chaves do mesmo período, um ano antes (pra comparação por cliente)
+  const chavesAnoAnterior = useMemo(() => {
+    return chavesConsideradas
+      .map(chave => {
+        const [ano, mes] = chave.split("-").map(Number);
+        return `${ano - 1}-${String(mes).padStart(2, "0")}`;
+      })
+      .filter(chave => periodos.includes(chave));
+  }, [chavesConsideradas, periodos]);
+
   const clientesMes = useMemo(() => {
     if (!chavesConsideradas.length) return [];
     const chaves = new Set(chavesConsideradas);
+    const chavesAnt = new Set(chavesAnoAnterior);
     return clientesFiltrados
       .map(codigo => {
-        let fat = 0, lit = 0;
-        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+        let fat = 0, lit = 0, fatAnt = 0, litAnt = 0;
+        (dados[codigo] || []).forEach(r => {
+          if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; }
+          if (chavesAnt.has(r.chave)) { fatAnt += r.faturamento; litAnt += r.litros; }
+        });
         if (fat <= 0 && lit <= 0) return null;
-        return { codigo, fat, lit, precoLitro: precoMedioLitro(fat, lit) };
+        const teveAnoAnterior = chavesAnt.size > 0 && (fatAnt > 0 || litAnt > 0);
+        return {
+          codigo, fat, lit, precoLitro: precoMedioLitro(fat, lit),
+          varFat: teveAnoAnterior ? calcularVariacao(fat, fatAnt) : null,
+          varLit: teveAnoAnterior ? calcularVariacao(lit, litAnt) : null,
+        };
       })
       .filter(Boolean);
-  }, [clientesFiltrados, dados, chavesConsideradas]);
+  }, [clientesFiltrados, dados, chavesConsideradas, chavesAnoAnterior]);
 
   const clientesOrdenados = useMemo(() => {
     const campo = ordenacao === "litros" ? "lit" : ordenacao === "faturamento" ? "fat" : "precoLitro";
@@ -2241,7 +2271,7 @@ function MesTab() {
       </div>
 
       <Section title={`Top Clientes · ${rotuloPeriodo}`} icon={<Trophy size={18} color="#C69700" />}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <button onClick={() => setOrdenacao("litros")} style={modoBtnStyle(ordenacao === "litros", "#C69700")}>
             <Droplets size={13} /> Litros
           </button>
@@ -2251,6 +2281,9 @@ function MesTab() {
           <button onClick={() => setOrdenacao("precoLitro")} style={modoBtnStyle(ordenacao === "precoLitro", "#4a90d9")}>
             <Droplets size={13} /> Preço/L
           </button>
+        </div>
+        <div style={{ color: "#666", fontSize: 11, marginBottom: 14 }}>
+          O % entre parênteses em Litros e Faturamento compara com o mesmo período do ano anterior.
         </div>
 
         {clientesMes.length === 0 && (
@@ -2277,8 +2310,12 @@ function MesTab() {
                     <tr key={c.codigo}>
                       <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
                       <td style={{ ...tdStyle, color: "#fff", fontWeight: 600 }}>{labelDoCliente[c.codigo]}</td>
-                      <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C69700" : "#ddd" }}>{fmtLitros(c.lit)}</td>
-                      <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#4caf6b" : "#ddd" }}>{fmtMoeda(c.fat)}</td>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C69700" : "#ddd" }}>
+                        {fmtLitros(c.lit)}<PctInline variacao={c.varLit} />
+                      </td>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#4caf6b" : "#ddd" }}>
+                        {fmtMoeda(c.fat)}<PctInline variacao={c.varFat} />
+                      </td>
                       <td style={{ ...tdStyle, fontWeight: ordenacao === "precoLitro" ? 800 : 400, color: ordenacao === "precoLitro" ? "#4a90d9" : "#ddd" }}>{fmtPrecoLitro(c.precoLitro)}</td>
                     </tr>
                   ))}
