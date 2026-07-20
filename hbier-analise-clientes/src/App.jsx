@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.4";
+const APP_VERSION = "v5.6";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1581,13 +1581,49 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
 }
 
 // Heatmap: linhas = grupos (+ "Sem grupo"), colunas = meses, cor da célula = crescimento/queda vs mês anterior
-function TabelaHeatmapGrupos({ linhas }) {
+// Heatmap genérico (categoria x mês) - usado na aba Produtos, com "valor" já na unidade
+// escolhida (R$ ou L), cor da célula por crescimento/queda vs o mês anterior na mesma linha.
+// "2026-03" -> "2026-02" (mês anterior) / "2026-01" -> "2025-12" (vira ano)
+function chaveMesAnterior(chave) {
+  const [ano, mes] = chave.split("-").map(Number);
+  if (mes === 1) return `${ano - 1}-12`;
+  return `${ano}-${String(mes - 1).padStart(2, "0")}`;
+}
+// "2026-03" -> "2025-03" (mesmo mês, ano anterior)
+function chaveAnoAnterior(chave) {
+  const [ano, mes] = chave.split("-").map(Number);
+  return `${ano - 1}-${String(mes).padStart(2, "0")}`;
+}
+
+// linhas: [{ categoria, valores: [{periodo, valor}] }] - só as colunas visíveis (janela escolhida)
+// dadosCompletos (opcional): { categoria: { chave: valor } } - histórico INTEIRO de cada categoria,
+// usado pra calcular as comparações mesmo quando só 1 mês (ou uma janela curta) está sendo exibido.
+// Sem dadosCompletos, cai pra buscar dentro da própria janela visível (funciona quando ela já
+// cobre o histórico todo, como no heatmap de grupos do Dashboard).
+function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos }) {
+  function formatador(v) { return rotuloCompactoGeral(v, unidade); }
+
+  function buscarValor(linha, chave) {
+    if (dadosCompletos && dadosCompletos[linha.categoria]) {
+      return dadosCompletos[linha.categoria][chave];
+    }
+    const item = linha.valores.find(v => v.periodo === chave);
+    return item ? item.valor : undefined;
+  }
+
+  function textoVariacao(rotulo, variacao) {
+    if (!variacao) return "";
+    const sinalPct = variacao.pct >= 0 ? "+" : "";
+    const sinalDiff = variacao.diff >= 0 ? "+" : "";
+    return `\n${rotulo}: ${sinalPct}${variacao.pct.toFixed(1)}% (${sinalDiff}${formatador(variacao.diff)})`;
+  }
+
   return (
     <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
         <thead>
           <tr>
-            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2 }}>Grupo</th>
+            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2 }}>{rotuloColuna}</th>
             {linhas[0]?.valores.map(v => <th key={v.periodo} style={thStyle}>{labelMes(v.periodo)}</th>)}
           </tr>
         </thead>
@@ -1595,11 +1631,21 @@ function TabelaHeatmapGrupos({ linhas }) {
           {linhas.map(linha => (
             <tr key={linha.categoria}>
               <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
-              {linha.valores.map((v, idx) => {
-                const anterior = idx > 0 ? linha.valores[idx - 1].fat : null;
-                const variacao = anterior != null ? calcularVariacao(v.fat, anterior) : null;
-                const bg = variacao ? classificarTendencia(variacao.pct).corFundo : "transparent";
-                return <td key={v.periodo} style={{ ...tdStyle, background: bg }}>{v.fat ? rotuloCompactoGeral(v.fat) : "-"}</td>;
+              {linha.valores.map(v => {
+                const valor = v.valor || 0;
+                const valorMesAnterior = buscarValor(linha, chaveMesAnterior(v.periodo));
+                const valorAnoAnterior = buscarValor(linha, chaveAnoAnterior(v.periodo));
+                const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
+                const variacaoAno = valorAnoAnterior != null ? calcularVariacao(valor, valorAnoAnterior) : null;
+
+                const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "transparent";
+                const tooltip = formatador(valor) + textoVariacao("vs mês anterior", variacaoMes) + textoVariacao("vs mesmo mês ano anterior", variacaoAno);
+
+                return (
+                  <td key={v.periodo} title={tooltip} style={{ ...tdStyle, background: bg, cursor: "default" }}>
+                    {valor ? formatador(valor) : "-"}
+                  </td>
+                );
               })}
             </tr>
           ))}
@@ -1667,6 +1713,8 @@ function DashboardTab() {
   const totalNovosClientes = novosClientesPorMes.reduce((s, m) => s + m.quantidade, 0);
   const temDataCriacao = Object.keys(dataCriacaoDoCliente).length > 0;
 
+  const [metricaHeatmapGrupo, setMetricaHeatmapGrupo] = useState("faturamento"); // 'faturamento' | 'litros'
+
   const linhasHeatmap = useMemo(() => {
     const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
     const semGrupo = nomes.filter(n => !nomesComGrupo.has(n));
@@ -1676,16 +1724,16 @@ function DashboardTab() {
     return categorias.map(cat => {
       const clientesCat = cat === "Sem grupo" ? semGrupo : clientesPorGrupo[cat];
       const valores = periodos.map(p => {
-        let fat = 0;
+        let fat = 0, lit = 0;
         clientesCat.forEach(nome => {
           const row = (dados[nome] || []).find(r => r.chave === p);
-          if (row) fat += row.faturamento;
+          if (row) { fat += row.faturamento; lit += row.litros; }
         });
-        return { periodo: p, fat };
+        return { periodo: p, valor: metricaHeatmapGrupo === "litros" ? lit : fat };
       });
       return { categoria: cat, valores };
     });
-  }, [grupos, clientesPorGrupo, nomes, periodos, dados]);
+  }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo]);
 
   return (
     <div>
@@ -1751,11 +1799,20 @@ function DashboardTab() {
         </Section>
       )}
 
-      <Section title="Comparação mês a mês por grupo · Faturamento" icon={<AlertTriangle size={16} color="#C69700" />}>
-        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). A última coluna pode ser um mês ainda em andamento — compare com cautela.
+      <Section title={`Comparação mês a mês por grupo · ${metricaHeatmapGrupo === "litros" ? "Litros" : "Faturamento"}`} icon={<AlertTriangle size={16} color="#C69700" />}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setMetricaHeatmapGrupo("faturamento")} style={modoBtnStyle(metricaHeatmapGrupo === "faturamento", "#02601D")}>
+            <TrendingUp size={13} /> Faturamento
+          </button>
+          <button onClick={() => setMetricaHeatmapGrupo("litros")} style={modoBtnStyle(metricaHeatmapGrupo === "litros", "#C69700")}>
+            <Droplets size={13} /> Litros
+          </button>
         </div>
-        <TabelaHeatmapGrupos linhas={linhasHeatmap} />
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). Passe o mouse numa célula pra ver a diferença
+          em número e % vs mês anterior e vs mesmo mês do ano anterior. A última coluna pode ser um mês ainda em andamento — compare com cautela.
+        </div>
+        <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
       </Section>
 
       <Section title="Top 10 · Maiores Crescimentos" icon={<ArrowUp size={18} color="#4caf6b" />}>
@@ -2418,7 +2475,7 @@ function CardCategoriaProduto({ nome, comp, cor }) {
 }
 
 function ProdutosTab() {
-  const { produtosDados, produtosNomes } = useData();
+  const { produtosDados, produtosNomes, produtosPeriodos } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
   const [expandido, setExpandido] = useState(false);
   const LIMITE_PADRAO = 24;
@@ -2435,6 +2492,57 @@ function ProdutosTab() {
 
   const produtosVisiveis = expandido ? produtosExibidos : produtosExibidos.slice(0, LIMITE_PADRAO);
 
+  // --- heatmap mês a mês por produto ---
+  const [metricaHeatmap, setMetricaHeatmap] = useState("faturamento"); // 'faturamento' | 'litros'
+  const [modoDataHeatmap, setModoDataHeatmap] = useState("mes"); // 'mes' | 'periodo'
+  const [expandidoHeatmap, setExpandidoHeatmap] = useState(false);
+  const LIMITE_HEATMAP = 20;
+
+  const mesAtualRealProdutos = chaveMesAtualReal();
+  const [mesHeatmap, setMesHeatmap] = useState(() =>
+    produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
+  );
+  const [inicioHeatmap, setInicioHeatmap] = useState(() => produtosPeriodos[0] || "");
+  const [fimHeatmap, setFimHeatmap] = useState(() =>
+    produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
+  );
+
+  const chavesHeatmap = useMemo(() => {
+    if (modoDataHeatmap === "mes") return mesHeatmap ? [mesHeatmap] : [];
+    if (!inicioHeatmap || !fimHeatmap) return [];
+    return produtosPeriodos.filter(p => p >= inicioHeatmap && p <= fimHeatmap);
+  }, [modoDataHeatmap, mesHeatmap, inicioHeatmap, fimHeatmap, produtosPeriodos]);
+
+  const linhasHeatmap = useMemo(() => {
+    if (!chavesHeatmap.length) return [];
+    return produtosNomes
+      .map(nome => {
+        const rows = produtosDados[nome] || [];
+        const valores = chavesHeatmap.map(chave => {
+          const row = rows.find(r => r.chave === chave);
+          return { periodo: chave, valor: row ? row[metricaHeatmap] : 0 };
+        });
+        const total = valores.reduce((s, v) => s + v.valor, 0);
+        return { categoria: nome, valores, total };
+      })
+      .filter(l => l.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [produtosNomes, produtosDados, chavesHeatmap, metricaHeatmap]);
+
+  // histórico INTEIRO por produto (não só a janela selecionada) - pra dar pra comparar com
+  // mês anterior/mesmo mês ano anterior mesmo quando a janela mostrada for só 1 mês
+  const dadosCompletosHeatmap = useMemo(() => {
+    const mapa = {};
+    produtosNomes.forEach(nome => {
+      const porChave = {};
+      (produtosDados[nome] || []).forEach(r => { porChave[r.chave] = r[metricaHeatmap]; });
+      mapa[nome] = porChave;
+    });
+    return mapa;
+  }, [produtosNomes, produtosDados, metricaHeatmap]);
+
+  const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
+
   if (!produtosNomes.length) {
     return (
       <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
@@ -2447,6 +2555,66 @@ function ProdutosTab() {
 
   return (
     <div>
+      <Section title="Comparação Mês a Mês por Produto" icon={<AlertTriangle size={16} color="#C69700" />}>
+        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setMetricaHeatmap("faturamento")} style={modoBtnStyle(metricaHeatmap === "faturamento", "#02601D")}>
+              <TrendingUp size={13} /> Faturamento
+            </button>
+            <button onClick={() => setMetricaHeatmap("litros")} style={modoBtnStyle(metricaHeatmap === "litros", "#C69700")}>
+              <Droplets size={13} /> Litros
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setModoDataHeatmap("mes")} style={modoBtnStyle(modoDataHeatmap === "mes", "#4a90d9")}>
+              <Calendar size={13} /> Mês único
+            </button>
+            <button onClick={() => setModoDataHeatmap("periodo")} style={modoBtnStyle(modoDataHeatmap === "periodo", "#4a90d9")}>
+              <Calendar size={13} /> Período
+            </button>
+          </div>
+
+          {modoDataHeatmap === "mes" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>Mês:</span>
+              <MonthPicker periodosDisponiveis={produtosPeriodos} valor={mesHeatmap} onSelecionar={setMesHeatmap} placeholder="Selecionar mês" />
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
+              <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioHeatmap} onSelecionar={setInicioHeatmap} placeholder="Início" />
+              <span style={{ color: "#666" }}>até</span>
+              <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimHeatmap} onSelecionar={setFimHeatmap} placeholder="Fim" />
+            </div>
+          )}
+        </div>
+
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (vs mês anterior). Passe o mouse numa célula pra ver a diferença em
+          número e % vs mês anterior e vs mesmo mês do ano anterior. Ordenado do maior pro menor total no período selecionado.
+        </div>
+
+        {linhasHeatmap.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+            Nenhum produto com dado no período selecionado.
+          </div>
+        )}
+
+        {linhasHeatmap.length > 0 && (
+          <>
+            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} />
+            {linhasHeatmap.length > LIMITE_HEATMAP && (
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button onClick={() => setExpandidoHeatmap(e => !e)} style={chipBtnStyle}>
+                  {expandidoHeatmap ? "Mostrar menos" : `Ver todos (${linhasHeatmap.length} produtos)`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </Section>
+
       <Section title={`Por Tipo de Produto (${produtosExibidos.length}${buscaTipo.trim() ? ` de ${produtosComComparativo.length}` : ""})`} icon={<TrendingUp size={18} color="#02601D" />}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
           <Search size={14} color="#C69700" />
