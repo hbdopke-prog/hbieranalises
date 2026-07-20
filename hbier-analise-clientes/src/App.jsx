@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.9";
+const APP_VERSION = "v6.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -170,6 +170,15 @@ function grupoEhPesado(g) {
 }
 function gruposPadrao(grupos) {
   return grupos.filter(g => !grupoEhPesado(g));
+}
+
+// Classifica um produto pela embalagem, olhando o começo do nome (ex: "CHOPE HELLES" -> chope,
+// "PET 2L HELLES" -> pet, "GARRAFA HELLES 355ML" -> outros)
+function classificarEmbalagem(nomeProduto) {
+  const n = (nomeProduto || "").trim().toUpperCase();
+  if (n.startsWith("CHOPE")) return "chope";
+  if (n.startsWith("PET")) return "pet";
+  return "outros";
 }
 
 function corDoAno(idx) {
@@ -2687,10 +2696,20 @@ function CardCategoriaProduto({ nome, comp, cor }) {
 }
 
 function ProdutosTab() {
-  const { produtosDados, produtosNomes, produtosPeriodos } = useData();
+  const { produtosDados, produtosNomes: todosProdutosNomes, produtosPeriodos } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
   const [expandido, setExpandido] = useState(false);
   const LIMITE_PADRAO = 24;
+
+  // filtro por embalagem: Chope / Pet / Outros (tudo que não é Chope nem Pet)
+  const [embalagensSel, setEmbalagensSel] = useState(["chope", "pet", "outros"]);
+  function toggleEmbalagem(e) {
+    setEmbalagensSel(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+  }
+  const produtosNomes = useMemo(
+    () => todosProdutosNomes.filter(nome => embalagensSel.includes(classificarEmbalagem(nome))),
+    [todosProdutosNomes, embalagensSel]
+  );
 
   const produtosComComparativo = useMemo(() => {
     return produtosNomes
@@ -2798,7 +2817,7 @@ function ProdutosTab() {
 
   const setColunasProjecao = useMemo(() => new Set(incluirProjecao ? chavesProjecao : []), [incluirProjecao, chavesProjecao]);
 
-  if (!produtosNomes.length) {
+  if (!todosProdutosNomes.length) {
     return (
       <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
         Nenhum dado de produtos encontrado ainda. Crie as abas <strong style={{ color: "#C69700" }}>produtos_faturamento</strong> e{" "}
@@ -2810,6 +2829,34 @@ function ProdutosTab() {
 
   return (
     <div>
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Package size={13} /> Embalagem ({produtosNomes.length} de {todosProdutosNomes.length} produtos):
+        </div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={embalagensSel.includes("chope")} onChange={() => toggleEmbalagem("chope")} />
+            🍺 Chope
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={embalagensSel.includes("pet")} onChange={() => toggleEmbalagem("pet")} />
+            🧴 Pet
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={embalagensSel.includes("outros")} onChange={() => toggleEmbalagem("outros")} />
+            📦 Outros (garrafa, lata, etc.)
+          </label>
+        </div>
+      </div>
+
+      {produtosNomes.length === 0 && (
+        <div style={{ color: "#888", textAlign: "center", padding: "40px 20px", fontSize: 14 }}>
+          Nenhum produto nas embalagens selecionadas. Marque pelo menos uma opção acima.
+        </div>
+      )}
+
+      {produtosNomes.length > 0 && (
+      <>
       <Section title="Comparação Mês a Mês por Produto" icon={<AlertTriangle size={16} color="#C69700" />}>
         <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -2934,6 +2981,8 @@ function ProdutosTab() {
           </>
         )}
       </Section>
+      </>
+      )}
     </div>
   );
 }
