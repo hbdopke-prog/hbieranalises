@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.0";
+const APP_VERSION = "v6.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1681,6 +1681,36 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
   );
 }
 
+// Tabela de projeção, separada da tabela de dados reais (sem cor de variação/comparação,
+// já que é estimativa) - mesmo formato {categoria, valores:[{periodo,valor}]}.
+function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
+  function formatador(v) { return rotuloCompactoGeral(v, unidade); }
+  return (
+    <div style={{ overflowX: "auto", border: "1px dashed rgba(198,151,0,0.4)", borderRadius: 8, background: "rgba(198,151,0,0.04)" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
+        <thead>
+          <tr>
+            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2, background: "#1D1D1B" }}>{rotuloColuna}</th>
+            {linhas[0]?.valores.map(v => (
+              <th key={v.periodo} style={{ ...thStyle, color: "#C69700", fontStyle: "italic" }}>{labelMes(v.periodo)}*</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map(linha => (
+            <tr key={linha.categoria}>
+              <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+              {linha.valores.map(v => (
+                <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>{v.valor ? formatador(v.valor) : "-"}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente, dataCriacaoDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
@@ -2776,11 +2806,13 @@ function ProdutosTab() {
 
   const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
 
-  // --- projeção: PERÍODO DE REFERÊNCIA PRÓPRIO (independente do período de visualização da
-  // tabela acima) - você escolhe exatamente quais meses quer usar de base (ex: só Set-Dez/25,
-  // a temporada de Oktoberfest), e a projeção sai só desses meses, 1 ano depois, ajustados por %.
+  // --- projeção (tabela separada, abaixo da tabela de dados reais) ---
   const [incluirProjecao, setIncluirProjecao] = useState(false);
+  const [modoProjecao, setModoProjecao] = useState("anoAnterior"); // 'anoAnterior' | 'mediaRecente'
   const [pctProjecao, setPctProjecao] = useState(100);
+
+  // modo "mesmo período do ano anterior": você escolhe o período de referência, ele projeta
+  // os mesmos meses 1 ano depois. Bom pra produto com histórico/sazonal (ex: Oktoberfest).
   const [inicioProjecao, setInicioProjecao] = useState(() =>
     produtosPeriodos.includes("2025-01") ? "2025-01" : (produtosPeriodos[0] || "")
   );
@@ -2793,29 +2825,82 @@ function ProdutosTab() {
     return produtosPeriodos.filter(p => p >= inicioProjecao && p <= fimProjecao);
   }, [inicioProjecao, fimProjecao, produtosPeriodos]);
 
-  const chavesProjecao = useMemo(() => {
+  const chavesProjecaoAnoAnterior = useMemo(() => {
     return chavesReferenciaProjecao.map(c => {
       const [ano, mes] = c.split("-").map(Number);
       return `${ano + 1}-${String(mes).padStart(2, "0")}`;
     });
   }, [chavesReferenciaProjecao]);
 
-  // linhas exibidas na tabela: janela de visualização + (se marcado) as colunas de projeção
-  // do período de referência, calculadas a partir do histórico INTEIRO do produto (não só do
-  // que estiver na janela de visualização - por isso usa dadosCompletosHeatmap aqui)
-  const linhasHeatmapComProjecao = useMemo(() => {
-    if (!incluirProjecao || !chavesReferenciaProjecao.length) return linhasHeatmapVisiveis;
+  // modo "média recente + sazonalidade geral": bom pra produto novo, sem ano anterior pra
+  // comparar. Pega a média dos últimos N meses do próprio produto como "nível base", e projeta
+  // pra frente M meses, variando cada mês pela sazonalidade AGREGADA dos produtos filtrados
+  // (embalagem selecionada) - ou seja, usa o comportamento sazonal do grupo pra estimar como
+  // um produto sem histórico deve se comportar mês a mês.
+  const [mesesBaseMedia, setMesesBaseMedia] = useState(3);
+  const [mesesProjetarFrente, setMesesProjetarFrente] = useState(6);
+
+  const periodosFechadosProdutos = useMemo(() => produtosPeriodos.filter(p => p !== mesAtualRealProdutos), [produtosPeriodos, mesAtualRealProdutos]);
+  const ultimoFechadoProdutos = periodosFechadosProdutos[periodosFechadosProdutos.length - 1] || "";
+
+  const chavesBaseMedia = useMemo(() => periodosFechadosProdutos.slice(-mesesBaseMedia), [periodosFechadosProdutos, mesesBaseMedia]);
+
+  const chavesProjecaoMediaRecente = useMemo(() => {
+    if (!ultimoFechadoProdutos) return [];
+    const chaves = [];
+    let atual = ultimoFechadoProdutos;
+    for (let i = 0; i < mesesProjetarFrente; i++) {
+      const [ano, mes] = atual.split("-").map(Number);
+      atual = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
+      chaves.push(atual);
+    }
+    return chaves;
+  }, [ultimoFechadoProdutos, mesesProjetarFrente]);
+
+  // índice de sazonalidade (1 posição por mês-calendário, 1 a 12): total de cada mês somado
+  // em todos os anos, dividido pela média mensal geral - só com os produtos do filtro atual
+  // (embalagem selecionada), pra não misturar sazonalidade de chope com pet, por exemplo.
+  const indiceSazonal = useMemo(() => {
+    const somaPorMes = Array(13).fill(0);
+    produtosNomes.forEach(nome => {
+      (produtosDados[nome] || []).forEach(r => { somaPorMes[r.mes] += r[metricaHeatmap] || 0; });
+    });
+    const mediaGeral = somaPorMes.slice(1).reduce((a, b) => a + b, 0) / 12;
+    if (!mediaGeral) return null;
+    return somaPorMes.map(v => v / mediaGeral);
+  }, [produtosNomes, produtosDados, metricaHeatmap]);
+
+  // linhas da tabela de projeção (formato separado, {categoria, valores:[{periodo,valor}]})
+  const linhasProjecao = useMemo(() => {
+    if (!incluirProjecao) return [];
+
+    if (modoProjecao === "anoAnterior") {
+      if (!chavesReferenciaProjecao.length) return [];
+      return linhasHeatmapVisiveis.map(linha => {
+        const completos = dadosCompletosHeatmap[linha.categoria] || {};
+        const valores = chavesReferenciaProjecao.map((chaveRef, idx) => ({
+          periodo: chavesProjecaoAnoAnterior[idx],
+          valor: (completos[chaveRef] || 0) * (pctProjecao / 100),
+        }));
+        return { categoria: linha.categoria, valores };
+      });
+    }
+
+    // modo "mediaRecente"
+    if (!indiceSazonal || !chavesBaseMedia.length || !chavesProjecaoMediaRecente.length) return [];
     return linhasHeatmapVisiveis.map(linha => {
       const completos = dadosCompletosHeatmap[linha.categoria] || {};
-      const valoresProjetados = chavesReferenciaProjecao.map((chaveRef, idx) => {
-        const valorReferencia = completos[chaveRef] || 0;
-        return { periodo: chavesProjecao[idx], valor: valorReferencia * (pctProjecao / 100) };
+      const baseValores = chavesBaseMedia.map(c => completos[c] || 0);
+      const baseMedia = baseValores.reduce((a, b) => a + b, 0) / baseValores.length;
+      const valores = chavesProjecaoMediaRecente.map(chave => {
+        const mes = Number(chave.split("-")[1]);
+        const indice = indiceSazonal[mes] ?? 1;
+        return { periodo: chave, valor: baseMedia * indice * (pctProjecao / 100) };
       });
-      return { ...linha, valores: [...linha.valores, ...valoresProjetados] };
+      return { categoria: linha.categoria, valores };
     });
-  }, [linhasHeatmapVisiveis, incluirProjecao, chavesReferenciaProjecao, chavesProjecao, pctProjecao, dadosCompletosHeatmap]);
-
-  const setColunasProjecao = useMemo(() => new Set(incluirProjecao ? chavesProjecao : []), [incluirProjecao, chavesProjecao]);
+  }, [incluirProjecao, modoProjecao, linhasHeatmapVisiveis, dadosCompletosHeatmap, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
+      pctProjecao, indiceSazonal, chavesBaseMedia, chavesProjecaoMediaRecente]);
 
   if (!todosProdutosNomes.length) {
     return (
@@ -2900,26 +2985,66 @@ function ProdutosTab() {
 
           {incluirProjecao && (
             <div style={{ marginTop: 10, background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 8, padding: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <span style={{ color: "#888", fontSize: 12 }}>Período de referência pra projetar:</span>
-                <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioProjecao} onSelecionar={setInicioProjecao} placeholder="Início" />
-                <span style={{ color: "#666" }}>até</span>
-                <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimProjecao} onSelecionar={setFimProjecao} placeholder="Fim" />
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                <button onClick={() => setModoProjecao("anoAnterior")} style={modoBtnStyle(modoProjecao === "anoAnterior", "#C69700")}>
+                  Mesmo período do ano anterior
+                </button>
+                <button onClick={() => setModoProjecao("mediaRecente")} style={modoBtnStyle(modoProjecao === "mediaRecente", "#C69700")}>
+                  Média recente + sazonalidade
+                </button>
               </div>
+
+              {modoProjecao === "anoAnterior" ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                    <span style={{ color: "#888", fontSize: 12 }}>Período de referência pra projetar:</span>
+                    <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioProjecao} onSelecionar={setInicioProjecao} placeholder="Início" />
+                    <span style={{ color: "#666" }}>até</span>
+                    <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimProjecao} onSelecionar={setFimProjecao} placeholder="Fim" />
+                  </div>
+                  {chavesReferenciaProjecao.length > 0 && (
+                    <div style={{ color: "#666", fontSize: 11, marginBottom: 10 }}>
+                      Vai projetar: {labelMes(chavesReferenciaProjecao[0])} a {labelMes(chavesReferenciaProjecao[chavesReferenciaProjecao.length - 1])} do
+                      período de referência → {labelMes(chavesProjecaoAnoAnterior[0])} a {labelMes(chavesProjecaoAnoAnterior[chavesProjecaoAnoAnterior.length - 1])} (mesmos meses, 1 ano depois)
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div style={{ color: "#666", fontSize: 11, marginBottom: 10 }}>
+                    Pra produto sem "ano anterior" pra comparar (ex: lançamento recente) — pega a média dos últimos meses do próprio
+                    produto como base, e projeta pra frente variando mês a mês pela sazonalidade agregada dos produtos marcados no
+                    filtro de embalagem (Chope/Pet/Outros) lá em cima.
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: "#888", fontSize: 12 }}>Base: média dos últimos</span>
+                      <input type="number" min="1" max="24" value={mesesBaseMedia} onChange={e => setMesesBaseMedia(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+                        style={{ width: 50, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                      <span style={{ color: "#888", fontSize: 12 }}>meses</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ color: "#888", fontSize: 12 }}>Projetar: próximos</span>
+                      <input type="number" min="1" max="24" value={mesesProjetarFrente} onChange={e => setMesesProjetarFrente(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
+                        style={{ width: 50, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                      <span style={{ color: "#888", fontSize: 12 }}>meses</span>
+                    </div>
+                  </div>
+                  {chavesBaseMedia.length > 0 && chavesProjecaoMediaRecente.length > 0 && (
+                    <div style={{ color: "#666", fontSize: 11, marginBottom: 10 }}>
+                      Base: {labelMes(chavesBaseMedia[0])} a {labelMes(chavesBaseMedia[chavesBaseMedia.length - 1])} → projeta
+                      {" "}{labelMes(chavesProjecaoMediaRecente[0])} a {labelMes(chavesProjecaoMediaRecente[chavesProjecaoMediaRecente.length - 1])}
+                    </div>
+                  )}
+                </>
+              )}
+
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ color: "#888", fontSize: 12 }}>Ajuste:</span>
                 <input type="number" min="0" max="300" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
                   style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
-                <span style={{ color: "#666", fontSize: 11 }}>
-                  % (100% = repete os mesmos valores do período de referência, 1 ano depois)
-                </span>
+                <span style={{ color: "#666", fontSize: 11 }}>% (100% = sem ajuste sobre a base calculada)</span>
               </div>
-              {chavesReferenciaProjecao.length > 0 && (
-                <div style={{ color: "#666", fontSize: 11, marginTop: 8 }}>
-                  Vai projetar: {labelMes(chavesReferenciaProjecao[0])} a {labelMes(chavesReferenciaProjecao[chavesReferenciaProjecao.length - 1])} do
-                  período de referência → {labelMes(chavesProjecao[0])} a {labelMes(chavesProjecao[chavesProjecao.length - 1])} (mesmos meses, 1 ano depois)
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -2927,7 +3052,6 @@ function ProdutosTab() {
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
           🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (vs mês anterior). Passe o mouse numa célula pra ver a diferença em
           número e % vs mês anterior e vs mesmo mês do ano anterior. Ordenado do maior pro menor total no período selecionado.
-          {incluirProjecao && " Colunas com * são projeção (estimativa), não dado real."}
         </div>
 
         {linhasHeatmap.length === 0 && (
@@ -2938,12 +3062,21 @@ function ProdutosTab() {
 
         {linhasHeatmap.length > 0 && (
           <>
-            <TabelaHeatmapCategoria linhas={linhasHeatmapComProjecao} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} colunasProjecao={setColunasProjecao} />
+            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} />
             {linhasHeatmap.length > LIMITE_HEATMAP && (
               <div style={{ textAlign: "center", marginTop: 14 }}>
                 <button onClick={() => setExpandidoHeatmap(e => !e)} style={chipBtnStyle}>
                   {expandidoHeatmap ? "Mostrar menos" : `Ver todos (${linhasHeatmap.length} produtos)`}
                 </button>
+              </div>
+            )}
+
+            {incluirProjecao && linhasProjecao.length > 0 && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ color: "#C69700", fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                  📈 Projeção (estimativa — colunas com * não são dado real)
+                </div>
+                <TabelaProjecao linhas={linhasProjecao} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} />
               </div>
             )}
           </>
