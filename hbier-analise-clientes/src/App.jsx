@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.1";
+const APP_VERSION = "v6.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1639,42 +1639,50 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                 {labelMes(v.periodo)}{ehProjecao(v.periodo) ? "*" : ""}
               </th>
             ))}
+            <th style={{ ...thStyle, color: "#C69700", borderLeft: "2px solid #444" }}>Total</th>
+            <th style={{ ...thStyle, color: "#C69700" }}>Média/mês</th>
           </tr>
         </thead>
         <tbody>
-          {linhas.map(linha => (
-            <tr key={linha.categoria}>
-              <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
-              {linha.valores.map(v => {
-                const valor = v.valor || 0;
+          {linhas.map(linha => {
+            const total = linha.valores.reduce((s, v) => s + (v.valor || 0), 0);
+            const media = linha.valores.length ? total / linha.valores.length : 0;
+            return (
+              <tr key={linha.categoria}>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+                {linha.valores.map(v => {
+                  const valor = v.valor || 0;
 
-                if (ehProjecao(v.periodo)) {
+                  if (ehProjecao(v.periodo)) {
+                    return (
+                      <td key={v.periodo} title={`Projeção: ${formatador(valor)}`} style={{
+                        ...tdStyle, background: "rgba(198,151,0,0.08)", border: "1px dashed rgba(198,151,0,0.4)",
+                        color: "#C69700", fontStyle: "italic", cursor: "default",
+                      }}>
+                        {valor ? formatador(valor) : "-"}
+                      </td>
+                    );
+                  }
+
+                  const valorMesAnterior = buscarValor(linha, chaveMesAnterior(v.periodo));
+                  const valorAnoAnterior = buscarValor(linha, chaveAnoAnterior(v.periodo));
+                  const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
+                  const variacaoAno = valorAnoAnterior != null ? calcularVariacao(valor, valorAnoAnterior) : null;
+
+                  const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "transparent";
+                  const tooltip = formatador(valor) + textoVariacao("vs mês anterior", variacaoMes) + textoVariacao("vs mesmo mês ano anterior", variacaoAno);
+
                   return (
-                    <td key={v.periodo} title={`Projeção: ${formatador(valor)}`} style={{
-                      ...tdStyle, background: "rgba(198,151,0,0.08)", border: "1px dashed rgba(198,151,0,0.4)",
-                      color: "#C69700", fontStyle: "italic", cursor: "default",
-                    }}>
+                    <td key={v.periodo} title={tooltip} style={{ ...tdStyle, background: bg, cursor: "default" }}>
                       {valor ? formatador(valor) : "-"}
                     </td>
                   );
-                }
-
-                const valorMesAnterior = buscarValor(linha, chaveMesAnterior(v.periodo));
-                const valorAnoAnterior = buscarValor(linha, chaveAnoAnterior(v.periodo));
-                const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
-                const variacaoAno = valorAnoAnterior != null ? calcularVariacao(valor, valorAnoAnterior) : null;
-
-                const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "transparent";
-                const tooltip = formatador(valor) + textoVariacao("vs mês anterior", variacaoMes) + textoVariacao("vs mesmo mês ano anterior", variacaoAno);
-
-                return (
-                  <td key={v.periodo} title={tooltip} style={{ ...tdStyle, background: bg, cursor: "default" }}>
-                    {valor ? formatador(valor) : "-"}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                })}
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.04)", borderLeft: "2px solid #444" }}>{formatador(total)}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#C69700", background: "rgba(198,151,0,0.06)" }}>{formatador(media)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -1694,17 +1702,25 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
             {linhas[0]?.valores.map(v => (
               <th key={v.periodo} style={{ ...thStyle, color: "#C69700", fontStyle: "italic" }}>{labelMes(v.periodo)}*</th>
             ))}
+            <th style={{ ...thStyle, color: "#C69700", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>Total</th>
+            <th style={{ ...thStyle, color: "#C69700" }}>Média/mês</th>
           </tr>
         </thead>
         <tbody>
-          {linhas.map(linha => (
-            <tr key={linha.categoria}>
-              <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
-              {linha.valores.map(v => (
-                <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>{v.valor ? formatador(v.valor) : "-"}</td>
-              ))}
-            </tr>
-          ))}
+          {linhas.map(linha => {
+            const total = linha.valores.reduce((s, v) => s + (v.valor || 0), 0);
+            const media = linha.valores.length ? total / linha.valores.length : 0;
+            return (
+              <tr key={linha.categoria}>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+                {linha.valores.map(v => (
+                  <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>{v.valor ? formatador(v.valor) : "-"}</td>
+                ))}
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>{formatador(total)}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)" }}>{formatador(media)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -2819,18 +2835,22 @@ function ProdutosTab() {
   const [fimProjecao, setFimProjecao] = useState(() =>
     produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
   );
+  // se marcado, pula os meses-alvo que já têm dado real (ex: usar o ano 2025 inteiro de
+  // referência, mas só projetar de fato os meses de 2026 que ainda não aconteceram)
+  const [somenteMesesFuturos, setSomenteMesesFuturos] = useState(true);
 
-  const chavesReferenciaProjecao = useMemo(() => {
+  const paresAnoAnterior = useMemo(() => {
     if (!inicioProjecao || !fimProjecao) return [];
-    return produtosPeriodos.filter(p => p >= inicioProjecao && p <= fimProjecao);
-  }, [inicioProjecao, fimProjecao, produtosPeriodos]);
-
-  const chavesProjecaoAnoAnterior = useMemo(() => {
-    return chavesReferenciaProjecao.map(c => {
+    const referencia = produtosPeriodos.filter(p => p >= inicioProjecao && p <= fimProjecao);
+    const pares = referencia.map(c => {
       const [ano, mes] = c.split("-").map(Number);
-      return `${ano + 1}-${String(mes).padStart(2, "0")}`;
+      return { referencia: c, alvo: `${ano + 1}-${String(mes).padStart(2, "0")}` };
     });
-  }, [chavesReferenciaProjecao]);
+    return somenteMesesFuturos ? pares.filter(p => !produtosPeriodos.includes(p.alvo)) : pares;
+  }, [inicioProjecao, fimProjecao, produtosPeriodos, somenteMesesFuturos]);
+
+  const chavesReferenciaProjecao = useMemo(() => paresAnoAnterior.map(p => p.referencia), [paresAnoAnterior]);
+  const chavesProjecaoAnoAnterior = useMemo(() => paresAnoAnterior.map(p => p.alvo), [paresAnoAnterior]);
 
   // modo "média recente + sazonalidade geral": bom pra produto novo, sem ano anterior pra
   // comparar. Pega a média dos últimos N meses do próprio produto como "nível base", e projeta
@@ -3002,10 +3022,18 @@ function ProdutosTab() {
                     <span style={{ color: "#666" }}>até</span>
                     <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimProjecao} onSelecionar={setFimProjecao} placeholder="Fim" />
                   </div>
-                  {chavesReferenciaProjecao.length > 0 && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer", marginBottom: 10 }}>
+                    <input type="checkbox" checked={somenteMesesFuturos} onChange={e => setSomenteMesesFuturos(e.target.checked)} />
+                    Pular meses que já têm dado real (útil pra usar um ano inteiro de referência e projetar só o restante do ano em andamento)
+                  </label>
+                  {chavesReferenciaProjecao.length > 0 ? (
                     <div style={{ color: "#666", fontSize: 11, marginBottom: 10 }}>
-                      Vai projetar: {labelMes(chavesReferenciaProjecao[0])} a {labelMes(chavesReferenciaProjecao[chavesReferenciaProjecao.length - 1])} do
-                      período de referência → {labelMes(chavesProjecaoAnoAnterior[0])} a {labelMes(chavesProjecaoAnoAnterior[chavesProjecaoAnoAnterior.length - 1])} (mesmos meses, 1 ano depois)
+                      Vai projetar: {labelMes(chavesProjecaoAnoAnterior[0])} a {labelMes(chavesProjecaoAnoAnterior[chavesProjecaoAnoAnterior.length - 1])}
+                      {" "}(com base em {labelMes(chavesReferenciaProjecao[0])} a {labelMes(chavesReferenciaProjecao[chavesReferenciaProjecao.length - 1])}, mesmos meses 1 ano antes)
+                    </div>
+                  ) : (
+                    <div style={{ color: "#e0645a", fontSize: 11, marginBottom: 10 }}>
+                      Nenhum mês-alvo sobrou pra projetar (todos os meses 1 ano depois já têm dado real). Desmarque a opção acima, ou escolha outro período de referência.
                     </div>
                   )}
                 </>
