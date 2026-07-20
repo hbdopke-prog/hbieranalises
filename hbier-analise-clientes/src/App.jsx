@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.4";
+const APP_VERSION = "v6.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2732,31 +2732,45 @@ function MesTab() {
               Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
             </div>
             <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
                 <thead>
                   <tr>
                     <th style={thStyle}>#</th>
                     <th style={thStyle}>Grupo</th>
                     <th style={thStyle}>Litros (total)</th>
                     <th style={thStyle}>Faturamento (total)</th>
+                    <th style={thStyle}>% do líder</th>
+                    <th style={thStyle}>% do total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[...resumoComparacao]
-                    .sort((a, b) => b.fat - a.fat)
-                    .map(({ id, nome, fat, lit }, idx) => {
+                  {(() => {
+                    const ordenado = [...resumoComparacao].sort((a, b) => b.fat - a.fat);
+                    const maiorFat = ordenado[0]?.fat || 0;
+                    const somaFat = ordenado.reduce((s, r) => s + r.fat, 0);
+                    return ordenado.map(({ id, nome, fat, lit }, idx) => {
                       const corOriginal = corDoAno(gruposComparar.findIndex(g => g.id === id));
+                      const pctLider = maiorFat ? (fat / maiorFat) * 100 : 0;
+                      const pctTotal = somaFat ? (fat / somaFat) * 100 : 0;
                       return (
                         <tr key={id}>
                           <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
                           <td style={{ ...tdStyle, color: corOriginal, fontWeight: 700 }}>{nome}</td>
                           <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtLitros(lit)}</td>
                           <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtMoeda(fat)}</td>
+                          <td style={{ ...tdStyle, color: idx === 0 ? "#4caf6b" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
+                            {idx === 0 ? "líder" : `${pctLider.toFixed(1)}%`}
+                          </td>
+                          <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
                         </tr>
                       );
-                    })}
+                    });
+                  })()}
                 </tbody>
               </table>
+            </div>
+            <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
+              "% do líder" compara o faturamento de cada grupo com o maior da lista. "% do total" é a fatia de cada grupo dentro da soma de todos os grupos comparados aqui (soma 100%).
             </div>
           </>
         )}
