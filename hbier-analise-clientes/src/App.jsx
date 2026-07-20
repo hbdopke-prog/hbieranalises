@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.3";
+const APP_VERSION = "v6.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2731,16 +2731,32 @@ function MesTab() {
             <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10, marginTop: 28 }}>
               Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
             </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {resumoComparacao.map(({ id, nome, fat, lit }, idx) => (
-                <div key={id} style={{ background: "#1D1D1B", border: `1px solid ${corDoAno(idx)}`, borderRadius: 10, padding: 14, flex: "1 1 220px", minWidth: 220 }}>
-                  <div style={{ color: corDoAno(idx), fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{nome}</div>
-                  <div style={{ color: "#666", fontSize: 10 }}>Litros (total do período)</div>
-                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginBottom: 8 }}>{fmtLitros(lit)}</div>
-                  <div style={{ color: "#666", fontSize: 10 }}>Faturamento (total do período)</div>
-                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800 }}>{fmtMoeda(fat)}</div>
-                </div>
-              ))}
+            <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 480 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>#</th>
+                    <th style={thStyle}>Grupo</th>
+                    <th style={thStyle}>Litros (total)</th>
+                    <th style={thStyle}>Faturamento (total)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...resumoComparacao]
+                    .sort((a, b) => b.fat - a.fat)
+                    .map(({ id, nome, fat, lit }, idx) => {
+                      const corOriginal = corDoAno(gruposComparar.findIndex(g => g.id === id));
+                      return (
+                        <tr key={id}>
+                          <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
+                          <td style={{ ...tdStyle, color: corOriginal, fontWeight: 700 }}>{nome}</td>
+                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtLitros(lit)}</td>
+                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtMoeda(fat)}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
             </div>
           </>
         )}
