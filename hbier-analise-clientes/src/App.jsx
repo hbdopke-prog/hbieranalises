@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, createContext, useContext } from "react";
+import React, { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.2";
+const APP_VERSION = "v6.3";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2282,6 +2282,57 @@ function GlobalTab() {
   );
 }
 
+// Card de um "grupo de comparação": pode ter 1 ou vários clientes (somados), com nome editável
+// e busca própria pra adicionar clientes só a esse grupo.
+function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRemoverCliente, onRemoverGrupo, nomesVisiveis, labelDoCliente }) {
+  const [busca, setBusca] = useState("");
+  const sugestoes = useMemo(() => {
+    if (!busca.trim()) return [];
+    return nomesVisiveis
+      .filter(c => !grupo.clientes.includes(c) && (labelDoCliente[c] || "").toLowerCase().includes(busca.toLowerCase()))
+      .slice(0, 6);
+  }, [busca, nomesVisiveis, labelDoCliente, grupo.clientes]);
+
+  return (
+    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 14, background: "#1D1D1B", flex: "1 1 300px", minWidth: 280 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <input value={grupo.nome} onChange={e => onRenomear(e.target.value)}
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${cor}`, color: cor, fontWeight: 700, fontSize: 14, padding: "3px 2px", outline: "none" }} />
+        <button onClick={onRemoverGrupo} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+          Remover
+        </button>
+      </div>
+
+      <div style={{ position: "relative", marginBottom: 8 }}>
+        <input placeholder="Adicionar cliente a esse grupo..." value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ width: "100%", boxSizing: "border-box", background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "7px 10px", color: "#fff", fontSize: 13, outline: "none" }} />
+        {sugestoes.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 6, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, marginTop: 4, overflow: "hidden" }}>
+            {sugestoes.map(c => (
+              <div key={c} onClick={() => { onAdicionarCliente(c); setBusca(""); }}
+                style={{ padding: "8px 10px", fontSize: 13, color: "#fff", cursor: "pointer", borderBottom: "1px solid #2a2a28" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                {labelDoCliente[c]}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {grupo.clientes.map(c => (
+          <div key={c} style={{ display: "flex", alignItems: "center", gap: 6, background: "#141412", border: `1px solid ${cor}`, borderRadius: 16, padding: "3px 4px 3px 10px", fontSize: 11, color: "#fff" }}>
+            {labelDoCliente[c]}
+            <button onClick={() => onRemoverCliente(c)} style={{ background: cor, border: "none", color: "#fff", borderRadius: "50%", width: 16, height: 16, cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          </div>
+        ))}
+        {grupo.clientes.length === 0 && <span style={{ color: "#666", fontSize: 11 }}>Nenhum cliente nesse grupo ainda.</span>}
+      </div>
+    </div>
+  );
+}
+
 function MesTab() {
   const { dados, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
@@ -2290,9 +2341,36 @@ function MesTab() {
   const [expandido, setExpandido] = useState(false);
   const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
 
-  // comparação entre clientes específicos selecionados (gráficos mês a mês)
-  const [buscaComparar, setBuscaComparar] = useState("");
-  const [clientesComparar, setClientesComparar] = useState([]);
+  // comparação entre grupos de clientes (cada grupo pode ter 1 ou vários clientes, somados)
+  const [gruposComparar, setGruposComparar] = useState([]);
+  const proximoIdGrupoRef = useRef(1);
+
+  function adicionarGrupoComparar() {
+    const id = proximoIdGrupoRef.current++;
+    setGruposComparar(prev => [...prev, { id, nome: `Grupo ${prev.length + 1}`, clientes: [] }]);
+  }
+  function removerGrupoComparar(id) {
+    setGruposComparar(prev => prev.filter(g => g.id !== id));
+  }
+  function renomearGrupoComparar(id, nome) {
+    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, nome } : g));
+  }
+  function adicionarClienteAoGrupo(id, codigo) {
+    setGruposComparar(prev => prev.map(g => {
+      if (g.id !== id) return g;
+      if (g.clientes.includes(codigo)) return g;
+      // se o grupo ainda não teve nome customizado (nome padrão "Grupo N") e é o primeiro
+      // cliente adicionado, já batiza o grupo com o nome desse cliente
+      const nomeAutomatico = /^Grupo \d+$/.test(g.nome) && g.clientes.length === 0;
+      return { ...g, clientes: [...g.clientes, codigo], nome: nomeAutomatico ? labelDoCliente[codigo] : g.nome };
+    }));
+  }
+  function removerClienteDoGrupo(id, codigo) {
+    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, clientes: g.clientes.filter(c => c !== codigo) } : g));
+  }
+  function limparGruposComparar() {
+    setGruposComparar([]);
+  }
 
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
@@ -2375,22 +2453,7 @@ function MesTab() {
     ? (mesSelecionado ? labelMes(mesSelecionado) : "-")
     : (inicioPeriodo && fimPeriodo ? `${labelMes(inicioPeriodo)}–${labelMes(fimPeriodo)}` : "-");
 
-  const sugestoesComparar = useMemo(() => {
-    if (!buscaComparar.trim()) return [];
-    return nomesVisiveis
-      .filter(c => !clientesComparar.includes(c) && (labelDoCliente[c] || "").toLowerCase().includes(buscaComparar.toLowerCase()))
-      .slice(0, 6);
-  }, [buscaComparar, nomesVisiveis, labelDoCliente, clientesComparar]);
-
-  function adicionarClienteComparar(codigo) {
-    setClientesComparar(prev => prev.includes(codigo) ? prev : [...prev, codigo]);
-    setBuscaComparar("");
-  }
-  function removerClienteComparar(codigo) {
-    setClientesComparar(prev => prev.filter(c => c !== codigo));
-  }
-
-  // valor de cada cliente selecionado, mês a mês (todo o histórico) + diferença vs mês anterior
+  // valor de cada GRUPO (soma dos clientes dele), mês a mês (todo o histórico) + diferença vs mês anterior
   const [inicioComparar, setInicioComparar] = useState(() => periodos[0] || "");
   const [fimComparar, setFimComparar] = useState(() => periodos[periodos.length - 1] || "");
 
@@ -2400,34 +2463,44 @@ function MesTab() {
   }, [periodos, inicioComparar, fimComparar]);
 
   const seriesComparacao = useMemo(() => {
-    if (!clientesComparar.length) return [];
+    if (!gruposComparar.length) return [];
     return periodosComparar.map((chave) => {
       const idxGlobal = periodos.indexOf(chave);
+      const anteriorChave = idxGlobal > 0 ? periodos[idxGlobal - 1] : null;
       const linha = { mes: labelMes(chave) };
-      clientesComparar.forEach(codigo => {
-        const rows = dados[codigo] || [];
-        const atual = rows.find(r => r.chave === chave);
-        const anteriorChave = idxGlobal > 0 ? periodos[idxGlobal - 1] : null;
-        const anterior = anteriorChave ? rows.find(r => r.chave === anteriorChave) : null;
-        linha[`fat_${codigo}`] = atual ? atual.faturamento : null;
-        linha[`lit_${codigo}`] = atual ? atual.litros : null;
-        linha[`fatDiff_${codigo}`] = (atual && anterior) ? (atual.faturamento - anterior.faturamento) : null;
-        linha[`litDiff_${codigo}`] = (atual && anterior) ? (atual.litros - anterior.litros) : null;
+      gruposComparar.forEach(grupo => {
+        let fatAtual = 0, litAtual = 0, teveAtual = false;
+        let fatAnterior = 0, litAnterior = 0, teveAnterior = false;
+        grupo.clientes.forEach(codigo => {
+          const rows = dados[codigo] || [];
+          const atual = rows.find(r => r.chave === chave);
+          if (atual) { fatAtual += atual.faturamento; litAtual += atual.litros; teveAtual = true; }
+          if (anteriorChave) {
+            const ant = rows.find(r => r.chave === anteriorChave);
+            if (ant) { fatAnterior += ant.faturamento; litAnterior += ant.litros; teveAnterior = true; }
+          }
+        });
+        linha[`fat_${grupo.id}`] = teveAtual ? fatAtual : null;
+        linha[`lit_${grupo.id}`] = teveAtual ? litAtual : null;
+        linha[`fatDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (fatAtual - fatAnterior) : null;
+        linha[`litDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (litAtual - litAnterior) : null;
       });
       return linha;
     });
-  }, [clientesComparar, dados, periodos, periodosComparar]);
+  }, [gruposComparar, dados, periodos, periodosComparar]);
 
-  // resumo acumulado (total litros/faturamento) de cada cliente selecionado, dentro do período
+  // resumo acumulado (total litros/faturamento) de cada grupo, dentro do período
   const resumoComparacao = useMemo(() => {
-    if (!clientesComparar.length) return [];
+    if (!gruposComparar.length) return [];
     const chaves = new Set(periodosComparar);
-    return clientesComparar.map(codigo => {
+    return gruposComparar.map(grupo => {
       let fat = 0, lit = 0;
-      (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
-      return { codigo, fat, lit };
+      grupo.clientes.forEach(codigo => {
+        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+      });
+      return { id: grupo.id, nome: grupo.nome, fat, lit };
     });
-  }, [clientesComparar, dados, periodosComparar]);
+  }, [gruposComparar, dados, periodosComparar]);
 
   return (
     <div>
@@ -2553,50 +2626,34 @@ function MesTab() {
       </Section>
 
       <Section title="Comparar Clientes Específicos (mês a mês)" icon={<GitCompareArrows size={18} color="#4a90d9" />}>
-        <div style={{ position: "relative", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
-            <Search size={16} color="#C69700" />
-            <input placeholder="Buscar cliente... (pode adicionar vários, ex: as 5 lojas Miller)" value={buscaComparar}
-              onChange={e => setBuscaComparar(e.target.value)}
-              style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 14 }} />
-            {clientesComparar.length > 0 && (
-              <button onClick={() => { setClientesComparar([]); setBuscaComparar(""); }} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
-                Limpar seleção
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>
+            Cada grupo pode ter 1 cliente só (ex: Redefort) ou vários somados (ex: as 5 lojas Miller) — o gráfico compara os grupos entre si.
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={adicionarGrupoComparar} style={chipBtnStyle}>+ Novo grupo</button>
+            {gruposComparar.length > 0 && (
+              <button onClick={limparGruposComparar} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                Limpar tudo
               </button>
             )}
           </div>
-          {sugestoesComparar.length > 0 && (
-            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
-              {sugestoesComparar.map(c => (
-                <div key={c} onClick={() => adicionarClienteComparar(c)}
-                  style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  {labelDoCliente[c]}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
-        {clientesComparar.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-            {clientesComparar.map(c => (
-              <div key={c} style={{
-                display: "flex", alignItems: "center", gap: 6, background: "#1D1D1B", border: "1px solid #4a90d9",
-                borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
-              }}>
-                {labelDoCliente[c]}
-                <button onClick={() => removerClienteComparar(c)} style={{
-                  background: "#4a90d9", border: "none", color: "#fff", borderRadius: "50%",
-                  width: 18, height: 18, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                }}>×</button>
-              </div>
+        {gruposComparar.length > 0 && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            {gruposComparar.map((grupo, idx) => (
+              <GrupoComparacaoCard key={grupo.id} grupo={grupo} cor={corDoAno(idx)}
+                onRenomear={nome => renomearGrupoComparar(grupo.id, nome)}
+                onAdicionarCliente={codigo => adicionarClienteAoGrupo(grupo.id, codigo)}
+                onRemoverCliente={codigo => removerClienteDoGrupo(grupo.id, codigo)}
+                onRemoverGrupo={() => removerGrupoComparar(grupo.id)}
+                nomesVisiveis={nomesVisiveis} labelDoCliente={labelDoCliente} />
             ))}
           </div>
         )}
 
-        {clientesComparar.length > 0 && (
+        {gruposComparar.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
             <MonthPicker periodosDisponiveis={periodos} valor={inicioComparar} onSelecionar={setInicioComparar} placeholder="Início" />
@@ -2605,13 +2662,13 @@ function MesTab() {
           </div>
         )}
 
-        {clientesComparar.length === 0 && (
+        {gruposComparar.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
-            Busque e adicione clientes acima pra ver os gráficos de comparação mês a mês (ex: as 5 lojas Miller).
+            Clique em "+ Novo grupo" pra começar (ex: um grupo "Redefort" com 1 cliente, e outro "Miller" com as 5 lojas somadas).
           </div>
         )}
 
-        {clientesComparar.length > 0 && (
+        {gruposComparar.length > 0 && (
           <>
             <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 8 }}>Faturamento</div>
             <ResponsiveContainer width="100%" height={280}>
@@ -2621,8 +2678,8 @@ function MesTab() {
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
-                {clientesComparar.map((codigo, idx) => (
-                  <Line key={codigo} type="monotone" dataKey={`fat_${codigo}`} name={labelDoCliente[codigo]} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                {gruposComparar.map((grupo, idx) => (
+                  <Line key={grupo.id} type="monotone" dataKey={`fat_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -2636,8 +2693,8 @@ function MesTab() {
                 <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 <ReferenceLine y={0} stroke="#666" />
-                {clientesComparar.map((codigo, idx) => (
-                  <Bar key={codigo} dataKey={`fatDiff_${codigo}`} name={labelDoCliente[codigo]} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                {gruposComparar.map((grupo, idx) => (
+                  <Bar key={grupo.id} dataKey={`fatDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -2650,8 +2707,8 @@ function MesTab() {
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
                 <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
-                {clientesComparar.map((codigo, idx) => (
-                  <Line key={codigo} type="monotone" dataKey={`lit_${codigo}`} name={labelDoCliente[codigo]} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                {gruposComparar.map((grupo, idx) => (
+                  <Line key={grupo.id} type="monotone" dataKey={`lit_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
@@ -2665,8 +2722,8 @@ function MesTab() {
                 <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 <ReferenceLine y={0} stroke="#666" />
-                {clientesComparar.map((codigo, idx) => (
-                  <Bar key={codigo} dataKey={`litDiff_${codigo}`} name={labelDoCliente[codigo]} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                {gruposComparar.map((grupo, idx) => (
+                  <Bar key={grupo.id} dataKey={`litDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
@@ -2675,9 +2732,9 @@ function MesTab() {
               Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
             </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {resumoComparacao.map(({ codigo, fat, lit }, idx) => (
-                <div key={codigo} style={{ background: "#1D1D1B", border: `1px solid ${corDoAno(idx)}`, borderRadius: 10, padding: 14, flex: "1 1 220px", minWidth: 220 }}>
-                  <div style={{ color: corDoAno(idx), fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{labelDoCliente[codigo]}</div>
+              {resumoComparacao.map(({ id, nome, fat, lit }, idx) => (
+                <div key={id} style={{ background: "#1D1D1B", border: `1px solid ${corDoAno(idx)}`, borderRadius: 10, padding: 14, flex: "1 1 220px", minWidth: 220 }}>
+                  <div style={{ color: corDoAno(idx), fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{nome}</div>
                   <div style={{ color: "#666", fontSize: 10 }}>Litros (total do período)</div>
                   <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginBottom: 8 }}>{fmtLitros(lit)}</div>
                   <div style={{ color: "#666", fontSize: 10 }}>Faturamento (total do período)</div>
