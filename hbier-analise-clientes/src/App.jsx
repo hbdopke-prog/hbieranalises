@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.6";
+const APP_VERSION = "v5.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -193,7 +193,7 @@ function LegendaBranca({ payload }) {
 }
 
 // Legenda lateral pros gráficos de pizza: texto branco + % de cada fatia sobre o total
-function LegendaPizza({ payload, total, campo }) {
+function LegendaPizza({ payload, total, campo, formatador }) {
   if (!payload) return null;
   return (
     <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -203,7 +203,7 @@ function LegendaPizza({ payload, total, campo }) {
         return (
           <li key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, fontSize: 12 }}>
             <span style={{ width: 10, height: 10, background: entry.color, display: "inline-block", borderRadius: 2, flexShrink: 0 }} />
-            <span style={{ color: "#fff" }}>{entry.value} ({pct.toFixed(1)}%)</span>
+            <span style={{ color: "#fff" }}>{entry.value} — {formatador ? formatador(valor) : valor} ({pct.toFixed(1)}%)</span>
           </li>
         );
       })}
@@ -2170,7 +2170,7 @@ function GlobalTab() {
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
                   <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalFatPizza} campo="fat" />} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalFatPizza} campo="fat" formatador={fmtMoeda} />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -2183,7 +2183,7 @@ function GlobalTab() {
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
                   <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalLitPizza} campo="lit" />} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalLitPizza} campo="lit" formatador={fmtLitros} />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -2211,12 +2211,16 @@ function GlobalTab() {
 }
 
 function MesTab() {
-  const { dados, nomes, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
+  const { dados, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
   const [buscaCliente, setBuscaCliente] = useState("");
   const [ordenacao, setOrdenacao] = useState("litros"); // 'litros' | 'faturamento' | 'precoLitro'
   const [expandido, setExpandido] = useState(false);
   const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
+
+  // comparação entre clientes específicos selecionados (gráficos mês a mês)
+  const [buscaComparar, setBuscaComparar] = useState("");
+  const [clientesComparar, setClientesComparar] = useState([]);
 
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
@@ -2298,6 +2302,40 @@ function MesTab() {
   const rotuloPeriodo = modo === "mes"
     ? (mesSelecionado ? labelMes(mesSelecionado) : "-")
     : (inicioPeriodo && fimPeriodo ? `${labelMes(inicioPeriodo)}–${labelMes(fimPeriodo)}` : "-");
+
+  const sugestoesComparar = useMemo(() => {
+    if (!buscaComparar.trim()) return [];
+    return nomesVisiveis
+      .filter(c => !clientesComparar.includes(c) && (labelDoCliente[c] || "").toLowerCase().includes(buscaComparar.toLowerCase()))
+      .slice(0, 6);
+  }, [buscaComparar, nomesVisiveis, labelDoCliente, clientesComparar]);
+
+  function adicionarClienteComparar(codigo) {
+    setClientesComparar(prev => prev.includes(codigo) ? prev : [...prev, codigo]);
+    setBuscaComparar("");
+  }
+  function removerClienteComparar(codigo) {
+    setClientesComparar(prev => prev.filter(c => c !== codigo));
+  }
+
+  // valor de cada cliente selecionado, mês a mês (todo o histórico) + diferença vs mês anterior
+  const seriesComparacao = useMemo(() => {
+    if (!clientesComparar.length) return [];
+    return periodos.map((chave, idx) => {
+      const linha = { mes: labelMes(chave) };
+      clientesComparar.forEach(codigo => {
+        const rows = dados[codigo] || [];
+        const atual = rows.find(r => r.chave === chave);
+        const anteriorChave = idx > 0 ? periodos[idx - 1] : null;
+        const anterior = anteriorChave ? rows.find(r => r.chave === anteriorChave) : null;
+        linha[`fat_${codigo}`] = atual ? atual.faturamento : null;
+        linha[`lit_${codigo}`] = atual ? atual.litros : null;
+        linha[`fatDiff_${codigo}`] = (atual && anterior) ? (atual.faturamento - anterior.faturamento) : null;
+        linha[`litDiff_${codigo}`] = (atual && anterior) ? (atual.litros - anterior.litros) : null;
+      });
+      return linha;
+    });
+  }, [clientesComparar, dados, periodos]);
 
   return (
     <div>
@@ -2418,6 +2456,119 @@ function MesTab() {
                 </button>
               </div>
             )}
+          </>
+        )}
+      </Section>
+
+      <Section title="Comparar Clientes Específicos (mês a mês)" icon={<GitCompareArrows size={18} color="#4a90d9" />}>
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
+            <Search size={16} color="#C69700" />
+            <input placeholder="Buscar cliente... (pode adicionar vários, ex: as 5 lojas Miller)" value={buscaComparar}
+              onChange={e => setBuscaComparar(e.target.value)}
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 14 }} />
+            {clientesComparar.length > 0 && (
+              <button onClick={() => { setClientesComparar([]); setBuscaComparar(""); }} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+                Limpar seleção
+              </button>
+            )}
+          </div>
+          {sugestoesComparar.length > 0 && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
+              {sugestoesComparar.map(c => (
+                <div key={c} onClick={() => adicionarClienteComparar(c)}
+                  style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  {labelDoCliente[c]}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {clientesComparar.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+            {clientesComparar.map(c => (
+              <div key={c} style={{
+                display: "flex", alignItems: "center", gap: 6, background: "#1D1D1B", border: "1px solid #4a90d9",
+                borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
+              }}>
+                {labelDoCliente[c]}
+                <button onClick={() => removerClienteComparar(c)} style={{
+                  background: "#4a90d9", border: "none", color: "#fff", borderRadius: "50%",
+                  width: 18, height: 18, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {clientesComparar.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+            Busque e adicione clientes acima pra ver os gráficos de comparação mês a mês (ex: as 5 lojas Miller).
+          </div>
+        )}
+
+        {clientesComparar.length > 0 && (
+          <>
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 8 }}>Faturamento</div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={seriesComparacao}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {clientesComparar.map((codigo, idx) => (
+                  <Line key={codigo} type="monotone" dataKey={`fat_${codigo}`} name={labelDoCliente[codigo]} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Faturamento</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={seriesComparacao}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                <ReferenceLine y={0} stroke="#666" />
+                {clientesComparar.map((codigo, idx) => (
+                  <Bar key={codigo} dataKey={`fatDiff_${codigo}`} name={labelDoCliente[codigo]} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 24 }}>Litros</div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={seriesComparacao}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {clientesComparar.map((codigo, idx) => (
+                  <Line key={codigo} type="monotone" dataKey={`lit_${codigo}`} name={labelDoCliente[codigo]} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Litros</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={seriesComparacao}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                <ReferenceLine y={0} stroke="#666" />
+                {clientesComparar.map((codigo, idx) => (
+                  <Bar key={codigo} dataKey={`litDiff_${codigo}`} name={labelDoCliente[codigo]} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
           </>
         )}
       </Section>
