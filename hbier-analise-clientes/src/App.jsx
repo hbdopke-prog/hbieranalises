@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.8";
+const APP_VERSION = "v5.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2714,7 +2714,9 @@ function ProdutosTab() {
   const [mesHeatmap, setMesHeatmap] = useState(() =>
     produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
   );
-  const [inicioHeatmap, setInicioHeatmap] = useState(() => produtosPeriodos[0] || "");
+  const [inicioHeatmap, setInicioHeatmap] = useState(() =>
+    produtosPeriodos.includes("2025-01") ? "2025-01" : (produtosPeriodos[0] || "")
+  );
   const [fimHeatmap, setFimHeatmap] = useState(() =>
     produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
   );
@@ -2755,27 +2757,44 @@ function ProdutosTab() {
 
   const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
 
-  // --- projeção: mesmos meses, 1 ano depois, ajustados por % ---
+  // --- projeção: PERÍODO DE REFERÊNCIA PRÓPRIO (independente do período de visualização da
+  // tabela acima) - você escolhe exatamente quais meses quer usar de base (ex: só Set-Dez/25,
+  // a temporada de Oktoberfest), e a projeção sai só desses meses, 1 ano depois, ajustados por %.
   const [incluirProjecao, setIncluirProjecao] = useState(false);
   const [pctProjecao, setPctProjecao] = useState(100);
+  const [inicioProjecao, setInicioProjecao] = useState(() =>
+    produtosPeriodos.includes("2025-01") ? "2025-01" : (produtosPeriodos[0] || "")
+  );
+  const [fimProjecao, setFimProjecao] = useState(() =>
+    produtosPeriodos.includes(mesAtualRealProdutos) ? mesAtualRealProdutos : (produtosPeriodos[produtosPeriodos.length - 1] || "")
+  );
+
+  const chavesReferenciaProjecao = useMemo(() => {
+    if (!inicioProjecao || !fimProjecao) return [];
+    return produtosPeriodos.filter(p => p >= inicioProjecao && p <= fimProjecao);
+  }, [inicioProjecao, fimProjecao, produtosPeriodos]);
 
   const chavesProjecao = useMemo(() => {
-    return chavesHeatmap.map(c => {
+    return chavesReferenciaProjecao.map(c => {
       const [ano, mes] = c.split("-").map(Number);
       return `${ano + 1}-${String(mes).padStart(2, "0")}`;
     });
-  }, [chavesHeatmap]);
+  }, [chavesReferenciaProjecao]);
 
+  // linhas exibidas na tabela: janela de visualização + (se marcado) as colunas de projeção
+  // do período de referência, calculadas a partir do histórico INTEIRO do produto (não só do
+  // que estiver na janela de visualização - por isso usa dadosCompletosHeatmap aqui)
   const linhasHeatmapComProjecao = useMemo(() => {
-    if (!incluirProjecao) return linhasHeatmapVisiveis;
+    if (!incluirProjecao || !chavesReferenciaProjecao.length) return linhasHeatmapVisiveis;
     return linhasHeatmapVisiveis.map(linha => {
-      const valoresProjetados = linha.valores.map((v, idx) => ({
-        periodo: chavesProjecao[idx],
-        valor: v.valor * (pctProjecao / 100),
-      }));
+      const completos = dadosCompletosHeatmap[linha.categoria] || {};
+      const valoresProjetados = chavesReferenciaProjecao.map((chaveRef, idx) => {
+        const valorReferencia = completos[chaveRef] || 0;
+        return { periodo: chavesProjecao[idx], valor: valorReferencia * (pctProjecao / 100) };
+      });
       return { ...linha, valores: [...linha.valores, ...valoresProjetados] };
     });
-  }, [linhasHeatmapVisiveis, incluirProjecao, chavesProjecao, pctProjecao]);
+  }, [linhasHeatmapVisiveis, incluirProjecao, chavesReferenciaProjecao, chavesProjecao, pctProjecao, dadosCompletosHeatmap]);
 
   const setColunasProjecao = useMemo(() => new Set(incluirProjecao ? chavesProjecao : []), [incluirProjecao, chavesProjecao]);
 
@@ -2828,17 +2847,34 @@ function ProdutosTab() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, paddingTop: 12, borderTop: "1px solid #333", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={incluirProjecao} onChange={e => setIncluirProjecao(e.target.checked)} />
-              📈 Incluir projeção (mesmos meses, 1 ano depois)
+              📈 Incluir projeção
             </label>
-            {incluirProjecao && (
+          </div>
+
+          {incluirProjecao && (
+            <div style={{ marginTop: 10, background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 8, padding: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <span style={{ color: "#888", fontSize: 12 }}>Período de referência pra projetar:</span>
+                <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioProjecao} onSelecionar={setInicioProjecao} placeholder="Início" />
+                <span style={{ color: "#666" }}>até</span>
+                <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimProjecao} onSelecionar={setFimProjecao} placeholder="Fim" />
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ color: "#888", fontSize: 12 }}>Ajuste:</span>
                 <input type="number" min="0" max="300" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
                   style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
-                <span style={{ color: "#666", fontSize: 11 }}>% (100% = repete o mesmo valor do período de referência)</span>
+                <span style={{ color: "#666", fontSize: 11 }}>
+                  % (100% = repete os mesmos valores do período de referência, 1 ano depois)
+                </span>
               </div>
-            )}
-          </div>
+              {chavesReferenciaProjecao.length > 0 && (
+                <div style={{ color: "#666", fontSize: 11, marginTop: 8 }}>
+                  Vai projetar: {labelMes(chavesReferenciaProjecao[0])} a {labelMes(chavesReferenciaProjecao[chavesReferenciaProjecao.length - 1])} do
+                  período de referência → {labelMes(chavesProjecao[0])} a {labelMes(chavesProjecao[chavesProjecao.length - 1])} (mesmos meses, 1 ano depois)
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
