@@ -54,7 +54,7 @@ Crie uma aba chamada **`usuarios`** com estas colunas:
 
 ## 3. Backend (Google Apps Script)
 
-- **Produtos (opcional)**: crie uma aba chamada **`pedidos_produtos`** com uma linha por item de pedido, exportada direto do ERP, com (pelo menos) estas colunas: `Lançamento`, `Cód. Cliente`, `Grupo de Cliente`, `Grupo de Produto`, `Valor Cobrado Item`, `Qtde Litros`. Pode ter quantas outras colunas quiser — o app só lê essas pelo nome. Sem essa aba, a aba "Produtos" do app fica vazia, mas o resto do app funciona normal.
+- **Produtos (opcional)**: crie duas abas, **`produtos_faturamento`** e **`produtos_litros`**, no mesmo formato "largo" dos relatórios de cliente (uma linha por produto, cabeçalho com "Produto" numa coluna e "Descrição" em outra, e uma coluna por mês). O app usa a coluna "Descrição" como o nome do tipo de produto. Sem essas abas, a aba "Produtos" do app fica vazia, mas o resto do app funciona normal. Não tem filtro por canal/grupo de cliente nessa aba (o relatório não traz essa informação por linha de produto).
 
 1. Na planilha: **Extensões > Apps Script**.
 2. Apague o conteúdo padrão e cole o arquivo `Code.gs` (raiz deste projeto).

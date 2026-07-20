@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.0";
+const APP_VERSION = "v5.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -154,12 +154,19 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 
 // Paleta de cores pra distinguir anos sobrepostos no mesmo gráfico (12 meses no eixo X)
 const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
-// Grupos que pesam muito nos filtros "Todos" (ex: consumo interno, muitos clientes de baixo valor)
-// e por isso ficam DE FORA da seleção padrão. O usuário ainda pode marcá-los manualmente.
-const GRUPOS_PESADOS = ["VENDA ONLINE", "5. VENDA CONSUMO DIRETO HBIER"];
+// Grupos/canais que pesam muito nos filtros "Todos" (consumo interno, eventos, venda online -
+// muitos clientes/pedidos de baixo valor unitário) e por isso ficam DE FORA da seleção padrão.
+// Detecta pelo PADRÃO de numeração da empresa (5.xxx = consumo direto, 6.xxx = eventos) e pela
+// palavra "online" - não pelo texto exato, porque o mesmo conceito aparece com nomes diferentes
+// em taxonomias diferentes (ex: Grupo de Cliente usa "5. Venda Consumo Direto HBier", já o Canal
+// de Produto usa "5. Consumidor Final" - o padrão numérico é o que se mantém igual nos dois).
 function grupoEhPesado(g) {
   const norm = (g || "").trim().toUpperCase();
-  return GRUPOS_PESADOS.some(x => norm === x.toUpperCase());
+  if (!norm) return false;
+  if (norm.includes("ONLINE")) return true;
+  if (/^5[.\s]/.test(norm)) return true;
+  if (/^6[.\s]/.test(norm)) return true;
+  return false;
 }
 function gruposPadrao(grupos) {
   return grupos.filter(g => !grupoEhPesado(g));
@@ -268,7 +275,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosDetalhado) {
+function processarDados(linhas, produtosPorTipo) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -312,7 +319,31 @@ function processarDados(linhas, produtosDetalhado) {
   // pra seleção individual, já que não fazem sentido de olhar um por um.
   const nomesVisiveis = nomes.filter(codigo => !grupoEhPesado(grupoDoCliente[codigo]));
 
-  return { dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente, produtosDetalhado: produtosDetalhado || [] };
+  // produtos: mesmo formato {dados, nomes, periodos} usado pra clientes, só que a "chave"
+  // é o nome do produto (Descrição) em vez do código do cliente
+  const porProduto = {};
+  (produtosPorTipo || []).forEach(r => {
+    const chave = `${r.ano}-${String(r.mes).padStart(2, "0")}`;
+    porProduto[r.produto] = porProduto[r.produto] || [];
+    porProduto[r.produto].push({
+      ano: r.ano, mes: r.mes, chave,
+      faturamento: Number(r.faturamento) || 0,
+      litros: Number(r.litros) || 0,
+    });
+  });
+  Object.keys(porProduto).forEach(produto => {
+    porProduto[produto].sort((a, b) => a.chave.localeCompare(b.chave));
+  });
+  const produtosNomes = Object.keys(porProduto).sort();
+  const produtosPeriodosSet = new Set();
+  Object.values(porProduto).forEach(rows => rows.forEach(r => produtosPeriodosSet.add(r.chave)));
+  const produtosPeriodos = [...produtosPeriodosSet].sort();
+
+  return {
+    dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente,
+    labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
+    produtosDados: porProduto, produtosNomes, produtosPeriodos,
+  };
 }
 
 // -------------------- Componentes visuais --------------------
@@ -2340,30 +2371,7 @@ function MesTab() {
 // Agrupa a lista já pré-agregada (tipo/canal/ano/mes/faturamento/litros) vinda do backend
 // por uma categoria (tipo OU canal), no mesmo formato {dados, nomes, periodos} usado em
 // todo o resto do app (dados[nome] = rows[] ordenadas, uma por mês).
-function agruparPorCategoriaProduto(linhas, campoCategoria) {
-  const porCategoria = {};
-  linhas.forEach(r => {
-    const nome = r[campoCategoria] || "Sem categoria";
-    const chave = `${r.ano}-${String(r.mes).padStart(2, "0")}`;
-    porCategoria[nome] = porCategoria[nome] || [];
-    let existente = porCategoria[nome].find(x => x.chave === chave);
-    if (!existente) {
-      existente = { ano: r.ano, mes: r.mes, chave, faturamento: 0, litros: 0 };
-      porCategoria[nome].push(existente);
-    }
-    existente.faturamento += Number(r.faturamento) || 0;
-    existente.litros += Number(r.litros) || 0;
-  });
-  Object.keys(porCategoria).forEach(nome => porCategoria[nome].sort((a, b) => a.chave.localeCompare(b.chave)));
-  const nomes = Object.keys(porCategoria).sort();
-  const periodosSet = new Set();
-  Object.values(porCategoria).forEach(rows => rows.forEach(r => periodosSet.add(r.chave)));
-  const periodos = [...periodosSet].sort();
-  return { dados: porCategoria, nomes, periodos };
-}
-
-// Pro último mês fechado de uma categoria (tipo de produto ou canal): valor, comparação
-// vs mês anterior e vs mesmo mês do ano anterior.
+// Pro último mês fechado de um produto: valor, comparação vs mês anterior e vs mesmo mês do ano anterior.
 function calcularComparativoCategoria(rowsBrutas) {
   const { fechados: rows } = separarMesEmAndamento(rowsBrutas);
   const n = rows.length;
@@ -2410,94 +2418,65 @@ function CardCategoriaProduto({ nome, comp, cor }) {
 }
 
 function ProdutosTab() {
-  const { produtosDetalhado } = useData();
+  const { produtosDados, produtosNomes } = useData();
+  const [buscaTipo, setBuscaTipo] = useState("");
+  const [expandido, setExpandido] = useState(false);
+  const LIMITE_PADRAO = 24;
 
-  const canaisDisponiveis = useMemo(
-    () => [...new Set(produtosDetalhado.map(r => r.canal))].sort(),
-    [produtosDetalhado]
-  );
-  const [canaisSel, setCanaisSel] = useState(() => canaisDisponiveis.filter(c => !grupoEhPesado(c)));
-
-  function toggleCanal(c) {
-    setCanaisSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
-  }
-  function marcarPadraoCanais() { setCanaisSel(canaisDisponiveis.filter(c => !grupoEhPesado(c))); }
-  function marcarTodosCanais() { setCanaisSel([...canaisDisponiveis]); }
-  function desmarcarTodosCanais() { setCanaisSel([]); }
-
-  const produtosFiltradosPorCanal = useMemo(
-    () => produtosDetalhado.filter(r => canaisSel.includes(r.canal)),
-    [produtosDetalhado, canaisSel]
-  );
-
-  const porTipo = useMemo(() => agruparPorCategoriaProduto(produtosFiltradosPorCanal, "tipo"), [produtosFiltradosPorCanal]);
-  const porCanal = useMemo(() => agruparPorCategoriaProduto(produtosDetalhado, "canal"), [produtosDetalhado]);
-
-  const tiposComComparativo = useMemo(() => {
-    return porTipo.nomes
-      .map(nome => ({ nome, comp: calcularComparativoCategoria(porTipo.dados[nome]) }))
+  const produtosComComparativo = useMemo(() => {
+    return produtosNomes
+      .map(nome => ({ nome, comp: calcularComparativoCategoria(produtosDados[nome]) }))
       .sort((a, b) => (b.comp?.fat || 0) - (a.comp?.fat || 0));
-  }, [porTipo]);
+  }, [produtosNomes, produtosDados]);
 
-  const canaisComComparativo = useMemo(() => {
-    return porCanal.nomes
-      .map(nome => ({ nome, comp: calcularComparativoCategoria(porCanal.dados[nome]) }))
-      .sort((a, b) => (b.comp?.fat || 0) - (a.comp?.fat || 0));
-  }, [porCanal]);
+  const produtosExibidos = buscaTipo.trim()
+    ? produtosComComparativo.filter(p => p.nome.toLowerCase().includes(buscaTipo.toLowerCase()))
+    : produtosComComparativo;
 
-  if (!produtosDetalhado.length) {
+  const produtosVisiveis = expandido ? produtosExibidos : produtosExibidos.slice(0, LIMITE_PADRAO);
+
+  if (!produtosNomes.length) {
     return (
       <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
-        Nenhum dado de produtos encontrado ainda. Crie a aba <strong style={{ color: "#C69700" }}>pedidos_produtos</strong> na
-        planilha (com as colunas Lançamento, Cód. Cliente, Grupo de Cliente, Grupo de Produto, Valor Cobrado Item e Qtde Litros)
-        pra essa aba passar a mostrar dados.
+        Nenhum dado de produtos encontrado ainda. Crie as abas <strong style={{ color: "#C69700" }}>produtos_faturamento</strong> e{" "}
+        <strong style={{ color: "#C69700" }}>produtos_litros</strong> na planilha (mesmo formato "largo" dos relatórios de
+        faturamento/litros por cliente, com a coluna "Produto" e "Descrição" e uma coluna por mês) pra essa aba passar a mostrar dados.
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
-        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-          <Layers size={13} /> Canal ({canaisSel.length} de {canaisDisponiveis.length} selecionados) — filtra a seção "Por Tipo de Produto":
+      <Section title={`Por Tipo de Produto (${produtosExibidos.length}${buscaTipo.trim() ? ` de ${produtosComComparativo.length}` : ""})`} icon={<TrendingUp size={18} color="#02601D" />}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
+          <Search size={14} color="#C69700" />
+          <input placeholder="Buscar um tipo de produto específico..." value={buscaTipo} onChange={e => setBuscaTipo(e.target.value)}
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
         </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <button onClick={marcarPadraoCanais} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
-          <button onClick={marcarTodosCanais} style={chipBtnStyle}>Marcar todos</button>
-          <button onClick={desmarcarTodosCanais} style={chipBtnStyle}>Desmarcar todos</button>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {canaisDisponiveis.map(c => (
-            <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(c) ? "#C69700" : "#fff", cursor: "pointer" }}>
-              <input type="checkbox" checked={canaisSel.includes(c)} onChange={() => toggleCanal(c)} />
-              {c}{grupoEhPesado(c) ? " ⚠" : ""}
-            </label>
-          ))}
-        </div>
-      </div>
 
-      <Section title="Por Tipo de Produto" icon={<TrendingUp size={18} color="#02601D" />}>
-        {tiposComComparativo.length === 0 && (
+        {produtosExibidos.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
-            Nenhum tipo de produto com dado nos canais selecionados.
+            Nenhum produto encontrado para essa busca.
           </div>
         )}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {tiposComComparativo.map(({ nome, comp }) => (
-            <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4caf6b" />
-          ))}
-        </div>
-      </Section>
 
-      <Section title="Por Canal" icon={<Layers size={18} color="#C69700" />}>
-        <div style={{ color: "#888", fontSize: 11, marginBottom: 12 }}>
-          Sempre considera todos os canais (não é afetado pelo filtro acima).
-        </div>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {canaisComComparativo.map(({ nome, comp }) => (
-            <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4a90d9" />
-          ))}
-        </div>
+        {produtosExibidos.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {produtosVisiveis.map(({ nome, comp }) => (
+                <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4caf6b" />
+              ))}
+            </div>
+
+            {produtosExibidos.length > LIMITE_PADRAO && (
+              <div style={{ textAlign: "center", marginTop: 16 }}>
+                <button onClick={() => setExpandido(e => !e)} style={chipBtnStyle}>
+                  {expandido ? "Mostrar menos" : `Ver todos (${produtosExibidos.length} produtos)`}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </Section>
     </div>
   );
@@ -2527,7 +2506,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosDetalhado || []));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || []));
         setStatus("ready");
       })
       .catch(err => {
