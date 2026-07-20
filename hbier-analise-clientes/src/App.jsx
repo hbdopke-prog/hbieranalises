@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v5.7";
+const APP_VERSION = "v5.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1600,8 +1600,9 @@ function chaveAnoAnterior(chave) {
 // usado pra calcular as comparações mesmo quando só 1 mês (ou uma janela curta) está sendo exibido.
 // Sem dadosCompletos, cai pra buscar dentro da própria janela visível (funciona quando ela já
 // cobre o histórico todo, como no heatmap de grupos do Dashboard).
-function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos }) {
+function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos, colunasProjecao }) {
   function formatador(v) { return rotuloCompactoGeral(v, unidade); }
+  const ehProjecao = periodo => colunasProjecao && colunasProjecao.has(periodo);
 
   function buscarValor(linha, chave) {
     if (dadosCompletos && dadosCompletos[linha.categoria]) {
@@ -1624,7 +1625,11 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos 
         <thead>
           <tr>
             <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2 }}>{rotuloColuna}</th>
-            {linhas[0]?.valores.map(v => <th key={v.periodo} style={thStyle}>{labelMes(v.periodo)}</th>)}
+            {linhas[0]?.valores.map(v => (
+              <th key={v.periodo} style={{ ...thStyle, color: ehProjecao(v.periodo) ? "#C69700" : "#fff", fontStyle: ehProjecao(v.periodo) ? "italic" : "normal" }}>
+                {labelMes(v.periodo)}{ehProjecao(v.periodo) ? "*" : ""}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -1633,6 +1638,18 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos 
               <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
               {linha.valores.map(v => {
                 const valor = v.valor || 0;
+
+                if (ehProjecao(v.periodo)) {
+                  return (
+                    <td key={v.periodo} title={`Projeção: ${formatador(valor)}`} style={{
+                      ...tdStyle, background: "rgba(198,151,0,0.08)", border: "1px dashed rgba(198,151,0,0.4)",
+                      color: "#C69700", fontStyle: "italic", cursor: "default",
+                    }}>
+                      {valor ? formatador(valor) : "-"}
+                    </td>
+                  );
+                }
+
                 const valorMesAnterior = buscarValor(linha, chaveMesAnterior(v.periodo));
                 const valorAnoAnterior = buscarValor(linha, chaveAnoAnterior(v.periodo));
                 const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
@@ -2319,14 +2336,23 @@ function MesTab() {
   }
 
   // valor de cada cliente selecionado, mês a mês (todo o histórico) + diferença vs mês anterior
+  const [inicioComparar, setInicioComparar] = useState(() => periodos[0] || "");
+  const [fimComparar, setFimComparar] = useState(() => periodos[periodos.length - 1] || "");
+
+  const periodosComparar = useMemo(() => {
+    if (!inicioComparar || !fimComparar) return periodos;
+    return periodos.filter(p => p >= inicioComparar && p <= fimComparar);
+  }, [periodos, inicioComparar, fimComparar]);
+
   const seriesComparacao = useMemo(() => {
     if (!clientesComparar.length) return [];
-    return periodos.map((chave, idx) => {
+    return periodosComparar.map((chave) => {
+      const idxGlobal = periodos.indexOf(chave);
       const linha = { mes: labelMes(chave) };
       clientesComparar.forEach(codigo => {
         const rows = dados[codigo] || [];
         const atual = rows.find(r => r.chave === chave);
-        const anteriorChave = idx > 0 ? periodos[idx - 1] : null;
+        const anteriorChave = idxGlobal > 0 ? periodos[idxGlobal - 1] : null;
         const anterior = anteriorChave ? rows.find(r => r.chave === anteriorChave) : null;
         linha[`fat_${codigo}`] = atual ? atual.faturamento : null;
         linha[`lit_${codigo}`] = atual ? atual.litros : null;
@@ -2335,7 +2361,18 @@ function MesTab() {
       });
       return linha;
     });
-  }, [clientesComparar, dados, periodos]);
+  }, [clientesComparar, dados, periodos, periodosComparar]);
+
+  // resumo acumulado (total litros/faturamento) de cada cliente selecionado, dentro do período
+  const resumoComparacao = useMemo(() => {
+    if (!clientesComparar.length) return [];
+    const chaves = new Set(periodosComparar);
+    return clientesComparar.map(codigo => {
+      let fat = 0, lit = 0;
+      (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+      return { codigo, fat, lit };
+    });
+  }, [clientesComparar, dados, periodosComparar]);
 
   return (
     <div>
@@ -2488,7 +2525,7 @@ function MesTab() {
         </div>
 
         {clientesComparar.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
             {clientesComparar.map(c => (
               <div key={c} style={{
                 display: "flex", alignItems: "center", gap: 6, background: "#1D1D1B", border: "1px solid #4a90d9",
@@ -2501,6 +2538,15 @@ function MesTab() {
                 }}>×</button>
               </div>
             ))}
+          </div>
+        )}
+
+        {clientesComparar.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioComparar} onSelecionar={setInicioComparar} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimComparar} onSelecionar={setFimComparar} placeholder="Fim" />
           </div>
         )}
 
@@ -2569,6 +2615,21 @@ function MesTab() {
                 ))}
               </BarChart>
             </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10, marginTop: 28 }}>
+              Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {resumoComparacao.map(({ codigo, fat, lit }, idx) => (
+                <div key={codigo} style={{ background: "#1D1D1B", border: `1px solid ${corDoAno(idx)}`, borderRadius: 10, padding: 14, flex: "1 1 220px", minWidth: 220 }}>
+                  <div style={{ color: corDoAno(idx), fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{labelDoCliente[codigo]}</div>
+                  <div style={{ color: "#666", fontSize: 10 }}>Litros (total do período)</div>
+                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, marginBottom: 8 }}>{fmtLitros(lit)}</div>
+                  <div style={{ color: "#666", fontSize: 10 }}>Faturamento (total do período)</div>
+                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800 }}>{fmtMoeda(fat)}</div>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </Section>
@@ -2694,6 +2755,30 @@ function ProdutosTab() {
 
   const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
 
+  // --- projeção: mesmos meses, 1 ano depois, ajustados por % ---
+  const [incluirProjecao, setIncluirProjecao] = useState(false);
+  const [pctProjecao, setPctProjecao] = useState(100);
+
+  const chavesProjecao = useMemo(() => {
+    return chavesHeatmap.map(c => {
+      const [ano, mes] = c.split("-").map(Number);
+      return `${ano + 1}-${String(mes).padStart(2, "0")}`;
+    });
+  }, [chavesHeatmap]);
+
+  const linhasHeatmapComProjecao = useMemo(() => {
+    if (!incluirProjecao) return linhasHeatmapVisiveis;
+    return linhasHeatmapVisiveis.map(linha => {
+      const valoresProjetados = linha.valores.map((v, idx) => ({
+        periodo: chavesProjecao[idx],
+        valor: v.valor * (pctProjecao / 100),
+      }));
+      return { ...linha, valores: [...linha.valores, ...valoresProjetados] };
+    });
+  }, [linhasHeatmapVisiveis, incluirProjecao, chavesProjecao, pctProjecao]);
+
+  const setColunasProjecao = useMemo(() => new Set(incluirProjecao ? chavesProjecao : []), [incluirProjecao, chavesProjecao]);
+
   if (!produtosNomes.length) {
     return (
       <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
@@ -2739,11 +2824,27 @@ function ProdutosTab() {
               <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimHeatmap} onSelecionar={setFimHeatmap} placeholder="Fim" />
             </div>
           )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, paddingTop: 12, borderTop: "1px solid #333", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={incluirProjecao} onChange={e => setIncluirProjecao(e.target.checked)} />
+              📈 Incluir projeção (mesmos meses, 1 ano depois)
+            </label>
+            {incluirProjecao && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "#888", fontSize: 12 }}>Ajuste:</span>
+                <input type="number" min="0" max="300" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
+                  style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                <span style={{ color: "#666", fontSize: 11 }}>% (100% = repete o mesmo valor do período de referência)</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
           🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (vs mês anterior). Passe o mouse numa célula pra ver a diferença em
           número e % vs mês anterior e vs mesmo mês do ano anterior. Ordenado do maior pro menor total no período selecionado.
+          {incluirProjecao && " Colunas com * são projeção (estimativa), não dado real."}
         </div>
 
         {linhasHeatmap.length === 0 && (
@@ -2754,7 +2855,7 @@ function ProdutosTab() {
 
         {linhasHeatmap.length > 0 && (
           <>
-            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} />
+            <TabelaHeatmapCategoria linhas={linhasHeatmapComProjecao} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} colunasProjecao={setColunasProjecao} />
             {linhasHeatmap.length > LIMITE_HEATMAP && (
               <div style={{ textAlign: "center", marginTop: 14 }}>
                 <button onClick={() => setExpandidoHeatmap(e => !e)} style={chipBtnStyle}>

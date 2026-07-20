@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.5
+ * Versão: v2.6
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -272,14 +272,19 @@ function lerCadastroClientes(ss) {
     const limiteLinhas = Math.min(valores.length, 15);
 
     for (let i = 0; i < limiteLinhas; i++) {
-      let idxCodigo = -1, idxFantasia = -1, idxGrupo = -1, idxDataCriacao = -1;
+      let idxCodigoExato = -1, idxCodigoSubstr = -1, idxFantasia = -1, idxGrupo = -1, idxDataCriacao = -1;
       valores[i].forEach(function (celula, c) {
         const texto = String(celula || "").trim().toLowerCase();
-        if (idxCodigo === -1 && /(código|codigo)/.test(texto)) idxCodigo = c;
+        if (idxCodigoExato === -1 && (texto === "código" || texto === "codigo")) idxCodigoExato = c;
+        if (idxCodigoSubstr === -1 && /(código|codigo)/.test(texto)) idxCodigoSubstr = c;
         if (idxFantasia === -1 && /(fantasia|apelido)/.test(texto)) idxFantasia = c;
         if (idxGrupo === -1 && /(categoria|grupo|segmento)/.test(texto)) idxGrupo = c;
         if (idxDataCriacao === -1 && /(data.*(cria|cadastr|abertur|inclus)|criado em|cadastrado em)/.test(texto)) idxDataCriacao = c;
       });
+      // prefere a coluna chamada EXATAMENTE "Código"/"Codigo"; só usa "contém a palavra código"
+      // como plano B (evita pegar de vez uma coluna tipo "Código de Barras" ou "Cód. Referência"
+      // que apareça antes da coluna certa de código do cliente)
+      const idxCodigo = idxCodigoExato !== -1 ? idxCodigoExato : idxCodigoSubstr;
 
       // precisa pelo menos de Código + (Fantasia ou Grupo) pra essa aba valer como cadastro
       if (idxCodigo !== -1 && (idxFantasia !== -1 || idxGrupo !== -1)) {
