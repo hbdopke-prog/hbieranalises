@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
   PieChart, Pie,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v4.9";
+const APP_VERSION = "v5.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -268,7 +268,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas) {
+function processarDados(linhas, produtosDetalhado) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -312,7 +312,7 @@ function processarDados(linhas) {
   // pra seleção individual, já que não fazem sentido de olhar um por um.
   const nomesVisiveis = nomes.filter(codigo => !grupoEhPesado(grupoDoCliente[codigo]));
 
-  return { dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente };
+  return { dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente, labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente, produtosDetalhado: produtosDetalhado || [] };
 }
 
 // -------------------- Componentes visuais --------------------
@@ -2337,6 +2337,172 @@ function MesTab() {
   );
 }
 
+// Agrupa a lista já pré-agregada (tipo/canal/ano/mes/faturamento/litros) vinda do backend
+// por uma categoria (tipo OU canal), no mesmo formato {dados, nomes, periodos} usado em
+// todo o resto do app (dados[nome] = rows[] ordenadas, uma por mês).
+function agruparPorCategoriaProduto(linhas, campoCategoria) {
+  const porCategoria = {};
+  linhas.forEach(r => {
+    const nome = r[campoCategoria] || "Sem categoria";
+    const chave = `${r.ano}-${String(r.mes).padStart(2, "0")}`;
+    porCategoria[nome] = porCategoria[nome] || [];
+    let existente = porCategoria[nome].find(x => x.chave === chave);
+    if (!existente) {
+      existente = { ano: r.ano, mes: r.mes, chave, faturamento: 0, litros: 0 };
+      porCategoria[nome].push(existente);
+    }
+    existente.faturamento += Number(r.faturamento) || 0;
+    existente.litros += Number(r.litros) || 0;
+  });
+  Object.keys(porCategoria).forEach(nome => porCategoria[nome].sort((a, b) => a.chave.localeCompare(b.chave)));
+  const nomes = Object.keys(porCategoria).sort();
+  const periodosSet = new Set();
+  Object.values(porCategoria).forEach(rows => rows.forEach(r => periodosSet.add(r.chave)));
+  const periodos = [...periodosSet].sort();
+  return { dados: porCategoria, nomes, periodos };
+}
+
+// Pro último mês fechado de uma categoria (tipo de produto ou canal): valor, comparação
+// vs mês anterior e vs mesmo mês do ano anterior.
+function calcularComparativoCategoria(rowsBrutas) {
+  const { fechados: rows } = separarMesEmAndamento(rowsBrutas);
+  const n = rows.length;
+  const atual = rows[n - 1];
+  if (!atual) return null;
+  const anterior = rows[n - 2];
+  const mesmoMesAnoPassado = rows.find(r => r.ano === atual.ano - 1 && r.mes === atual.mes);
+  return {
+    mesTexto: labelMes(atual.chave),
+    fat: atual.faturamento, lit: atual.litros, precoLitro: precoMedioLitro(atual.faturamento, atual.litros),
+    varFatMes: anterior ? calcularVariacao(atual.faturamento, anterior.faturamento) : null,
+    varLitMes: anterior ? calcularVariacao(atual.litros, anterior.litros) : null,
+    varFatAno: mesmoMesAnoPassado ? calcularVariacao(atual.faturamento, mesmoMesAnoPassado.faturamento) : null,
+    varLitAno: mesmoMesAnoPassado ? calcularVariacao(atual.litros, mesmoMesAnoPassado.litros) : null,
+    mesmoMesAnoPassadoTexto: mesmoMesAnoPassado ? labelMes(mesmoMesAnoPassado.chave) : null,
+  };
+}
+
+function CardCategoriaProduto({ nome, comp, cor }) {
+  return (
+    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 260px", minWidth: 260 }}>
+      <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{nome}</div>
+      {!comp && <div style={{ color: "#666", fontSize: 12, marginTop: 6 }}>Sem dado no último mês fechado.</div>}
+      {comp && (
+        <>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 8 }}>{comp.mesTexto}</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ color: "#666", fontSize: 10 }}>Faturamento</div>
+            <div style={{ color: "#fff", fontSize: 16, fontWeight: 800 }}>{fmtMoeda(comp.fat)}</div>
+            <BadgeTendencia variacao={comp.varFatMes} formatador={fmtMoeda} periodoTexto="vs mês anterior" />
+            <BadgeTendencia variacao={comp.varFatAno} formatador={fmtMoeda} periodoTexto={comp.mesmoMesAnoPassadoTexto ? `vs ${comp.mesmoMesAnoPassadoTexto}` : ""} />
+          </div>
+          <div>
+            <div style={{ color: "#666", fontSize: 10 }}>Litros</div>
+            <div style={{ color: "#ddd", fontSize: 15, fontWeight: 700 }}>{fmtLitros(comp.lit)}</div>
+            <BadgeTendencia variacao={comp.varLitMes} formatador={fmtLitros} periodoTexto="vs mês anterior" />
+            <BadgeTendencia variacao={comp.varLitAno} formatador={fmtLitros} periodoTexto={comp.mesmoMesAnoPassadoTexto ? `vs ${comp.mesmoMesAnoPassadoTexto}` : ""} />
+          </div>
+          <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginTop: 8 }}>{fmtPrecoLitro(comp.precoLitro)}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProdutosTab() {
+  const { produtosDetalhado } = useData();
+
+  const canaisDisponiveis = useMemo(
+    () => [...new Set(produtosDetalhado.map(r => r.canal))].sort(),
+    [produtosDetalhado]
+  );
+  const [canaisSel, setCanaisSel] = useState(() => canaisDisponiveis.filter(c => !grupoEhPesado(c)));
+
+  function toggleCanal(c) {
+    setCanaisSel(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  }
+  function marcarPadraoCanais() { setCanaisSel(canaisDisponiveis.filter(c => !grupoEhPesado(c))); }
+  function marcarTodosCanais() { setCanaisSel([...canaisDisponiveis]); }
+  function desmarcarTodosCanais() { setCanaisSel([]); }
+
+  const produtosFiltradosPorCanal = useMemo(
+    () => produtosDetalhado.filter(r => canaisSel.includes(r.canal)),
+    [produtosDetalhado, canaisSel]
+  );
+
+  const porTipo = useMemo(() => agruparPorCategoriaProduto(produtosFiltradosPorCanal, "tipo"), [produtosFiltradosPorCanal]);
+  const porCanal = useMemo(() => agruparPorCategoriaProduto(produtosDetalhado, "canal"), [produtosDetalhado]);
+
+  const tiposComComparativo = useMemo(() => {
+    return porTipo.nomes
+      .map(nome => ({ nome, comp: calcularComparativoCategoria(porTipo.dados[nome]) }))
+      .sort((a, b) => (b.comp?.fat || 0) - (a.comp?.fat || 0));
+  }, [porTipo]);
+
+  const canaisComComparativo = useMemo(() => {
+    return porCanal.nomes
+      .map(nome => ({ nome, comp: calcularComparativoCategoria(porCanal.dados[nome]) }))
+      .sort((a, b) => (b.comp?.fat || 0) - (a.comp?.fat || 0));
+  }, [porCanal]);
+
+  if (!produtosDetalhado.length) {
+    return (
+      <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
+        Nenhum dado de produtos encontrado ainda. Crie a aba <strong style={{ color: "#C69700" }}>pedidos_produtos</strong> na
+        planilha (com as colunas Lançamento, Cód. Cliente, Grupo de Cliente, Grupo de Produto, Valor Cobrado Item e Qtde Litros)
+        pra essa aba passar a mostrar dados.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Layers size={13} /> Canal ({canaisSel.length} de {canaisDisponiveis.length} selecionados) — filtra a seção "Por Tipo de Produto":
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button onClick={marcarPadraoCanais} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
+          <button onClick={marcarTodosCanais} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosCanais} style={chipBtnStyle}>Desmarcar todos</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {canaisDisponiveis.map(c => (
+            <label key={c} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(c) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={canaisSel.includes(c)} onChange={() => toggleCanal(c)} />
+              {c}{grupoEhPesado(c) ? " ⚠" : ""}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <Section title="Por Tipo de Produto" icon={<TrendingUp size={18} color="#02601D" />}>
+        {tiposComComparativo.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+            Nenhum tipo de produto com dado nos canais selecionados.
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {tiposComComparativo.map(({ nome, comp }) => (
+            <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4caf6b" />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Por Canal" icon={<Layers size={18} color="#C69700" />}>
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 12 }}>
+          Sempre considera todos os canais (não é afetado pelo filtro acima).
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {canaisComComparativo.map(({ nome, comp }) => (
+            <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4a90d9" />
+          ))}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
 export default function App() {
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
@@ -2361,7 +2527,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados));
+        setContexto(processarDados(json.dados, json.produtosDetalhado || []));
         setStatus("ready");
       })
       .catch(err => {
@@ -2422,6 +2588,9 @@ export default function App() {
                 <button onClick={() => setTab("mes")} style={tabStyle(tab === "mes")}>
                   <Calendar size={14} /> Mês
                 </button>
+                <button onClick={() => setTab("produtos")} style={tabStyle(tab === "produtos")}>
+                  <Package size={14} /> Produtos
+                </button>
                 {isAdmin && (
                   <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
                     <Globe size={14} /> Global
@@ -2433,6 +2602,7 @@ export default function App() {
               {tab === "comparacao" && <ComparacaoTab />}
               {tab === "dashboard" && <DashboardTab />}
               {tab === "mes" && <MesTab />}
+              {tab === "produtos" && <ProdutosTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}

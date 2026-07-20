@@ -54,6 +54,8 @@ Crie uma aba chamada **`usuarios`** com estas colunas:
 
 ## 3. Backend (Google Apps Script)
 
+- **Produtos (opcional)**: crie uma aba chamada **`pedidos_produtos`** com uma linha por item de pedido, exportada direto do ERP, com (pelo menos) estas colunas: `Lançamento`, `Cód. Cliente`, `Grupo de Cliente`, `Grupo de Produto`, `Valor Cobrado Item`, `Qtde Litros`. Pode ter quantas outras colunas quiser — o app só lê essas pelo nome. Sem essa aba, a aba "Produtos" do app fica vazia, mas o resto do app funciona normal.
+
 1. Na planilha: **Extensões > Apps Script**.
 2. Apague o conteúdo padrão e cole o arquivo `Code.gs` (raiz deste projeto).
 3. **Implantar > Nova implantação**:

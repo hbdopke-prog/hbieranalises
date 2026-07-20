@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.2
+ * Versão: v2.3
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -57,11 +57,20 @@
  *   - admin: SIM/TRUE/1 pra liberar acesso à aba "Global"; vazio ou NAO = usuário comum.
  *   - nome: opcional, nome de exibição depois do login.
  * O login vira uma chamada POST (não GET) pra não expor usuário/senha na URL.
+ *
+ * PRODUTOS (v2.3):
+ * Aba opcional "pedidos_produtos", nível de item de pedido (uma linha por item),
+ * com estas colunas (nomes exatos do export do ERP):
+ *   Lançamento | Cód. Cliente | Grupo de Cliente | Grupo de Produto | Valor Cobrado Item | Qtde Litros
+ * O script agrupa por Tipo de Produto (Grupo de Produto) x Canal (Grupo de Cliente) x mês,
+ * somando Valor Cobrado Item (faturamento) e Qtde Litros. Se a aba não existir, a aba
+ * "Produtos" do app simplesmente fica vazia (não quebra o resto do app).
  */
 
 const SHEET_FATURAMENTO = "faturamento";
 const SHEET_LITROS = "litros";
 const SHEET_USUARIOS = "usuarios";
+const SHEET_PEDIDOS_PRODUTOS = "pedidos_produtos";
 
 function doGet(e) {
   try {
@@ -70,14 +79,97 @@ function doGet(e) {
     const litros = lerRelatorio(ss, SHEET_LITROS);
     const cadastro = lerCadastroClientes(ss); // mapa: codigo -> { nomeFantasia, grupo, dataCriacao }
     const combinado = combinar(faturamento, litros, cadastro);
+
+    // produtos é opcional - se der qualquer problema, não derruba o resto do app
+    let produtosDetalhado = [];
+    try {
+      produtosDetalhado = lerPedidosProdutos(ss);
+    } catch (errProdutos) {
+      produtosDetalhado = [];
+    }
+
     return jsonResponse({
       ok: true,
       dados: combinado,
+      produtosDetalhado: produtosDetalhado,
       atualizadoEm: new Date().toISOString(),
     });
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+// Lê a aba "pedidos_produtos" (nível de item de pedido) e agrega por
+// Tipo de Produto x Canal x mês. Devolve uma lista já pré-agregada e pequena
+// (bem menor que as ~26 mil linhas originais), pronta pro front-end consumir.
+function lerPedidosProdutos(ss) {
+  const sheet = ss.getSheetByName(SHEET_PEDIDOS_PRODUTOS);
+  if (!sheet) return [];
+
+  const valores = sheet.getDataRange().getValues();
+  if (valores.length < 2) return [];
+
+  // acha a linha de cabeçalho procurando as colunas esperadas (não assume que é a linha 1)
+  let linhaCabecalho = -1, idxData = -1, idxCanal = -1, idxTipo = -1, idxValor = -1, idxLitros = -1;
+  const limiteLinhas = Math.min(valores.length, 5);
+  for (let i = 0; i < limiteLinhas; i++) {
+    let d = -1, c = -1, t = -1, v = -1, l = -1;
+    valores[i].forEach(function (celula, col) {
+      const texto = String(celula || "").trim().toLowerCase();
+      if (d === -1 && texto === "lançamento") d = col;
+      if (c === -1 && /grupo de cliente/.test(texto)) c = col;
+      if (t === -1 && /grupo de produto/.test(texto)) t = col;
+      if (v === -1 && /valor cobrado item/.test(texto)) v = col;
+      if (l === -1 && /qtde litros/.test(texto)) l = col;
+    });
+    if (d !== -1 && c !== -1 && t !== -1 && v !== -1 && l !== -1) {
+      linhaCabecalho = i; idxData = d; idxCanal = c; idxTipo = t; idxValor = v; idxLitros = l;
+      break;
+    }
+  }
+  if (linhaCabecalho === -1) return [];
+
+  function paraNumeroProduto(bruto) {
+    if (typeof bruto === "number") return bruto;
+    if (bruto === "" || bruto === null || bruto === undefined) return 0;
+    let texto = String(bruto).trim();
+    if (texto === "" || texto === "-") return 0;
+    texto = texto.replace(/[R$\s]/g, "");
+    if (texto.indexOf(",") !== -1) texto = texto.replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(texto);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function paraAnoMesProduto(bruto) {
+    if (Object.prototype.toString.call(bruto) === "[object Date]" && !isNaN(bruto)) {
+      return { ano: bruto.getFullYear(), mes: bruto.getMonth() + 1 };
+    }
+    const texto = String(bruto || "").trim();
+    const m = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); // DD/MM/AAAA (ignora hora se tiver)
+    if (m) return { ano: parseInt(m[3], 10), mes: parseInt(m[2], 10) };
+    return null;
+  }
+
+  const mapa = {};
+  for (let i = linhaCabecalho + 1; i < valores.length; i++) {
+    const linha = valores[i];
+    const info = paraAnoMesProduto(linha[idxData]);
+    if (!info) continue;
+
+    const tipo = String(linha[idxTipo] || "").trim() || "Sem categoria";
+    const canal = String(linha[idxCanal] || "").trim() || "Sem canal";
+    const valor = paraNumeroProduto(linha[idxValor]);
+    const litros = paraNumeroProduto(linha[idxLitros]);
+
+    const chave = tipo + "__" + canal + "__" + info.ano + "-" + String(info.mes).padStart(2, "0");
+    if (!mapa[chave]) {
+      mapa[chave] = { tipo: tipo, canal: canal, ano: info.ano, mes: info.mes, faturamento: 0, litros: 0 };
+    }
+    mapa[chave].faturamento += valor;
+    mapa[chave].litros += litros;
+  }
+
+  return Object.keys(mapa).map(function (k) { return mapa[k]; });
 }
 
 // POST é usado só pra login (usuario/senha nunca vão na URL)
