@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.5";
+const APP_VERSION = "v6.6";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1165,7 +1165,87 @@ function CardComparativo({ titulo, valorA, valorB, variacao, formatador, icon })
 }
 
 function ComparacaoTab() {
-  const { dados, periodos, labelDoCliente } = useData();
+  const { dados, periodos, labelDoCliente, nomesVisiveis } = useData();
+
+  // comparação entre grupos de clientes (cada grupo pode ter 1 ou vários clientes, somados)
+  const [gruposComparar, setGruposComparar] = useState([]);
+  const proximoIdGrupoRef = useRef(1);
+
+  function adicionarGrupoComparar() {
+    const id = proximoIdGrupoRef.current++;
+    setGruposComparar(prev => [...prev, { id, nome: `Grupo ${prev.length + 1}`, clientes: [] }]);
+  }
+  function removerGrupoComparar(id) {
+    setGruposComparar(prev => prev.filter(g => g.id !== id));
+  }
+  function renomearGrupoComparar(id, nome) {
+    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, nome } : g));
+  }
+  function adicionarClienteAoGrupo(id, codigo) {
+    setGruposComparar(prev => prev.map(g => {
+      if (g.id !== id) return g;
+      if (g.clientes.includes(codigo)) return g;
+      // se o grupo ainda não teve nome customizado (nome padrão "Grupo N") e é o primeiro
+      // cliente adicionado, já batiza o grupo com o nome desse cliente
+      const nomeAutomatico = /^Grupo \d+$/.test(g.nome) && g.clientes.length === 0;
+      return { ...g, clientes: [...g.clientes, codigo], nome: nomeAutomatico ? labelDoCliente[codigo] : g.nome };
+    }));
+  }
+  function removerClienteDoGrupo(id, codigo) {
+    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, clientes: g.clientes.filter(c => c !== codigo) } : g));
+  }
+  function limparGruposComparar() {
+    setGruposComparar([]);
+  }
+
+  const [inicioComparar, setInicioComparar] = useState(() => periodos[0] || "");
+  const [fimComparar, setFimComparar] = useState(() => periodos[periodos.length - 1] || "");
+
+  const periodosComparar = useMemo(() => {
+    if (!inicioComparar || !fimComparar) return periodos;
+    return periodos.filter(p => p >= inicioComparar && p <= fimComparar);
+  }, [periodos, inicioComparar, fimComparar]);
+
+  const seriesComparacaoGrupos = useMemo(() => {
+    if (!gruposComparar.length) return [];
+    return periodosComparar.map((chave) => {
+      const idxGlobal = periodos.indexOf(chave);
+      const anteriorChave = idxGlobal > 0 ? periodos[idxGlobal - 1] : null;
+      const linha = { mes: labelMes(chave) };
+      gruposComparar.forEach(grupo => {
+        let fatAtual = 0, litAtual = 0, teveAtual = false;
+        let fatAnterior = 0, litAnterior = 0, teveAnterior = false;
+        grupo.clientes.forEach(codigo => {
+          const rows = dados[codigo] || [];
+          const atual = rows.find(r => r.chave === chave);
+          if (atual) { fatAtual += atual.faturamento; litAtual += atual.litros; teveAtual = true; }
+          if (anteriorChave) {
+            const ant = rows.find(r => r.chave === anteriorChave);
+            if (ant) { fatAnterior += ant.faturamento; litAnterior += ant.litros; teveAnterior = true; }
+          }
+        });
+        linha[`fat_${grupo.id}`] = teveAtual ? fatAtual : null;
+        linha[`lit_${grupo.id}`] = teveAtual ? litAtual : null;
+        linha[`fatDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (fatAtual - fatAnterior) : null;
+        linha[`litDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (litAtual - litAnterior) : null;
+      });
+      return linha;
+    });
+  }, [gruposComparar, dados, periodos, periodosComparar]);
+
+  // resumo acumulado (total litros/faturamento) de cada grupo, dentro do período
+  const resumoComparacaoGrupos = useMemo(() => {
+    if (!gruposComparar.length) return [];
+    const chaves = new Set(periodosComparar);
+    return gruposComparar.map(grupo => {
+      let fat = 0, lit = 0;
+      grupo.clientes.forEach(codigo => {
+        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
+      });
+      return { id: grupo.id, nome: grupo.nome, fat, lit };
+    });
+  }, [gruposComparar, dados, periodosComparar]);
+
   const [modoA, setModoA] = useState("clientes");
   const [selA, setSelA] = useState([]);
   const [gruposA, setGruposA] = useState([]);
@@ -1395,6 +1475,157 @@ function ComparacaoTab() {
           </div>
         </>
       )}
+
+      <Section title="Comparar Clientes Específicos (mês a mês)" icon={<GitCompareArrows size={18} color="#4a90d9" />}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>
+            Cada grupo pode ter 1 cliente só (ex: Redefort) ou vários somados (ex: as 5 lojas Miller) — o gráfico compara os grupos entre si.
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={adicionarGrupoComparar} style={chipBtnStyle}>+ Novo grupo</button>
+            {gruposComparar.length > 0 && (
+              <button onClick={limparGruposComparar} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                Limpar tudo
+              </button>
+            )}
+          </div>
+        </div>
+
+        {gruposComparar.length > 0 && (
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            {gruposComparar.map((grupo, idx) => (
+              <GrupoComparacaoCard key={grupo.id} grupo={grupo} cor={corDoAno(idx)}
+                onRenomear={nome => renomearGrupoComparar(grupo.id, nome)}
+                onAdicionarCliente={codigo => adicionarClienteAoGrupo(grupo.id, codigo)}
+                onRemoverCliente={codigo => removerClienteDoGrupo(grupo.id, codigo)}
+                onRemoverGrupo={() => removerGrupoComparar(grupo.id)}
+                nomesVisiveis={nomesVisiveis} labelDoCliente={labelDoCliente} />
+            ))}
+          </div>
+        )}
+
+        {gruposComparar.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioComparar} onSelecionar={setInicioComparar} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimComparar} onSelecionar={setFimComparar} placeholder="Fim" />
+          </div>
+        )}
+
+        {gruposComparar.length === 0 && (
+          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+            Clique em "+ Novo grupo" pra começar (ex: um grupo "Redefort" com 1 cliente, e outro "Miller" com as 5 lojas somadas).
+          </div>
+        )}
+
+        {gruposComparar.length > 0 && (
+          <>
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 8 }}>Faturamento</div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={seriesComparacaoGrupos}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {gruposComparar.map((grupo, idx) => (
+                  <Line key={grupo.id} type="monotone" dataKey={`fat_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Faturamento</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={seriesComparacaoGrupos}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                <ReferenceLine y={0} stroke="#666" />
+                {gruposComparar.map((grupo, idx) => (
+                  <Bar key={grupo.id} dataKey={`fatDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 24 }}>Litros</div>
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={seriesComparacaoGrupos}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {gruposComparar.map((grupo, idx) => (
+                  <Line key={grupo.id} type="monotone" dataKey={`lit_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Litros</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={seriesComparacaoGrupos}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                <ReferenceLine y={0} stroke="#666" />
+                {gruposComparar.map((grupo, idx) => (
+                  <Bar key={grupo.id} dataKey={`litDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10, marginTop: 28 }}>
+              Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
+            </div>
+            <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>#</th>
+                    <th style={thStyle}>Grupo</th>
+                    <th style={thStyle}>Litros (total)</th>
+                    <th style={thStyle}>Faturamento (total)</th>
+                    <th style={thStyle}>% do líder</th>
+                    <th style={thStyle}>% do total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const ordenado = [...resumoComparacaoGrupos].sort((a, b) => b.fat - a.fat);
+                    const maiorFat = ordenado[0]?.fat || 0;
+                    const somaFat = ordenado.reduce((s, r) => s + r.fat, 0);
+                    return ordenado.map(({ id, nome, fat, lit }, idx) => {
+                      const corOriginal = corDoAno(gruposComparar.findIndex(g => g.id === id));
+                      const pctLider = maiorFat ? (fat / maiorFat) * 100 : 0;
+                      const pctTotal = somaFat ? (fat / somaFat) * 100 : 0;
+                      return (
+                        <tr key={id}>
+                          <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
+                          <td style={{ ...tdStyle, color: corOriginal, fontWeight: 700 }}>{nome}</td>
+                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtLitros(lit)}</td>
+                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtMoeda(fat)}</td>
+                          <td style={{ ...tdStyle, color: idx === 0 ? "#4caf6b" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
+                            {idx === 0 ? "líder" : `${pctLider.toFixed(1)}%`}
+                          </td>
+                          <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
+              "% do líder" compara o faturamento de cada grupo com o maior da lista. "% do total" é a fatia de cada grupo dentro da soma de todos os grupos comparados aqui (soma 100%).
+            </div>
+          </>
+        )}
+      </Section>
     </div>
   );
 }
@@ -2341,37 +2572,6 @@ function MesTab() {
   const [expandido, setExpandido] = useState(false);
   const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
 
-  // comparação entre grupos de clientes (cada grupo pode ter 1 ou vários clientes, somados)
-  const [gruposComparar, setGruposComparar] = useState([]);
-  const proximoIdGrupoRef = useRef(1);
-
-  function adicionarGrupoComparar() {
-    const id = proximoIdGrupoRef.current++;
-    setGruposComparar(prev => [...prev, { id, nome: `Grupo ${prev.length + 1}`, clientes: [] }]);
-  }
-  function removerGrupoComparar(id) {
-    setGruposComparar(prev => prev.filter(g => g.id !== id));
-  }
-  function renomearGrupoComparar(id, nome) {
-    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, nome } : g));
-  }
-  function adicionarClienteAoGrupo(id, codigo) {
-    setGruposComparar(prev => prev.map(g => {
-      if (g.id !== id) return g;
-      if (g.clientes.includes(codigo)) return g;
-      // se o grupo ainda não teve nome customizado (nome padrão "Grupo N") e é o primeiro
-      // cliente adicionado, já batiza o grupo com o nome desse cliente
-      const nomeAutomatico = /^Grupo \d+$/.test(g.nome) && g.clientes.length === 0;
-      return { ...g, clientes: [...g.clientes, codigo], nome: nomeAutomatico ? labelDoCliente[codigo] : g.nome };
-    }));
-  }
-  function removerClienteDoGrupo(id, codigo) {
-    setGruposComparar(prev => prev.map(g => g.id === id ? { ...g, clientes: g.clientes.filter(c => c !== codigo) } : g));
-  }
-  function limparGruposComparar() {
-    setGruposComparar([]);
-  }
-
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
     periodos.includes(mesAtualReal) ? mesAtualReal : (periodos[periodos.length - 1] || "")
@@ -2452,55 +2652,6 @@ function MesTab() {
   const rotuloPeriodo = modo === "mes"
     ? (mesSelecionado ? labelMes(mesSelecionado) : "-")
     : (inicioPeriodo && fimPeriodo ? `${labelMes(inicioPeriodo)}–${labelMes(fimPeriodo)}` : "-");
-
-  // valor de cada GRUPO (soma dos clientes dele), mês a mês (todo o histórico) + diferença vs mês anterior
-  const [inicioComparar, setInicioComparar] = useState(() => periodos[0] || "");
-  const [fimComparar, setFimComparar] = useState(() => periodos[periodos.length - 1] || "");
-
-  const periodosComparar = useMemo(() => {
-    if (!inicioComparar || !fimComparar) return periodos;
-    return periodos.filter(p => p >= inicioComparar && p <= fimComparar);
-  }, [periodos, inicioComparar, fimComparar]);
-
-  const seriesComparacao = useMemo(() => {
-    if (!gruposComparar.length) return [];
-    return periodosComparar.map((chave) => {
-      const idxGlobal = periodos.indexOf(chave);
-      const anteriorChave = idxGlobal > 0 ? periodos[idxGlobal - 1] : null;
-      const linha = { mes: labelMes(chave) };
-      gruposComparar.forEach(grupo => {
-        let fatAtual = 0, litAtual = 0, teveAtual = false;
-        let fatAnterior = 0, litAnterior = 0, teveAnterior = false;
-        grupo.clientes.forEach(codigo => {
-          const rows = dados[codigo] || [];
-          const atual = rows.find(r => r.chave === chave);
-          if (atual) { fatAtual += atual.faturamento; litAtual += atual.litros; teveAtual = true; }
-          if (anteriorChave) {
-            const ant = rows.find(r => r.chave === anteriorChave);
-            if (ant) { fatAnterior += ant.faturamento; litAnterior += ant.litros; teveAnterior = true; }
-          }
-        });
-        linha[`fat_${grupo.id}`] = teveAtual ? fatAtual : null;
-        linha[`lit_${grupo.id}`] = teveAtual ? litAtual : null;
-        linha[`fatDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (fatAtual - fatAnterior) : null;
-        linha[`litDiff_${grupo.id}`] = (teveAtual && teveAnterior) ? (litAtual - litAnterior) : null;
-      });
-      return linha;
-    });
-  }, [gruposComparar, dados, periodos, periodosComparar]);
-
-  // resumo acumulado (total litros/faturamento) de cada grupo, dentro do período
-  const resumoComparacao = useMemo(() => {
-    if (!gruposComparar.length) return [];
-    const chaves = new Set(periodosComparar);
-    return gruposComparar.map(grupo => {
-      let fat = 0, lit = 0;
-      grupo.clientes.forEach(codigo => {
-        (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
-      });
-      return { id: grupo.id, nome: grupo.nome, fat, lit };
-    });
-  }, [gruposComparar, dados, periodosComparar]);
 
   return (
     <div>
@@ -2621,157 +2772,6 @@ function MesTab() {
                 </button>
               </div>
             )}
-          </>
-        )}
-      </Section>
-
-      <Section title="Comparar Clientes Específicos (mês a mês)" icon={<GitCompareArrows size={18} color="#4a90d9" />}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ color: "#888", fontSize: 12 }}>
-            Cada grupo pode ter 1 cliente só (ex: Redefort) ou vários somados (ex: as 5 lojas Miller) — o gráfico compara os grupos entre si.
-          </span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={adicionarGrupoComparar} style={chipBtnStyle}>+ Novo grupo</button>
-            {gruposComparar.length > 0 && (
-              <button onClick={limparGruposComparar} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
-                Limpar tudo
-              </button>
-            )}
-          </div>
-        </div>
-
-        {gruposComparar.length > 0 && (
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-            {gruposComparar.map((grupo, idx) => (
-              <GrupoComparacaoCard key={grupo.id} grupo={grupo} cor={corDoAno(idx)}
-                onRenomear={nome => renomearGrupoComparar(grupo.id, nome)}
-                onAdicionarCliente={codigo => adicionarClienteAoGrupo(grupo.id, codigo)}
-                onRemoverCliente={codigo => removerClienteDoGrupo(grupo.id, codigo)}
-                onRemoverGrupo={() => removerGrupoComparar(grupo.id)}
-                nomesVisiveis={nomesVisiveis} labelDoCliente={labelDoCliente} />
-            ))}
-          </div>
-        )}
-
-        {gruposComparar.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
-            <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
-            <MonthPicker periodosDisponiveis={periodos} valor={inicioComparar} onSelecionar={setInicioComparar} placeholder="Início" />
-            <span style={{ color: "#666" }}>até</span>
-            <MonthPicker periodosDisponiveis={periodos} valor={fimComparar} onSelecionar={setFimComparar} placeholder="Fim" />
-          </div>
-        )}
-
-        {gruposComparar.length === 0 && (
-          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
-            Clique em "+ Novo grupo" pra começar (ex: um grupo "Redefort" com 1 cliente, e outro "Miller" com as 5 lojas somadas).
-          </div>
-        )}
-
-        {gruposComparar.length > 0 && (
-          <>
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 8 }}>Faturamento</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={seriesComparacao}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend content={<LegendaBranca />} />
-                {gruposComparar.map((grupo, idx) => (
-                  <Line key={grupo.id} type="monotone" dataKey={`fat_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Faturamento</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={seriesComparacao}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend content={<LegendaBranca />} />
-                <ReferenceLine y={0} stroke="#666" />
-                {gruposComparar.map((grupo, idx) => (
-                  <Bar key={grupo.id} dataKey={`fatDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 24 }}>Litros</div>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={seriesComparacao}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend content={<LegendaBranca />} />
-                {gruposComparar.map((grupo, idx) => (
-                  <Line key={grupo.id} type="monotone" dataKey={`lit_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8, marginTop: 20 }}>Diferença mês a mês · Litros</div>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={seriesComparacao}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend content={<LegendaBranca />} />
-                <ReferenceLine y={0} stroke="#666" />
-                {gruposComparar.map((grupo, idx) => (
-                  <Bar key={grupo.id} dataKey={`litDiff_${grupo.id}`} name={grupo.nome} fill={corDoAno(idx)} radius={[3,3,3,3]} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-
-            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10, marginTop: 28 }}>
-              Resumo do período ({periodosComparar.length ? `${labelMes(periodosComparar[0])}–${labelMes(periodosComparar[periodosComparar.length - 1])}` : "-"})
-            </div>
-            <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>#</th>
-                    <th style={thStyle}>Grupo</th>
-                    <th style={thStyle}>Litros (total)</th>
-                    <th style={thStyle}>Faturamento (total)</th>
-                    <th style={thStyle}>% do líder</th>
-                    <th style={thStyle}>% do total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const ordenado = [...resumoComparacao].sort((a, b) => b.fat - a.fat);
-                    const maiorFat = ordenado[0]?.fat || 0;
-                    const somaFat = ordenado.reduce((s, r) => s + r.fat, 0);
-                    return ordenado.map(({ id, nome, fat, lit }, idx) => {
-                      const corOriginal = corDoAno(gruposComparar.findIndex(g => g.id === id));
-                      const pctLider = maiorFat ? (fat / maiorFat) * 100 : 0;
-                      const pctTotal = somaFat ? (fat / somaFat) * 100 : 0;
-                      return (
-                        <tr key={id}>
-                          <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
-                          <td style={{ ...tdStyle, color: corOriginal, fontWeight: 700 }}>{nome}</td>
-                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtLitros(lit)}</td>
-                          <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtMoeda(fat)}</td>
-                          <td style={{ ...tdStyle, color: idx === 0 ? "#4caf6b" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
-                            {idx === 0 ? "líder" : `${pctLider.toFixed(1)}%`}
-                          </td>
-                          <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
-              "% do líder" compara o faturamento de cada grupo com o maior da lista. "% do total" é a fatia de cada grupo dentro da soma de todos os grupos comparados aqui (soma 100%).
-            </div>
           </>
         )}
       </Section>
