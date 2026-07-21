@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.6";
+const APP_VERSION = "v6.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1967,6 +1967,15 @@ function DashboardTab() {
   const [inicioNovos, setInicioNovos] = useState(() => periodos.includes("2025-01") ? "2025-01" : (periodos[0] || ""));
   const [fimNovos, setFimNovos] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
 
+  // heatmap por grupo: período próprio, padrão nos últimos 3 meses
+  const [inicioHeatmapGrupo, setInicioHeatmapGrupo] = useState(() => periodos[Math.max(0, periodos.length - 3)] || "");
+  const [fimHeatmapGrupo, setFimHeatmapGrupo] = useState(() => periodos[periodos.length - 1] || "");
+
+  // Top N: tamanho ajustável + período customizado opcional ("cresceu entre X e Y")
+  const [tamanhoTopN, setTamanhoTopN] = useState(10);
+  const [inicioTopN, setInicioTopN] = useState("");
+  const [fimTopN, setFimTopN] = useState("");
+
   function toggleGrupoFiltro(g) {
     setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
   }
@@ -1993,40 +2002,73 @@ function DashboardTab() {
     ? clientesComMetricas.filter(c => (labelDoCliente[c.nome] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : clientesComMetricas;
 
-  // Top 10 maiores crescimentos e maiores quedas (faturamento e litros, vs mês anterior e vs mesmo mês ano anterior)
-  const top10FatMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, 10, "desc");
-  const top10FatMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, 10, "asc");
-  const top10FatAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, 10, "desc");
-  const top10FatAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, 10, "asc");
-  const top10LitMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, 10, "desc");
-  const top10LitMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, 10, "asc");
-  const top10LitAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, 10, "desc");
-  const top10LitAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, 10, "asc");
+  // Top N maiores crescimentos e maiores quedas (faturamento e litros, vs mês anterior e vs mesmo mês ano anterior)
+  const top10FatMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, tamanhoTopN, "desc");
+  const top10FatMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varFat, tamanhoTopN, "asc");
+  const top10FatAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, tamanhoTopN, "desc");
+  const top10FatAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varFat, tamanhoTopN, "asc");
+  const top10LitMesCresc = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, tamanhoTopN, "desc");
+  const top10LitMesQueda = topN(clientesComMetricas, c => c.ultimoMesFechado?.varLit, tamanhoTopN, "asc");
+  const top10LitAnoCresc = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, tamanhoTopN, "desc");
+  const top10LitAnoQueda = topN(clientesComMetricas, c => c.comparacaoAno?.m1?.varLit, tamanhoTopN, "asc");
 
-  // novos clientes cadastrados por mês, no período selecionado
+  // Top N num período customizado escolhido por você (ex: "cresceu entre Mar/25 e Jun/25")
+  // compara o valor no mês final com o valor no mês inicial, direto.
+  function valorNoMes(rows, chave, campo) {
+    const row = (rows || []).find(r => r.chave === chave);
+    return row ? row[campo] : null;
+  }
+  const clientesComVariacaoPeriodo = useMemo(() => {
+    if (!inicioTopN || !fimTopN) return [];
+    return clientesFiltrados.map(nome => {
+      const rows = dados[nome] || [];
+      const fatInicio = valorNoMes(rows, inicioTopN, "faturamento");
+      const fatFim = valorNoMes(rows, fimTopN, "faturamento");
+      const litInicio = valorNoMes(rows, inicioTopN, "litros");
+      const litFim = valorNoMes(rows, fimTopN, "litros");
+      return {
+        nome,
+        metricas: {
+          varFatPeriodo: (fatInicio != null && fatFim != null) ? calcularVariacao(fatFim, fatInicio) : null,
+          varLitPeriodo: (litInicio != null && litFim != null) ? calcularVariacao(litFim, litInicio) : null,
+        },
+      };
+    });
+  }, [clientesFiltrados, dados, inicioTopN, fimTopN]);
+
+  const topFatPeriodoCresc = topN(clientesComVariacaoPeriodo, m => m.varFatPeriodo, tamanhoTopN, "desc");
+  const topFatPeriodoQueda = topN(clientesComVariacaoPeriodo, m => m.varFatPeriodo, tamanhoTopN, "asc");
+  const topLitPeriodoCresc = topN(clientesComVariacaoPeriodo, m => m.varLitPeriodo, tamanhoTopN, "desc");
+  const topLitPeriodoQueda = topN(clientesComVariacaoPeriodo, m => m.varLitPeriodo, tamanhoTopN, "asc");
+
+  // novos clientes cadastrados por mês, no período selecionado - respeita o filtro de grupo
   const novosClientesPorMes = useMemo(() => {
     if (!inicioNovos || !fimNovos) return [];
     const mesesRange = periodos.filter(p => p >= inicioNovos && p <= fimNovos);
     return mesesRange.map(mes => {
-      const clientesDoMes = nomes.filter(codigo => (dataCriacaoDoCliente[codigo] || "").slice(0, 7) === mes);
+      const clientesDoMes = clientesFiltrados.filter(codigo => (dataCriacaoDoCliente[codigo] || "").slice(0, 7) === mes);
       return { mes, quantidade: clientesDoMes.length, clientes: clientesDoMes.map(c => labelDoCliente[c]) };
     });
-  }, [inicioNovos, fimNovos, periodos, nomes, dataCriacaoDoCliente, labelDoCliente]);
+  }, [inicioNovos, fimNovos, periodos, clientesFiltrados, dataCriacaoDoCliente, labelDoCliente]);
 
   const totalNovosClientes = novosClientesPorMes.reduce((s, m) => s + m.quantidade, 0);
   const temDataCriacao = Object.keys(dataCriacaoDoCliente).length > 0;
+  const ultimoMesNovos = novosClientesPorMes[novosClientesPorMes.length - 1];
 
   const [metricaHeatmapGrupo, setMetricaHeatmapGrupo] = useState("faturamento"); // 'faturamento' | 'litros'
 
   const linhasHeatmap = useMemo(() => {
+    const periodosHeatmap = (!inicioHeatmapGrupo || !fimHeatmapGrupo)
+      ? periodos
+      : periodos.filter(p => p >= inicioHeatmapGrupo && p <= fimHeatmapGrupo);
     const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
     const semGrupo = nomes.filter(n => !nomesComGrupo.has(n));
-    const categorias = [...grupos];
+    const categorias = grupos.filter(g => gruposSel.includes(g));
     if (semGrupo.length) categorias.push("Sem grupo");
 
     return categorias.map(cat => {
       const clientesCat = cat === "Sem grupo" ? semGrupo : clientesPorGrupo[cat];
-      const valores = periodos.map(p => {
+      const valores = periodosHeatmap.map(p => {
         let fat = 0, lit = 0;
         clientesCat.forEach(nome => {
           const row = (dados[nome] || []).find(r => r.chave === p);
@@ -2036,13 +2078,13 @@ function DashboardTab() {
       });
       return { categoria: cat, valores };
     });
-  }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo]);
+  }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo, inicioHeatmapGrupo, fimHeatmapGrupo, gruposSel]);
 
   return (
     <div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-          <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados):
+          <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados) — vale pra toda a aba:
         </div>
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <button onClick={marcarPadraoGrupos} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
@@ -2067,6 +2109,29 @@ function DashboardTab() {
           <MonthPicker periodosDisponiveis={periodosFechados} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
         </div>
       </div>
+
+      <Section title={`Comparação mês a mês por grupo · ${metricaHeatmapGrupo === "litros" ? "Litros" : "Faturamento"}`} icon={<AlertTriangle size={16} color="#C69700" />}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+          <button onClick={() => setMetricaHeatmapGrupo("faturamento")} style={modoBtnStyle(metricaHeatmapGrupo === "faturamento", "#02601D")}>
+            <TrendingUp size={13} /> Faturamento
+          </button>
+          <button onClick={() => setMetricaHeatmapGrupo("litros")} style={modoBtnStyle(metricaHeatmapGrupo === "litros", "#C69700")}>
+            <Droplets size={13} /> Litros
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>Período (padrão: últimos 3 meses):</span>
+          <MonthPicker periodosDisponiveis={periodos} valor={inicioHeatmapGrupo} onSelecionar={setInicioHeatmapGrupo} placeholder="Início" />
+          <span style={{ color: "#666" }}>até</span>
+          <MonthPicker periodosDisponiveis={periodos} valor={fimHeatmapGrupo} onSelecionar={setFimHeatmapGrupo} placeholder="Fim" />
+        </div>
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). Passe o mouse numa célula pra ver a diferença
+          em número e % vs mês anterior e vs mesmo mês do ano anterior. A última coluna pode ser um mês ainda em andamento — compare com cautela.
+          Só mostra os grupos marcados no filtro lá em cima.
+        </div>
+        <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
+      </Section>
 
       {temDataCriacao && (
         <Section title="Novos Clientes" icon={<Users size={18} color="#C69700" />}>
@@ -2099,35 +2164,72 @@ function DashboardTab() {
               </tbody>
             </table>
           </div>
+
+          {ultimoMesNovos && ultimoMesNovos.clientes.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+                Nomes dos novos clientes em {labelMes(ultimoMesNovos.mes)} ({ultimoMesNovos.clientes.length})
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 14 }}>
+                {ultimoMesNovos.clientes.map((nomeCliente, idx) => (
+                  <div key={idx} style={{ color: "#fff", fontSize: 13, minWidth: 200 }}>{nomeCliente}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </Section>
       )}
 
-      <Section title={`Comparação mês a mês por grupo · ${metricaHeatmapGrupo === "litros" ? "Litros" : "Faturamento"}`} icon={<AlertTriangle size={16} color="#C69700" />}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          <button onClick={() => setMetricaHeatmapGrupo("faturamento")} style={modoBtnStyle(metricaHeatmapGrupo === "faturamento", "#02601D")}>
-            <TrendingUp size={13} /> Faturamento
-          </button>
-          <button onClick={() => setMetricaHeatmapGrupo("litros")} style={modoBtnStyle(metricaHeatmapGrupo === "litros", "#C69700")}>
-            <Droplets size={13} /> Litros
-          </button>
+      <Section title="Top N · Maiores Crescimentos e Quedas" icon={<GitCompareArrows size={18} color="#4a90d9" />}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>Tamanho do Top:</span>
+          <select value={tamanhoTopN} onChange={e => setTamanhoTopN(Number(e.target.value))} style={selectStyle}>
+            {[10, 20, 30, 50, 100, 200, 300].map(n => <option key={n} value={n}>Top {n}</option>)}
+          </select>
         </div>
-        <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). Passe o mouse numa célula pra ver a diferença
-          em número e % vs mês anterior e vs mesmo mês do ano anterior. A última coluna pode ser um mês ainda em andamento — compare com cautela.
-        </div>
-        <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
-      </Section>
 
-      <Section title="Top 10 · Maiores Crescimentos" icon={<ArrowUp size={18} color="#4caf6b" />}>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+          <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>
+            Período customizado (opcional) — ex: "quem mais cresceu entre Mar/25 e Jun/25": compara o valor do mês final com o valor do mês inicial.
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <MonthPicker periodosDisponiveis={periodos} valor={inicioTopN} onSelecionar={setInicioTopN} placeholder="Início" />
+            <span style={{ color: "#666" }}>até</span>
+            <MonthPicker periodosDisponiveis={periodos} valor={fimTopN} onSelecionar={setFimTopN} placeholder="Fim" />
+            {(inicioTopN || fimTopN) && (
+              <button onClick={() => { setInicioTopN(""); setFimTopN(""); }} style={chipBtnStyle}>Limpar período</button>
+            )}
+          </div>
+        </div>
+
+        {inicioTopN && fimTopN && (
+          <>
+            <div style={{ color: "#4caf6b", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              Maiores crescimentos entre {labelMes(inicioTopN)} e {labelMes(fimTopN)}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+              <ListaTop10 titulo={`Faturamento (${labelMes(inicioTopN)} → ${labelMes(fimTopN)})`} itens={topFatPeriodoCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+              <ListaTop10 titulo={`Litros (${labelMes(inicioTopN)} → ${labelMes(fimTopN)})`} itens={topLitPeriodoCresc} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+            </div>
+            <div style={{ color: "#e0645a", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+              Maiores quedas entre {labelMes(inicioTopN)} e {labelMes(fimTopN)}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+              <ListaTop10 titulo={`Faturamento (${labelMes(inicioTopN)} → ${labelMes(fimTopN)})`} itens={topFatPeriodoQueda} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
+              <ListaTop10 titulo={`Litros (${labelMes(inicioTopN)} → ${labelMes(fimTopN)})`} itens={topLitPeriodoQueda} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
+            </div>
+          </>
+        )}
+
+        <div style={{ color: "#4caf6b", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Maiores crescimentos</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
           <ListaTop10 titulo="Faturamento vs mês anterior" itens={top10FatMesCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
           <ListaTop10 titulo="Faturamento vs mesmo mês ano anterior" itens={top10FatAnoCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
           <ListaTop10 titulo="Litros vs mês anterior" itens={top10LitMesCresc} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
           <ListaTop10 titulo="Litros vs mesmo mês ano anterior" itens={top10LitAnoCresc} formatador={fmtLitros} labelDoCliente={labelDoCliente} />
         </div>
-      </Section>
 
-      <Section title="Top 10 · Maiores Quedas" icon={<ArrowDown size={18} color="#e0645a" />}>
+        <div style={{ color: "#e0645a", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Maiores quedas</div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <ListaTop10 titulo="Faturamento vs mês anterior" itens={top10FatMesQueda} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
           <ListaTop10 titulo="Faturamento vs mesmo mês ano anterior" itens={top10FatAnoQueda} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
