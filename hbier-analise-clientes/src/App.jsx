@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.7";
+const APP_VERSION = "v6.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1834,13 +1834,18 @@ function chaveAnoAnterior(chave) {
   const [ano, mes] = chave.split("-").map(Number);
   return `${ano - 1}-${String(mes).padStart(2, "0")}`;
 }
+// quantos dias tem esse mês (considera ano bissexto certinho)
+function diasNoMes(chave) {
+  const [ano, mes] = chave.split("-").map(Number);
+  return new Date(ano, mes, 0).getDate();
+}
 
 // linhas: [{ categoria, valores: [{periodo, valor}] }] - só as colunas visíveis (janela escolhida)
 // dadosCompletos (opcional): { categoria: { chave: valor } } - histórico INTEIRO de cada categoria,
 // usado pra calcular as comparações mesmo quando só 1 mês (ou uma janela curta) está sendo exibido.
 // Sem dadosCompletos, cai pra buscar dentro da própria janela visível (funciona quando ela já
 // cobre o histórico todo, como no heatmap de grupos do Dashboard).
-function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos, colunasProjecao }) {
+function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos, colunasProjecao, mostrarMedia7d, periodosCompletos }) {
   function formatador(v) { return rotuloCompactoGeral(v, unidade); }
   const ehProjecao = periodo => colunasProjecao && colunasProjecao.has(periodo);
 
@@ -1852,12 +1857,28 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
     return item ? item.valor : undefined;
   }
 
+  // média diária estimada (total ÷ dias corridos dos meses envolvidos) × 7 - já que os dados
+  // são mensais, não diários, isso é uma ESTIMATIVA assumindo distribuição uniforme no mês.
+  function media7dEstimada(categoria, chaves) {
+    let somaValor = 0, somaDias = 0;
+    chaves.forEach(chave => {
+      const valor = buscarValor({ categoria, valores: [] }, chave) || 0;
+      somaValor += valor;
+      somaDias += diasNoMes(chave);
+    });
+    if (!somaDias) return 0;
+    return (somaValor / somaDias) * 7;
+  }
+
   function textoVariacao(rotulo, variacao) {
     if (!variacao) return "";
     const sinalPct = variacao.pct >= 0 ? "+" : "";
     const sinalDiff = variacao.diff >= 0 ? "+" : "";
     return `\n${rotulo}: ${sinalPct}${variacao.pct.toFixed(1)}% (${sinalDiff}${formatador(variacao.diff)})`;
   }
+
+  const ultimoPeriodoGlobal = periodosCompletos && periodosCompletos.length ? periodosCompletos[periodosCompletos.length - 1] : null;
+  const chavesUltimos3Global = periodosCompletos ? periodosCompletos.slice(-3) : [];
 
   return (
     <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
@@ -1872,12 +1893,24 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
             ))}
             <th style={{ ...thStyle, color: "#C69700", borderLeft: "2px solid #444" }}>Total</th>
             <th style={{ ...thStyle, color: "#C69700" }}>Média/mês</th>
+            {mostrarMedia7d && (
+              <>
+                <th style={{ ...thStyle, color: "#4a90d9", borderLeft: "2px solid #444" }}>Média 7d (últ. mês)</th>
+                <th style={{ ...thStyle, color: "#4a90d9" }}>Média 7d (últ. 3 meses)</th>
+                <th style={{ ...thStyle, color: "#4a90d9" }}>Média 7d (período)</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           {linhas.map(linha => {
             const total = linha.valores.reduce((s, v) => s + (v.valor || 0), 0);
             const media = linha.valores.length ? total / linha.valores.length : 0;
+
+            const media7dUltimoMes = mostrarMedia7d && ultimoPeriodoGlobal ? media7dEstimada(linha.categoria, [ultimoPeriodoGlobal]) : 0;
+            const media7d3Meses = mostrarMedia7d ? media7dEstimada(linha.categoria, chavesUltimos3Global) : 0;
+            const media7dPeriodo = mostrarMedia7d ? media7dEstimada(linha.categoria, linha.valores.map(v => v.periodo)) : 0;
+
             return (
               <tr key={linha.categoria}>
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
@@ -1911,11 +1944,23 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                 })}
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.04)", borderLeft: "2px solid #444" }}>{formatador(total)}</td>
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#C69700", background: "rgba(198,151,0,0.06)" }}>{formatador(media)}</td>
+                {mostrarMedia7d && (
+                  <>
+                    <td title="Estimativa: total do mês ÷ dias do mês × 7" style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9", background: "rgba(74,144,217,0.06)", borderLeft: "2px solid #444", cursor: "default" }}>{formatador(media7dUltimoMes)}</td>
+                    <td title="Estimativa: total dos últimos 3 meses ÷ dias corridos × 7" style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9", background: "rgba(74,144,217,0.06)", cursor: "default" }}>{formatador(media7d3Meses)}</td>
+                    <td title="Estimativa: total do período selecionado na tabela ÷ dias corridos × 7" style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9", background: "rgba(74,144,217,0.06)", cursor: "default" }}>{formatador(media7dPeriodo)}</td>
+                  </>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
+      {mostrarMedia7d && (
+        <div style={{ color: "#666", fontSize: 11, padding: "8px 12px", borderTop: "1px solid #333" }}>
+          "Média 7d" é uma estimativa (os dados são mensais, não diários): pega o total do período, divide pelos dias corridos e multiplica por 7 — assume venda distribuída igualmente ao longo do mês, não reflete picos reais de dia da semana.
+        </div>
+      )}
     </div>
   );
 }
@@ -3279,7 +3324,7 @@ function ProdutosTab() {
 
         {linhasHeatmap.length > 0 && (
           <>
-            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} />
+            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} mostrarMedia7d periodosCompletos={produtosPeriodos} />
             {linhasHeatmap.length > LIMITE_HEATMAP && (
               <div style={{ textAlign: "center", marginTop: 14 }}>
                 <button onClick={() => setExpandidoHeatmap(e => !e)} style={chipBtnStyle}>
