@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.9";
+const APP_VERSION = "v7.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -463,7 +463,7 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
 // Só retorna trimestres que já têm pelo menos 1 mês fechado (trimestre totalmente no futuro
 // não aparece). Trimestre com menos de 3 meses fechados é sinalizado como "em andamento" e a
 // média/mês divide só pelos meses que realmente têm dado (não sempre por 3).
-function calcularTrimestres(rowsDoAno, totalFatAno, totalLitAno) {
+function calcularTrimestres(rowsDoAno, rowsAnoAnterior, totalFatAno, totalLitAno) {
   const definicoes = [
     { nome: "T1", label: "Jan-Mar", meses: [1, 2, 3] },
     { nome: "T2", label: "Abr-Jun", meses: [4, 5, 6] },
@@ -476,20 +476,31 @@ function calcularTrimestres(rowsDoAno, totalFatAno, totalLitAno) {
       if (!rows.length) return null;
       const totalFat = soma(rows, "faturamento");
       const totalLit = soma(rows, "litros");
+
+      // compara com o MESMO CONJUNTO DE MESES do ano anterior (ex: se o trimestre atual só
+      // tem Julho fechado, compara só com Julho do ano passado, não o trimestre inteiro) -
+      // senão a % ficaria injusta/distorcida num trimestre ainda em andamento.
+      const mesesPresentes = rows.map(r => r.mes);
+      const rowsAnteriorMesmosMeses = (rowsAnoAnterior || []).filter(r => mesesPresentes.includes(r.mes));
+      const totalFatAnterior = rowsAnteriorMesmosMeses.length ? soma(rowsAnteriorMesmosMeses, "faturamento") : null;
+      const totalLitAnterior = rowsAnteriorMesmosMeses.length ? soma(rowsAnteriorMesmosMeses, "litros") : null;
+
       return {
         nome: def.nome, label: def.label, mesesFechados: rows.length, completo: rows.length === 3,
         totalFat, totalLit,
         mediaFat: totalFat / rows.length, mediaLit: totalLit / rows.length,
         pctFat: totalFatAno ? (totalFat / totalFatAno) * 100 : 0,
         pctLit: totalLitAno ? (totalLit / totalLitAno) * 100 : 0,
+        variacaoFat: totalFatAnterior != null ? calcularVariacao(totalFat, totalFatAnterior) : null,
+        variacaoLit: totalLitAnterior != null ? calcularVariacao(totalLit, totalLitAnterior) : null,
       };
     })
     .filter(Boolean);
 }
 
 function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
-  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit, rowsDoAno } = dados;
-  const trimestres = mostrarTrimestres ? calcularTrimestres(rowsDoAno, totalFat, totalLit) : [];
+  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit, rowsDoAno, rowsAnoAnterior } = dados;
+  const trimestres = mostrarTrimestres ? calcularTrimestres(rowsDoAno, rowsAnoAnterior, totalFat, totalLit) : [];
   return (
     <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
@@ -517,6 +528,9 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
       {trimestres.length > 0 && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
           <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Por trimestre</div>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 8 }}>
+            O % entre parênteses ao lado do total compara com o mesmo trimestre do ano anterior (mesmos meses, mesmo se o trimestre atual ainda estiver parcial).
+          </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {trimestres.map(t => (
               <div key={t.nome} style={{ background: "#141412", border: "1px solid #333", borderRadius: 8, padding: 10, flex: "1 1 160px", minWidth: 160 }}>
@@ -524,11 +538,15 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
                   {t.nome} · {t.label}{!t.completo ? ` (${t.mesesFechados} mês${t.mesesFechados > 1 ? "es" : ""} fechado${t.mesesFechados > 1 ? "s" : ""})` : ""}
                 </div>
                 <div style={{ color: "#666", fontSize: 9 }}>Litros total</div>
-                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{fmtLitros(t.totalLit)}</div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>
+                  {fmtLitros(t.totalLit)}<PctInline variacao={t.variacaoLit} />
+                </div>
                 <div style={{ color: "#888", fontSize: 10 }}>Média/mês: {fmtLitros(t.mediaLit)}</div>
                 <div style={{ color: "#4a90d9", fontSize: 10, fontWeight: 700, marginBottom: 6 }}>{t.pctLit.toFixed(1)}% do ano</div>
                 <div style={{ color: "#666", fontSize: 9 }}>Faturamento total</div>
-                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{fmtMoeda(t.totalFat)}</div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>
+                  {fmtMoeda(t.totalFat)}<PctInline variacao={t.variacaoFat} />
+                </div>
                 <div style={{ color: "#888", fontSize: 10 }}>Média/mês: {fmtMoeda(t.mediaFat)}</div>
                 <div style={{ color: "#4a90d9", fontSize: 10, fontWeight: 700 }}>{t.pctFat.toFixed(1)}% do ano</div>
               </div>
@@ -2397,7 +2415,7 @@ function GlobalTab() {
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
       return {
-        ano, meses: rowsDoAno.length, rowsDoAno,
+        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior,
         totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
         variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
