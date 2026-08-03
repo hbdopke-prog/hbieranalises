@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v6.8";
+const APP_VERSION = "v6.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -459,8 +459,37 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
 
 // Card de ano-calendário mostrando Faturamento e Litros juntos (total + média/mês),
 // com crescimento/queda vs o ano anterior (baseado na média/mês, justo mesmo com ano parcial)
-function CardAnualCompleto({ dados, projecao }) {
-  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit } = dados;
+// Quebra as rows fechadas de um ano em 4 trimestres (Jan-Mar, Abr-Jun, Jul-Set, Out-Dez).
+// Só retorna trimestres que já têm pelo menos 1 mês fechado (trimestre totalmente no futuro
+// não aparece). Trimestre com menos de 3 meses fechados é sinalizado como "em andamento" e a
+// média/mês divide só pelos meses que realmente têm dado (não sempre por 3).
+function calcularTrimestres(rowsDoAno, totalFatAno, totalLitAno) {
+  const definicoes = [
+    { nome: "T1", label: "Jan-Mar", meses: [1, 2, 3] },
+    { nome: "T2", label: "Abr-Jun", meses: [4, 5, 6] },
+    { nome: "T3", label: "Jul-Set", meses: [7, 8, 9] },
+    { nome: "T4", label: "Out-Dez", meses: [10, 11, 12] },
+  ];
+  return definicoes
+    .map(def => {
+      const rows = (rowsDoAno || []).filter(r => def.meses.includes(r.mes));
+      if (!rows.length) return null;
+      const totalFat = soma(rows, "faturamento");
+      const totalLit = soma(rows, "litros");
+      return {
+        nome: def.nome, label: def.label, mesesFechados: rows.length, completo: rows.length === 3,
+        totalFat, totalLit,
+        mediaFat: totalFat / rows.length, mediaLit: totalLit / rows.length,
+        pctFat: totalFatAno ? (totalFat / totalFatAno) * 100 : 0,
+        pctLit: totalLitAno ? (totalLit / totalLitAno) * 100 : 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
+  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit, rowsDoAno } = dados;
+  const trimestres = mostrarTrimestres ? calcularTrimestres(rowsDoAno, totalFat, totalLit) : [];
   return (
     <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
@@ -484,6 +513,29 @@ function CardAnualCompleto({ dados, projecao }) {
           <div style={{ color: "#C69700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
         </div>
       </div>
+
+      {trimestres.length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
+          <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Por trimestre</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {trimestres.map(t => (
+              <div key={t.nome} style={{ background: "#141412", border: "1px solid #333", borderRadius: 8, padding: 10, flex: "1 1 160px", minWidth: 160 }}>
+                <div style={{ color: "#C69700", fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+                  {t.nome} · {t.label}{!t.completo ? ` (${t.mesesFechados} mês${t.mesesFechados > 1 ? "es" : ""} fechado${t.mesesFechados > 1 ? "s" : ""})` : ""}
+                </div>
+                <div style={{ color: "#666", fontSize: 9 }}>Litros total</div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{fmtLitros(t.totalLit)}</div>
+                <div style={{ color: "#888", fontSize: 10 }}>Média/mês: {fmtLitros(t.mediaLit)}</div>
+                <div style={{ color: "#4a90d9", fontSize: 10, fontWeight: 700, marginBottom: 6 }}>{t.pctLit.toFixed(1)}% do ano</div>
+                <div style={{ color: "#666", fontSize: 9 }}>Faturamento total</div>
+                <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{fmtMoeda(t.totalFat)}</div>
+                <div style={{ color: "#888", fontSize: 10 }}>Média/mês: {fmtMoeda(t.mediaFat)}</div>
+                <div style={{ color: "#4a90d9", fontSize: 10, fontWeight: 700 }}>{t.pctFat.toFixed(1)}% do ano</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {projecao && projecao.meses > 0 && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #444" }}>
@@ -2345,7 +2397,7 @@ function GlobalTab() {
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
       return {
-        ano, meses: rowsDoAno.length,
+        ano, meses: rowsDoAno.length, rowsDoAno,
         totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
         variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
@@ -2569,7 +2621,7 @@ function GlobalTab() {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {mediasPorAno.map((m, idx) => (
-              <CardAnualCompleto key={m.ano} dados={m} projecao={idx === mediasPorAno.length - 1 ? projecaoAnoParcial : null} />
+              <CardAnualCompleto key={m.ano} dados={m} projecao={idx === mediasPorAno.length - 1 ? projecaoAnoParcial : null} mostrarTrimestres />
             ))}
           </div>
         </Section>
