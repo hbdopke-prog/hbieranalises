@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.0";
+const APP_VERSION = "v7.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -805,7 +805,7 @@ function ClienteDashboard() {
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
       return {
-        ano, meses: rowsDoAno.length,
+        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior,
         totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
         // variação calculada em cima da MÉDIA mensal (não do total), pra ser justa mesmo quando
@@ -1008,7 +1008,7 @@ function ClienteDashboard() {
               <div style={{ background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 10, padding: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {mediasPorAno.map(m => (
-                    <CardAnualCompleto key={m.ano} dados={m} />
+                    <CardAnualCompleto key={m.ano} dados={m} mostrarTrimestres />
                   ))}
                 </div>
               </div>
