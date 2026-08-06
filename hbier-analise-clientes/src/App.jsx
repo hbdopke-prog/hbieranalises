@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.1";
+const APP_VERSION = "v7.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1977,6 +1977,16 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
             const total = linha.valores.reduce((s, v) => s + (v.valor || 0), 0);
             const media = linha.valores.length ? total / linha.valores.length : 0;
 
+            // média do MESMO período, 1 ano antes (ex: se a tabela mostra Mar-Jun/26, compara
+            // com a média de Mar-Jun/25) - usa só os meses que realmente têm dado no ano anterior
+            const valoresAnoAnteriorPeriodo = linha.valores
+              .map(v => buscarValor(linha, chaveAnoAnterior(v.periodo)))
+              .filter(v => v != null);
+            const mediaAnoAnteriorPeriodo = valoresAnoAnteriorPeriodo.length
+              ? valoresAnoAnteriorPeriodo.reduce((s, v) => s + v, 0) / valoresAnoAnteriorPeriodo.length
+              : null;
+            const variacaoMediaPeriodo = mediaAnoAnteriorPeriodo != null ? calcularVariacao(media, mediaAnoAnteriorPeriodo) : null;
+
             const media7dUltimoMes = mostrarMedia7d && ultimoPeriodoGlobal ? media7dEstimada(linha.categoria, [ultimoPeriodoGlobal]) : 0;
             const media7d3Meses = mostrarMedia7d ? media7dEstimada(linha.categoria, chavesUltimos3Global) : 0;
             const media7dPeriodo = mostrarMedia7d ? media7dEstimada(linha.categoria, linha.valores.map(v => v.periodo)) : 0;
@@ -2008,12 +2018,14 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
 
                   return (
                     <td key={v.periodo} title={tooltip} style={{ ...tdStyle, background: bg, cursor: "default" }}>
-                      {valor ? formatador(valor) : "-"}
+                      {valor ? formatador(valor) : "-"}<PctInline variacao={variacaoAno} />
                     </td>
                   );
                 })}
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.04)", borderLeft: "2px solid #444" }}>{formatador(total)}</td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#C69700", background: "rgba(198,151,0,0.06)" }}>{formatador(media)}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#C69700", background: "rgba(198,151,0,0.06)" }}>
+                  {formatador(media)}<PctInline variacao={variacaoMediaPeriodo} />
+                </td>
                 {mostrarMedia7d && (
                   <>
                     <td title="Estimativa: total do mês ÷ dias do mês × 7" style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9", background: "rgba(74,144,217,0.06)", borderLeft: "2px solid #444", cursor: "default" }}>{formatador(media7dUltimoMes)}</td>
@@ -2241,9 +2253,9 @@ function DashboardTab() {
           <MonthPicker periodosDisponiveis={periodos} valor={fimHeatmapGrupo} onSelecionar={setFimHeatmapGrupo} placeholder="Fim" />
         </div>
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (tudo vs mês anterior). Passe o mouse numa célula pra ver a diferença
-          em número e % vs mês anterior e vs mesmo mês do ano anterior. A última coluna pode ser um mês ainda em andamento — compare com cautela.
-          Só mostra os grupos marcados no filtro lá em cima.
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (cor de fundo = vs mês anterior). O % entre parênteses ao lado de cada
+          valor (mês a mês e na Média/mês) compara com o mesmo mês/período do ano anterior. Passe o mouse numa célula pra ver a diferença em número
+          também. A última coluna pode ser um mês ainda em andamento — compare com cautela. Só mostra os grupos marcados no filtro lá em cima.
         </div>
         <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
       </Section>
@@ -3382,8 +3394,9 @@ function ProdutosTab() {
         </div>
 
         <div style={{ color: "#888", fontSize: 11, marginBottom: 8 }}>
-          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (vs mês anterior). Passe o mouse numa célula pra ver a diferença em
-          número e % vs mês anterior e vs mesmo mês do ano anterior. Ordenado do maior pro menor total no período selecionado.
+          🟢 acima de +10% · 🟡 0% a +10% · 🟠 0% a -10% · 🔴 abaixo de -10% (cor de fundo = vs mês anterior). O % entre parênteses ao lado de cada
+          valor (mês a mês e na Média/mês) compara com o mesmo mês/período do ano anterior. Passe o mouse numa célula pra ver a diferença em número
+          também. Ordenado do maior pro menor total no período selecionado.
         </div>
 
         {linhasHeatmap.length === 0 && (
