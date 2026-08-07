@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.3";
+const APP_VERSION = "v7.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2070,16 +2070,29 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
         </thead>
         <tbody>
           {linhas.map(linha => {
-            const total = linha.valores.reduce((s, v) => s + (v.valor || 0), 0);
-            const media = linha.valores.length ? total / linha.valores.length : 0;
+            const totalBase = linha.valores.reduce((s, v) => s + (v.base || 0), 0);
+            const totalMin = linha.valores.reduce((s, v) => s + (v.min || 0), 0);
+            const totalMax = linha.valores.reduce((s, v) => s + (v.max || 0), 0);
+            const n = linha.valores.length || 1;
             return (
               <tr key={linha.categoria}>
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
                 {linha.valores.map(v => (
-                  <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>{v.valor ? formatador(v.valor) : "-"}</td>
+                  <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>
+                    <div>{v.base ? formatador(v.base) : "-"}</div>
+                    <div style={{ fontSize: 9, color: "#888", fontStyle: "normal", marginTop: 2 }}>
+                      Mín {formatador(v.min)} · Máx {formatador(v.max)}
+                    </div>
+                  </td>
                 ))}
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>{formatador(total)}</td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)" }}>{formatador(media)}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>
+                  <div>{formatador(totalBase)}</div>
+                  <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, marginTop: 2 }}>Mín {formatador(totalMin)} · Máx {formatador(totalMax)}</div>
+                </td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(198,151,0,0.12)" }}>
+                  <div>{formatador(totalBase / n)}</div>
+                  <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, marginTop: 2 }}>Mín {formatador(totalMin / n)} · Máx {formatador(totalMax / n)}</div>
+                </td>
               </tr>
             );
           })}
@@ -3145,7 +3158,9 @@ function ProdutosTab() {
   // --- projeção (tabela separada, abaixo da tabela de dados reais) ---
   const [incluirProjecao, setIncluirProjecao] = useState(false);
   const [modoProjecao, setModoProjecao] = useState("anoAnterior"); // 'anoAnterior' | 'mediaRecente'
-  const [pctProjecao, setPctProjecao] = useState(100);
+  const [pctMin, setPctMin] = useState(80);
+  const [pctBase, setPctBase] = useState(100);
+  const [pctMax, setPctMax] = useState(120);
 
   // modo "mesmo período do ano anterior": você escolhe o período de referência, ele projeta
   // os mesmos meses 1 ano depois. Bom pra produto com histórico/sazonal (ex: Oktoberfest).
@@ -3218,10 +3233,15 @@ function ProdutosTab() {
       if (!chavesReferenciaProjecao.length) return [];
       return linhasHeatmapVisiveis.map(linha => {
         const completos = dadosCompletosHeatmap[linha.categoria] || {};
-        const valores = chavesReferenciaProjecao.map((chaveRef, idx) => ({
-          periodo: chavesProjecaoAnoAnterior[idx],
-          valor: (completos[chaveRef] || 0) * (pctProjecao / 100),
-        }));
+        const valores = chavesReferenciaProjecao.map((chaveRef, idx) => {
+          const valorRef = completos[chaveRef] || 0;
+          return {
+            periodo: chavesProjecaoAnoAnterior[idx],
+            base: valorRef * (pctBase / 100),
+            min: valorRef * (pctMin / 100),
+            max: valorRef * (pctMax / 100),
+          };
+        });
         return { categoria: linha.categoria, valores };
       });
     }
@@ -3235,12 +3255,18 @@ function ProdutosTab() {
       const valores = chavesProjecaoMediaRecente.map(chave => {
         const mes = Number(chave.split("-")[1]);
         const indice = indiceSazonal[mes] ?? 1;
-        return { periodo: chave, valor: baseMedia * indice * (pctProjecao / 100) };
+        const valorSazonal = baseMedia * indice;
+        return {
+          periodo: chave,
+          base: valorSazonal * (pctBase / 100),
+          min: valorSazonal * (pctMin / 100),
+          max: valorSazonal * (pctMax / 100),
+        };
       });
       return { categoria: linha.categoria, valores };
     });
   }, [incluirProjecao, modoProjecao, linhasHeatmapVisiveis, dadosCompletosHeatmap, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
-      pctProjecao, indiceSazonal, chavesBaseMedia, chavesProjecaoMediaRecente]);
+      pctMin, pctBase, pctMax, indiceSazonal, chavesBaseMedia, chavesProjecaoMediaRecente]);
 
   if (!todosProdutosNomes.length) {
     return (
@@ -3387,11 +3413,25 @@ function ProdutosTab() {
                 </>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: "#888", fontSize: 12 }}>Ajuste:</span>
-                <input type="number" min="0" max="300" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
-                  style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
-                <span style={{ color: "#666", fontSize: 11 }}>% (100% = sem ajuste sobre a base calculada)</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#e0645a", fontSize: 12 }}>% mínimo:</span>
+                  <input type="number" min="0" max="300" value={pctMin} onChange={e => setPctMin(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
+                    style={{ width: 65, background: "#141412", border: "1px solid #e0645a", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#C69700", fontSize: 12 }}>% igual ano passado:</span>
+                  <input type="number" min="0" max="300" value={pctBase} onChange={e => setPctBase(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
+                    style={{ width: 65, background: "#141412", border: "1px solid #C69700", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ color: "#4caf6b", fontSize: 12 }}>% máximo:</span>
+                  <input type="number" min="0" max="300" value={pctMax} onChange={e => setPctMax(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
+                    style={{ width: 65, background: "#141412", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                </div>
+              </div>
+              <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
+                100% = repete exatamente o valor da base calculada (ano anterior ou média recente, conforme o modo). Os 3 valores aparecem juntos em cada célula da tabela de projeção abaixo.
               </div>
             </div>
           )}
