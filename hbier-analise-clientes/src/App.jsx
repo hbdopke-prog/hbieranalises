@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.5";
+const APP_VERSION = "v7.6";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -1941,6 +1941,24 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
     return item ? item.valor : undefined;
   }
 
+  // soma de TODOS os produtos exibidos, chave a chave - usada pra linha de TOTAL no fim da
+  // tabela (soma o histórico inteiro de cada produto, não só a janela visível, pra dar pra
+  // comparar com mês/ano anterior direito mesmo com janela curta)
+  const dadosCompletosTotal = useMemo(() => {
+    const mapa = {};
+    linhas.forEach(linha => {
+      const porChave = (dadosCompletos && dadosCompletos[linha.categoria]) || {};
+      Object.keys(porChave).forEach(chave => { mapa[chave] = (mapa[chave] || 0) + (porChave[chave] || 0); });
+      if (!dadosCompletos) {
+        linha.valores.forEach(v => { mapa[v.periodo] = (mapa[v.periodo] || 0) + (v.valor || 0); });
+      }
+    });
+    return mapa;
+  }, [linhas, dadosCompletos]);
+  function buscarValorTotal(chave) {
+    return Object.prototype.hasOwnProperty.call(dadosCompletosTotal, chave) ? dadosCompletosTotal[chave] : undefined;
+  }
+
   // média diária estimada (total ÷ dias corridos dos meses envolvidos) × 7 - já que os dados
   // são mensais, não diários, isso é uma ESTIMATIVA assumindo distribuição uniforme no mês.
   function media7dEstimada(categoria, chaves) {
@@ -1948,6 +1966,15 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
     chaves.forEach(chave => {
       const valor = buscarValor({ categoria, valores: [] }, chave) || 0;
       somaValor += valor;
+      somaDias += diasNoMes(chave);
+    });
+    if (!somaDias) return 0;
+    return (somaValor / somaDias) * 7;
+  }
+  function media7dEstimadaTotal(chaves) {
+    let somaValor = 0, somaDias = 0;
+    chaves.forEach(chave => {
+      somaValor += buscarValorTotal(chave) || 0;
       somaDias += diasNoMes(chave);
     });
     if (!somaDias) return 0;
@@ -2055,6 +2082,67 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
             );
           })}
         </tbody>
+        <tfoot>
+          {(() => {
+            const colunas = linhas[0]?.valores.map(v => v.periodo) || [];
+            const totalGeral = colunas.reduce((s, chave) => s + (buscarValorTotal(chave) || 0), 0);
+            const mediaGeral = colunas.length ? totalGeral / colunas.length : 0;
+
+            const valoresAnoAnteriorTotal = colunas.map(c => buscarValorTotal(chaveAnoAnterior(c))).filter(v => v != null);
+            const mediaAnoAnteriorTotal = valoresAnoAnteriorTotal.length
+              ? valoresAnoAnteriorTotal.reduce((s, v) => s + v, 0) / valoresAnoAnteriorTotal.length
+              : null;
+            const variacaoMediaTotal = mediaAnoAnteriorTotal != null ? calcularVariacao(mediaGeral, mediaAnoAnteriorTotal) : null;
+
+            const ultimaColuna = colunas[colunas.length - 1];
+            const ultimas3Colunas = colunas.slice(-3);
+            const media7dUltimoMesTotal = mostrarMedia7d && ultimaColuna ? media7dEstimadaTotal([ultimaColuna]) : 0;
+            const media7d3MesesTotal = mostrarMedia7d ? media7dEstimadaTotal(ultimas3Colunas) : 0;
+            const media7dPeriodoTotal = mostrarMedia7d ? media7dEstimadaTotal(colunas) : 0;
+
+            return (
+              <tr>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#2a2a28", position: "sticky", left: 0, borderTop: "2px solid #444" }}>TOTAL</td>
+                {colunas.map(chave => {
+                  if (ehProjecao(chave)) {
+                    const v = buscarValorTotal(chave) || 0;
+                    return (
+                      <td key={chave} title={`Projeção total: ${formatador(v)}`} style={{
+                        ...tdStyle, fontWeight: 800, background: "rgba(198,151,0,0.14)", border: "1px dashed rgba(198,151,0,0.4)",
+                        color: "#C69700", fontStyle: "italic", cursor: "default", borderTop: "2px solid #444",
+                      }}>
+                        {v ? formatador(v) : "-"}
+                      </td>
+                    );
+                  }
+                  const valor = buscarValorTotal(chave) || 0;
+                  const valorMesAnterior = buscarValorTotal(chaveMesAnterior(chave));
+                  const valorAnoAnterior = buscarValorTotal(chaveAnoAnterior(chave));
+                  const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
+                  const variacaoAno = valorAnoAnterior != null ? calcularVariacao(valor, valorAnoAnterior) : null;
+                  const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "#2a2a28";
+                  const tooltip = formatador(valor) + textoVariacao("vs mês anterior", variacaoMes) + textoVariacao("vs mesmo mês ano anterior", variacaoAno);
+                  return (
+                    <td key={chave} title={tooltip} style={{ ...tdStyle, fontWeight: 800, background: bg, cursor: "default", borderTop: "2px solid #444" }}>
+                      {valor ? formatador(valor) : "-"}<PctInline variacao={variacaoAno} />
+                    </td>
+                  );
+                })}
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,0.1)", borderLeft: "2px solid #444", borderTop: "2px solid #444" }}>{formatador(totalGeral)}</td>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#C69700", background: "rgba(198,151,0,0.14)", borderTop: "2px solid #444" }}>
+                  {formatador(mediaGeral)}<PctInline variacao={variacaoMediaTotal} />
+                </td>
+                {mostrarMedia7d && (
+                  <>
+                    <td style={{ ...tdStyle, fontWeight: 800, color: "#4a90d9", background: "rgba(74,144,217,0.14)", borderLeft: "2px solid #444", borderTop: "2px solid #444" }}>{formatador(media7dUltimoMesTotal)}</td>
+                    <td style={{ ...tdStyle, fontWeight: 800, color: "#4a90d9", background: "rgba(74,144,217,0.14)", borderTop: "2px solid #444" }}>{formatador(media7d3MesesTotal)}</td>
+                    <td style={{ ...tdStyle, fontWeight: 800, color: "#4a90d9", background: "rgba(74,144,217,0.14)", borderTop: "2px solid #444" }}>{formatador(media7dPeriodoTotal)}</td>
+                  </>
+                )}
+              </tr>
+            );
+          })()}
+        </tfoot>
       </table>
       {mostrarMedia7d && (
         <div style={{ color: "#666", fontSize: 11, padding: "8px 12px", borderTop: "1px solid #333" }}>
@@ -2111,6 +2199,44 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
             );
           })}
         </tbody>
+        <tfoot>
+          {(() => {
+            const colunas = linhas[0]?.valores.map(v => v.periodo) || [];
+            const n = colunas.length || 1;
+            let totalBaseGeral = 0, totalMinGeral = 0, totalMaxGeral = 0;
+            linhas.forEach(linha => {
+              totalBaseGeral += linha.valores.reduce((s, v) => s + (v.base || 0), 0);
+              totalMinGeral += linha.valores.reduce((s, v) => s + (v.min || 0), 0);
+              totalMaxGeral += linha.valores.reduce((s, v) => s + (v.max || 0), 0);
+            });
+            return (
+              <tr>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#2a2a28", position: "sticky", left: 0, borderTop: "2px solid rgba(198,151,0,0.4)" }}>TOTAL</td>
+                {colunas.map(chave => {
+                  let base = 0, min = 0, max = 0;
+                  linhas.forEach(linha => {
+                    const v = linha.valores.find(x => x.periodo === chave);
+                    if (v) { base += v.base || 0; min += v.min || 0; max += v.max || 0; }
+                  });
+                  return (
+                    <td key={chave} style={{ ...tdStyle, fontWeight: 800, color: "#C69700", fontStyle: "italic", background: "rgba(198,151,0,0.14)", borderTop: "2px solid rgba(198,151,0,0.4)" }}>
+                      <div>{base ? formatador(base) : "-"}</div>
+                      <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, fontStyle: "normal", marginTop: 2 }}>Mín {formatador(min)} · Máx {formatador(max)}</div>
+                    </td>
+                  );
+                })}
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "rgba(198,151,0,0.2)", borderLeft: "2px solid rgba(198,151,0,0.4)", borderTop: "2px solid rgba(198,151,0,0.4)" }}>
+                  <div>{formatador(totalBaseGeral)}</div>
+                  <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, marginTop: 2 }}>Mín {formatador(totalMinGeral)} · Máx {formatador(totalMaxGeral)}</div>
+                </td>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "rgba(198,151,0,0.2)", borderTop: "2px solid rgba(198,151,0,0.4)" }}>
+                  <div>{formatador(totalBaseGeral / n)}</div>
+                  <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, marginTop: 2 }}>Mín {formatador(totalMinGeral / n)} · Máx {formatador(totalMaxGeral / n)}</div>
+                </td>
+              </tr>
+            );
+          })()}
+        </tfoot>
       </table>
     </div>
   );
