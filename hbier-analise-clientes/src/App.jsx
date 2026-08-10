@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.4";
+const APP_VERSION = "v7.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -179,6 +179,17 @@ function classificarEmbalagem(nomeProduto) {
   if (n.startsWith("CHOPE")) return "chope";
   if (n.startsWith("PET")) return "pet";
   return "outros";
+}
+
+// Quantos litros cabem num pallet, de acordo com o tamanho da embalagem no nome do produto.
+// Retorna null se não reconhecer o tamanho (ex: garrafa 355ml, lata 473ml, chope) - nesses
+// casos não existe conversão de pallet definida, então mantém o valor em litros mesmo.
+function litrosPorPallet(nomeProduto) {
+  const n = (nomeProduto || "").toUpperCase();
+  if (/500\s*ML/.test(n)) return 1050;
+  if (/\b2\s*L\b/.test(n)) return 1152;
+  if (/\b1\s*L\b/.test(n)) return 1080;
+  return null;
 }
 
 function corDoAno(idx) {
@@ -1730,6 +1741,9 @@ function rotuloCompactoGeral(v, unidade) {
   if (unidade === "L") {
     return Math.abs(v) >= 1000 ? `${(v / 1000).toFixed(1)}k L` : `${Math.round(v)} L`;
   }
+  if (unidade === "pal") {
+    return `${v.toFixed(1)} pal`;
+  }
   return Math.abs(v) >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : fmtMoeda(v);
 }
 
@@ -3104,6 +3118,7 @@ function ProdutosTab() {
 
   // --- heatmap mês a mês por produto ---
   const [metricaHeatmap, setMetricaHeatmap] = useState("faturamento"); // 'faturamento' | 'litros'
+  const [unidadeExibicao, setUnidadeExibicao] = useState("litros"); // 'litros' | 'pallets' (só aplica quando metricaHeatmap === 'litros')
   const [modoDataHeatmap, setModoDataHeatmap] = useState("mes"); // 'mes' | 'periodo'
   const [expandidoHeatmap, setExpandidoHeatmap] = useState(false);
   const LIMITE_HEATMAP = 20;
@@ -3154,6 +3169,35 @@ function ProdutosTab() {
   }, [produtosNomes, produtosDados, metricaHeatmap]);
 
   const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
+
+  // se estiver em modo pallets, converte litros -> pallets por produto (cada um tem seu
+  // próprio "litros por pallet" de acordo com o tamanho da embalagem no nome). Produto sem
+  // tamanho reconhecido (garrafa/lata/chope) mantém o valor em litros mesmo.
+  const emModoPallets = unidadeExibicao === "pallets" && metricaHeatmap === "litros";
+
+  const linhasHeatmapExibidas = useMemo(() => {
+    if (!emModoPallets) return linhasHeatmapVisiveis;
+    return linhasHeatmapVisiveis.map(linha => {
+      const porPallet = litrosPorPallet(linha.categoria);
+      if (!porPallet) return linha;
+      return { ...linha, valores: linha.valores.map(v => ({ ...v, valor: v.valor / porPallet })) };
+    });
+  }, [linhasHeatmapVisiveis, emModoPallets]);
+
+  const dadosCompletosExibidos = useMemo(() => {
+    if (!emModoPallets) return dadosCompletosHeatmap;
+    const mapa = {};
+    Object.keys(dadosCompletosHeatmap).forEach(nome => {
+      const porPallet = litrosPorPallet(nome);
+      if (!porPallet) { mapa[nome] = dadosCompletosHeatmap[nome]; return; }
+      const porChave = {};
+      Object.keys(dadosCompletosHeatmap[nome]).forEach(chave => { porChave[chave] = dadosCompletosHeatmap[nome][chave] / porPallet; });
+      mapa[nome] = porChave;
+    });
+    return mapa;
+  }, [dadosCompletosHeatmap, emModoPallets]);
+
+  const unidadeAtual = metricaHeatmap === "litros" ? (emModoPallets ? "pal" : "L") : undefined;
 
   // --- projeção (tabela separada, abaixo da tabela de dados reais) ---
   const [incluirProjecao, setIncluirProjecao] = useState(false);
@@ -3231,8 +3275,8 @@ function ProdutosTab() {
 
     if (modoProjecao === "anoAnterior") {
       if (!chavesReferenciaProjecao.length) return [];
-      return linhasHeatmapVisiveis.map(linha => {
-        const completos = dadosCompletosHeatmap[linha.categoria] || {};
+      return linhasHeatmapExibidas.map(linha => {
+        const completos = dadosCompletosExibidos[linha.categoria] || {};
         const valores = chavesReferenciaProjecao.map((chaveRef, idx) => {
           const valorRef = completos[chaveRef] || 0;
           return {
@@ -3248,8 +3292,8 @@ function ProdutosTab() {
 
     // modo "mediaRecente"
     if (!indiceSazonal || !chavesBaseMedia.length || !chavesProjecaoMediaRecente.length) return [];
-    return linhasHeatmapVisiveis.map(linha => {
-      const completos = dadosCompletosHeatmap[linha.categoria] || {};
+    return linhasHeatmapExibidas.map(linha => {
+      const completos = dadosCompletosExibidos[linha.categoria] || {};
       const baseValores = chavesBaseMedia.map(c => completos[c] || 0);
       const baseMedia = baseValores.reduce((a, b) => a + b, 0) / baseValores.length;
       const valores = chavesProjecaoMediaRecente.map(chave => {
@@ -3265,7 +3309,7 @@ function ProdutosTab() {
       });
       return { categoria: linha.categoria, valores };
     });
-  }, [incluirProjecao, modoProjecao, linhasHeatmapVisiveis, dadosCompletosHeatmap, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
+  }, [incluirProjecao, modoProjecao, linhasHeatmapExibidas, dadosCompletosExibidos, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
       pctMin, pctBase, pctMax, indiceSazonal, chavesBaseMedia, chavesProjecaoMediaRecente]);
 
   if (!todosProdutosNomes.length) {
@@ -3318,6 +3362,22 @@ function ProdutosTab() {
               <Droplets size={13} /> Litros
             </button>
           </div>
+
+          {metricaHeatmap === "litros" && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              <button onClick={() => setUnidadeExibicao("litros")} style={modoBtnStyle(unidadeExibicao === "litros", "#4a90d9")}>
+                <Droplets size={13} /> Litros
+              </button>
+              <button onClick={() => setUnidadeExibicao("pallets")} style={modoBtnStyle(unidadeExibicao === "pallets", "#4a90d9")}>
+                <Package size={13} /> Pallets
+              </button>
+            </div>
+          )}
+          {emModoPallets && (
+            <div style={{ color: "#666", fontSize: 11, marginBottom: 12 }}>
+              Conversão: PET 1L = 1.080 L/pallet · PET 2L = 1.152 L/pallet · 500ml = 1.050 L/pallet. Garrafa, lata e chope não têm pallet definido — continuam em litros.
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
             <button onClick={() => setModoDataHeatmap("mes")} style={modoBtnStyle(modoDataHeatmap === "mes", "#4a90d9")}>
@@ -3451,7 +3511,7 @@ function ProdutosTab() {
 
         {linhasHeatmap.length > 0 && (
           <>
-            <TabelaHeatmapCategoria linhas={linhasHeatmapVisiveis} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmap} mostrarMedia7d />
+            <TabelaHeatmapCategoria linhas={linhasHeatmapExibidas} rotuloColuna="Produto" unidade={unidadeAtual} dadosCompletos={dadosCompletosExibidos} mostrarMedia7d />
             {linhasHeatmap.length > LIMITE_HEATMAP && (
               <div style={{ textAlign: "center", marginTop: 14 }}>
                 <button onClick={() => setExpandidoHeatmap(e => !e)} style={chipBtnStyle}>
@@ -3465,7 +3525,7 @@ function ProdutosTab() {
                 <div style={{ color: "#C69700", fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
                   📈 Projeção (estimativa — colunas com * não são dado real)
                 </div>
-                <TabelaProjecao linhas={linhasProjecao} rotuloColuna="Produto" unidade={metricaHeatmap === "litros" ? "L" : undefined} />
+                <TabelaProjecao linhas={linhasProjecao} rotuloColuna="Produto" unidade={unidadeAtual} />
               </div>
             )}
           </>
