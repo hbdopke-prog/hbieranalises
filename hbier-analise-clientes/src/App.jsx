@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.6";
+const APP_VERSION = "v7.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -714,6 +714,20 @@ const chipBtnStyle = {
   borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600,
 };
 
+// Botão pra gerar impressão (ou "Salvar como PDF" via caixa de diálogo do navegador) da aba
+// atual. O CSS de impressão (em index.html) já força fundo branco e some com os botões/nav.
+function BotaoImprimir({ label }) {
+  return (
+    <button onClick={() => window.print()} style={{
+      background: "transparent", border: "1px solid #4a90d9", color: "#4a90d9",
+      borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600,
+      display: "flex", alignItems: "center", gap: 6,
+    }}>
+      🖨️ {label || "Gerar impressão"}
+    </button>
+  );
+}
+
 function ClienteDashboard() {
   const { dados, nomes, nomesVisiveis, periodos, labelDoCliente, razaoSocialDoCliente } = useData();
   const [busca, setBusca] = useState("");
@@ -836,6 +850,9 @@ function ClienteDashboard() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Cliente" />
+      </div>
       <div style={{ position: "relative", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
           <Search size={16} color="#C69700" />
@@ -1432,6 +1449,9 @@ function ComparacaoTab() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Comparação" />
+      </div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
         <ColunaComparacao titulo="Cenário A" cor="#02601D"
           modo={modoA} setModo={setModoA} selecionados={selA} setSelecionados={setSelA}
@@ -2366,6 +2386,9 @@ function DashboardTab() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Dashboard" />
+      </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados) — vale pra toda a aba:
@@ -2714,6 +2737,9 @@ function GlobalTab() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Global" />
+      </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />}
           badge={<BadgeTendencia variacao={variacaoFat12} formatador={fmtMoeda} periodoTexto="vs mesmos 12 meses ano passado" />} />
@@ -3041,6 +3067,9 @@ function MesTab() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Mês" />
+      </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
           <button onClick={() => setModo("mes")} style={modoBtnStyle(modo === "mes", "#C69700")}>
@@ -3450,6 +3479,9 @@ function ProdutosTab() {
 
   return (
     <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Produtos (comparação + projeção)" />
+      </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Package size={13} /> Embalagem ({produtosNomes.length} de {todosProdutosNomes.length} produtos):
@@ -3744,7 +3776,7 @@ export default function App() {
 
       {logado && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 1 }}>
               HBIER <span style={{ color: "#C69700" }}>BI</span>
               <span style={{ color: "#555", fontSize: 12, marginLeft: 10, fontFamily: "system-ui" }}>{APP_VERSION}</span>
@@ -3767,7 +3799,7 @@ export default function App() {
 
           {status === "ready" && contexto && (
             <DataContext.Provider value={contexto}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: "1px solid #2a2a28" }}>
+              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: "1px solid #2a2a28" }}>
                 <button onClick={() => setTab("cliente")} style={tabStyle(tab === "cliente")}>
                   <Search size={14} /> Cliente
                 </button>

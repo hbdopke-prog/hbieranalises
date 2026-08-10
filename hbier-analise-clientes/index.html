@@ -21,6 +21,23 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet" />
     <style>
       body { margin: 0; background: #141412; }
+
+      @media print {
+        html, body, #root, #root * {
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          background-image: none !important;
+          box-shadow: none !important;
+        }
+        /* botões (inclui a navegação por abas, toggles e ações) não fazem sentido no papel */
+        button, .no-print {
+          display: none !important;
+        }
+        /* tabelas e textos ficam com contorno mais visível no papel, já que perderam o fundo escuro */
+        table, th, td {
+          border-color: #999 !important;
+        }
+      }
     </style>
   </head>
   <body>
