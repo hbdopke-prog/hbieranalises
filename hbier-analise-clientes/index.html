@@ -23,6 +23,11 @@
       body { margin: 0; background: #141412; }
 
       @media print {
+        @page {
+          size: A3 landscape;
+          margin: 10mm;
+        }
+
         html, body, #root, #root * {
           background: #ffffff !important;
           background-color: #ffffff !important;
@@ -36,6 +41,22 @@
         /* tabelas e textos ficam com contorno mais visível no papel, já que perderam o fundo escuro */
         table, th, td {
           border-color: #999 !important;
+        }
+
+        /* a tela mostra tabelas largas com scroll horizontal e coluna fixa (sticky) - na
+           impressão isso corta informação, já que não tem como "rolar" o papel. Aqui a gente
+           deixa tudo se expandir na largura real, sem cortar nada. */
+        #root * {
+          overflow: visible !important;
+          max-width: none !important;
+          position: static !important;
+        }
+        table {
+          width: auto !important;
+          min-width: 0 !important;
+        }
+        body {
+          font-size: 10px;
         }
       }
     </style>
