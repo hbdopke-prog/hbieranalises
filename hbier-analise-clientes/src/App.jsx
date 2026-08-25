@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.9";
+const APP_VERSION = "v8.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3264,10 +3264,15 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
     <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 14, flex: "1 1 280px", minWidth: 280 }}>
       <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo} ({itens.length})</div>
       {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Nenhum cliente nesse grupo.</div>}
-      {visiveis.map(({ codigo, ultimaCompra }) => (
-        <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "5px 0", borderBottom: "1px solid #2a2a28", fontSize: 12 }}>
+      {visiveis.map(({ codigo, ultimaCompra, ultimoFat, ultimoLit }) => (
+        <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #2a2a28", fontSize: 12 }}>
           <span style={{ color: "#fff" }}>{labelDoCliente[codigo]}</span>
-          {mostrarData && <span style={{ color: "#888", whiteSpace: "nowrap" }}>{ultimaCompra ? labelMes(ultimaCompra) : "nunca"}</span>}
+          <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+            {mostrarData && <div style={{ color: "#888" }}>{ultimaCompra ? labelMes(ultimaCompra) : "nunca"}</div>}
+            {ultimaCompra && (
+              <div style={{ color: "#4caf6b", fontSize: 11 }}>{fmtMoeda(ultimoFat)} · {fmtLitros(ultimoLit)}</div>
+            )}
+          </span>
         </div>
       ))}
       {itens.length > LIMITE && (
@@ -3308,9 +3313,10 @@ function PositivacaoTab() {
         return;
       }
       const ultima = comprasAteRef[comprasAteRef.length - 1];
-      if (ultima.chave === mesRef) positivados.push({ codigo, ultimaCompra: ultima.chave });
-      else if (ultima.chave === mesAnteriorRef) semCompraMes.push({ codigo, ultimaCompra: ultima.chave });
-      else semCompra2Meses.push({ codigo, ultimaCompra: ultima.chave });
+      const item = { codigo, ultimaCompra: ultima.chave, ultimoFat: ultima.faturamento, ultimoLit: ultima.litros };
+      if (ultima.chave === mesRef) positivados.push(item);
+      else if (ultima.chave === mesAnteriorRef) semCompraMes.push(item);
+      else semCompra2Meses.push(item);
     });
 
     const porNome = (a, b) => (labelDoCliente[a.codigo] || "").localeCompare(labelDoCliente[b.codigo] || "");
