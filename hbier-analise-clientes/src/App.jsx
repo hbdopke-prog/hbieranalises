@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.0";
+const APP_VERSION = "v8.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3289,8 +3289,8 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
 function PositivacaoTab() {
   const { dados, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
-  const periodosFechados = periodos.filter(p => p !== chaveMesAtualReal());
-  const [mesRef, setMesRef] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
+  const mesAtualReal = chaveMesAtualReal();
+  const [mesRef, setMesRef] = useState(() => periodos.includes(mesAtualReal) ? mesAtualReal : (periodos[periodos.length - 1] || ""));
 
   function toggleGrupoFiltro(g) {
     setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
@@ -3339,7 +3339,8 @@ function PositivacaoTab() {
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês de referência:</span>
-          <MonthPicker periodosDisponiveis={periodosFechados} valor={mesRef} onSelecionar={setMesRef} placeholder="Selecionar mês" />
+          <MonthPicker periodosDisponiveis={periodos} valor={mesRef} onSelecionar={setMesRef} placeholder="Selecionar mês" />
+          {mesRef === mesAtualReal && <span style={{ color: "#888", fontSize: 11 }}>⏳ mês em andamento — dados parciais até hoje</span>}
         </div>
 
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
