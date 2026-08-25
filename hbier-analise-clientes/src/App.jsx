@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v7.8";
+const APP_VERSION = "v7.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3243,6 +3243,144 @@ function CardCategoriaProduto({ nome, comp, cor }) {
   );
 }
 
+function CardResumoPositivacao({ titulo, cor, quantidade, total, icone }) {
+  const pct = total ? (quantidade / total * 100) : 0;
+  return (
+    <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 16, flex: "1 1 220px", minWidth: 220 }}>
+      <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        {icone} {titulo}
+      </div>
+      <div style={{ color: "#fff", fontSize: 28, fontWeight: 800 }}>{quantidade}</div>
+      <div style={{ color: "#888", fontSize: 12 }}>{pct.toFixed(1)}% dos {total} clientes filtrados</div>
+    </div>
+  );
+}
+
+function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
+  const [expandido, setExpandido] = useState(false);
+  const LIMITE = 20;
+  const visiveis = expandido ? itens : itens.slice(0, LIMITE);
+  return (
+    <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 14, flex: "1 1 280px", minWidth: 280 }}>
+      <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo} ({itens.length})</div>
+      {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Nenhum cliente nesse grupo.</div>}
+      {visiveis.map(({ codigo, ultimaCompra }) => (
+        <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "5px 0", borderBottom: "1px solid #2a2a28", fontSize: 12 }}>
+          <span style={{ color: "#fff" }}>{labelDoCliente[codigo]}</span>
+          {mostrarData && <span style={{ color: "#888", whiteSpace: "nowrap" }}>{ultimaCompra ? labelMes(ultimaCompra) : "nunca"}</span>}
+        </div>
+      ))}
+      {itens.length > LIMITE && (
+        <div style={{ textAlign: "center", marginTop: 10 }}>
+          <button onClick={() => setExpandido(e => !e)} style={chipBtnStyle}>
+            {expandido ? "Mostrar menos" : `Ver todos (${itens.length})`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PositivacaoTab() {
+  const { dados, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
+  const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
+  const periodosFechados = periodos.filter(p => p !== chaveMesAtualReal());
+  const [mesRef, setMesRef] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
+
+  function toggleGrupoFiltro(g) {
+    setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+  function marcarPadraoGrupos() { setGruposSel(gruposPadrao(grupos)); }
+  function marcarTodosGrupos() { setGruposSel([...grupos]); }
+  function desmarcarTodosGrupos() { setGruposSel([]); }
+
+  const clientesFiltrados = [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
+
+  const classificacao = useMemo(() => {
+    const positivados = [], semCompraMes = [], semCompra2Meses = [], nuncaComprou = [];
+    if (!mesRef) return { positivados, semCompraMes, semCompra2Meses, nuncaComprou };
+    const mesAnteriorRef = chaveMesAnterior(mesRef);
+
+    clientesFiltrados.forEach(codigo => {
+      const comprasAteRef = (dados[codigo] || []).filter(r => r.chave <= mesRef && r.faturamento > 0);
+      if (!comprasAteRef.length) {
+        nuncaComprou.push({ codigo, ultimaCompra: null });
+        return;
+      }
+      const ultima = comprasAteRef[comprasAteRef.length - 1];
+      if (ultima.chave === mesRef) positivados.push({ codigo, ultimaCompra: ultima.chave });
+      else if (ultima.chave === mesAnteriorRef) semCompraMes.push({ codigo, ultimaCompra: ultima.chave });
+      else semCompra2Meses.push({ codigo, ultimaCompra: ultima.chave });
+    });
+
+    const porNome = (a, b) => (labelDoCliente[a.codigo] || "").localeCompare(labelDoCliente[b.codigo] || "");
+    return {
+      positivados: positivados.sort(porNome),
+      semCompraMes: semCompraMes.sort(porNome),
+      semCompra2Meses: semCompra2Meses.sort((a, b) => (a.ultimaCompra || "").localeCompare(b.ultimaCompra || "")),
+      nuncaComprou: nuncaComprou.sort(porNome),
+    };
+  }, [clientesFiltrados, dados, mesRef, labelDoCliente]);
+
+  const totalFiltrado = clientesFiltrados.length;
+
+  return (
+    <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Positivação" />
+      </div>
+
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês de referência:</span>
+          <MonthPicker periodosDisponiveis={periodosFechados} valor={mesRef} onSelecionar={setMesRef} placeholder="Selecionar mês" />
+        </div>
+
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Layers size={13} /> Filtrar por grupo ({totalFiltrado} clientes selecionados):
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button onClick={marcarPadraoGrupos} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
+          <button onClick={marcarTodosGrupos} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosGrupos} style={chipBtnStyle}>Desmarcar todos</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {grupos.map(g => (
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
+              {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {!mesRef && (
+        <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>Selecione um mês de referência.</div>
+      )}
+
+      {mesRef && (
+        <>
+          <Section title={`Positivação de Clientes · ${labelMes(mesRef)}`} icon={<Trophy size={18} color="#C69700" />}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+              <CardResumoPositivacao titulo="Positivados" cor="#4caf6b" icone="🟢" quantidade={classificacao.positivados.length} total={totalFiltrado} />
+              <CardResumoPositivacao titulo="Sem compra no mês" cor="#e8c400" icone="🟡" quantidade={classificacao.semCompraMes.length} total={totalFiltrado} />
+              <CardResumoPositivacao titulo="Sem compra há 2+ meses" cor="#e0645a" icone="🔴" quantidade={classificacao.semCompra2Meses.length} total={totalFiltrado} />
+              <CardResumoPositivacao titulo="Nunca comprou" cor="#888" icone="⚪" quantidade={classificacao.nuncaComprou.length} total={totalFiltrado} />
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <ListaPositivacao titulo="🟢 Positivados" cor="#4caf6b" itens={classificacao.positivados} labelDoCliente={labelDoCliente} mostrarData={false} />
+              <ListaPositivacao titulo="🟡 Sem compra no mês" cor="#e8c400" itens={classificacao.semCompraMes} labelDoCliente={labelDoCliente} mostrarData />
+              <ListaPositivacao titulo="🔴 Sem compra há 2+ meses" cor="#e0645a" itens={classificacao.semCompra2Meses} labelDoCliente={labelDoCliente} mostrarData />
+              <ListaPositivacao titulo="⚪ Nunca comprou" cor="#888" itens={classificacao.nuncaComprou} labelDoCliente={labelDoCliente} mostrarData={false} />
+            </div>
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ProdutosTab() {
   const { produtosDados, produtosNomes: todosProdutosNomes, produtosPeriodos } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
@@ -3815,6 +3953,9 @@ export default function App() {
                 <button onClick={() => setTab("produtos")} style={tabStyle(tab === "produtos")}>
                   <Package size={14} /> Produtos
                 </button>
+                <button onClick={() => setTab("positivacao")} style={tabStyle(tab === "positivacao")}>
+                  <Trophy size={14} /> Positivação
+                </button>
                 {isAdmin && (
                   <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
                     <Globe size={14} /> Global
@@ -3827,6 +3968,7 @@ export default function App() {
               {tab === "dashboard" && <DashboardTab />}
               {tab === "mes" && <MesTab />}
               {tab === "produtos" && <ProdutosTab />}
+              {tab === "positivacao" && <PositivacaoTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}
