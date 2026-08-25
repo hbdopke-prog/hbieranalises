@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.1";
+const APP_VERSION = "v8.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3260,9 +3260,23 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
   const [expandido, setExpandido] = useState(false);
   const LIMITE = 20;
   const visiveis = expandido ? itens : itens.slice(0, LIMITE);
+
+  // resumo automático: total de litros/faturamento dos últimos pedidos desse grupo, quantos
+  // clientes entram nessa soma, e o mês (se todo mundo tiver a última compra no mesmo mês)
+  const itensComCompra = itens.filter(i => i.ultimaCompra);
+  const totalFat = itensComCompra.reduce((s, i) => s + (i.ultimoFat || 0), 0);
+  const totalLit = itensComCompra.reduce((s, i) => s + (i.ultimoLit || 0), 0);
+  const mesesUnicos = new Set(itensComCompra.map(i => i.ultimaCompra));
+  const mesResumo = mesesUnicos.size === 1 ? labelMes([...mesesUnicos][0]) : null;
+
   return (
     <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 14, flex: "1 1 280px", minWidth: 280 }}>
-      <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo} ({itens.length})</div>
+      <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{titulo} ({itens.length})</div>
+      {itensComCompra.length > 0 && (
+        <div style={{ color: "#888", fontSize: 11, marginBottom: 10 }}>
+          Total: {fmtLitros(totalLit)} · {fmtMoeda(totalFat)} ({itensComCompra.length} cliente{itensComCompra.length > 1 ? "s" : ""}{mesResumo ? `, ${mesResumo}` : ""})
+        </div>
+      )}
       {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Nenhum cliente nesse grupo.</div>}
       {visiveis.map(({ codigo, ultimaCompra, ultimoFat, ultimoLit }) => (
         <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #2a2a28", fontSize: 12 }}>
