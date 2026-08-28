@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.2";
+const APP_VERSION = "v8.3";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2384,6 +2384,35 @@ function DashboardTab() {
     });
   }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo, inicioHeatmapGrupo, fimHeatmapGrupo, gruposSel]);
 
+  // gráfico do heatmap por grupo: por padrão mostra TODOS os grupos que estão na tabela acima;
+  // null = "todos automaticamente" (segue a tabela se o filtro mudar), array = seleção manual
+  const [gruposGraficoOverride, setGruposGraficoOverride] = useState(null);
+  const categoriasDisponiveisGrafico = linhasHeatmap.map(l => l.categoria);
+  const gruposNoGrafico = gruposGraficoOverride || categoriasDisponiveisGrafico;
+
+  function toggleGrupoGrafico(cat) {
+    setGruposGraficoOverride(prev => {
+      const base = prev || categoriasDisponiveisGrafico;
+      return base.includes(cat) ? base.filter(x => x !== cat) : [...base, cat];
+    });
+  }
+  function marcarTodosGrafico() { setGruposGraficoOverride(null); }
+  function desmarcarTodosGrafico() { setGruposGraficoOverride([]); }
+
+  const dadosGraficoHeatmap = useMemo(() => {
+    const colunas = linhasHeatmap[0]?.valores.map(v => v.periodo) || [];
+    return colunas.map(periodo => {
+      const linha = { mes: labelMes(periodo) };
+      linhasHeatmap.forEach(l => {
+        if (gruposNoGrafico.includes(l.categoria)) {
+          const item = l.valores.find(v => v.periodo === periodo);
+          linha[l.categoria] = item ? item.valor : null;
+        }
+      });
+      return linha;
+    });
+  }, [linhasHeatmap, gruposNoGrafico]);
+
   return (
     <div>
       <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
@@ -2438,6 +2467,43 @@ function DashboardTab() {
           também. A última coluna pode ser um mês ainda em andamento — compare com cautela. Só mostra os grupos marcados no filtro lá em cima.
         </div>
         <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
+
+        <div style={{ marginTop: 20 }}>
+          <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+            <Layers size={13} /> Grupos no gráfico ({gruposNoGrafico.length} de {categoriasDisponiveisGrafico.length}):
+          </div>
+          <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <button onClick={marcarTodosGrafico} style={chipBtnStyle}>Mostrar todos automaticamente</button>
+            <button onClick={desmarcarTodosGrafico} style={chipBtnStyle}>Desmarcar todos</button>
+          </div>
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+            {categoriasDisponiveisGrafico.map(cat => (
+              <label key={cat} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+                <input type="checkbox" checked={gruposNoGrafico.includes(cat)} onChange={() => toggleGrupoGrafico(cat)} />
+                {cat}
+              </label>
+            ))}
+          </div>
+
+          {gruposNoGrafico.length === 0 ? (
+            <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+              Marque pelo menos um grupo pra ver o gráfico.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={dadosGraficoHeatmap}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
+                <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {gruposNoGrafico.map((cat, idx) => (
+                  <Line key={cat} type="monotone" dataKey={cat} name={cat} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </Section>
 
       {temDataCriacao && (
