@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.3";
+const APP_VERSION = "v8.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2399,6 +2399,46 @@ function DashboardTab() {
   function marcarTodosGrafico() { setGruposGraficoOverride(null); }
   function desmarcarTodosGrafico() { setGruposGraficoOverride([]); }
 
+  // modo "agrupado": junta vários grupos numa linha só do gráfico (soma), você cria quantos
+  // agrupamentos quiser (ex: "Varejo total" juntando 1./1.2/1.3/1.4)
+  const [modoGraficoHeatmap, setModoGraficoHeatmap] = useState("individual"); // 'individual' | 'agrupado'
+  const [agrupamentosGrafico, setAgrupamentosGrafico] = useState([]);
+  const proximoIdAgrupamentoRef = useRef(1);
+
+  function adicionarAgrupamento() {
+    const id = proximoIdAgrupamentoRef.current++;
+    setAgrupamentosGrafico(prev => [...prev, { id, nome: `Agrupamento ${prev.length + 1}`, grupos: [] }]);
+  }
+  function removerAgrupamento(id) {
+    setAgrupamentosGrafico(prev => prev.filter(a => a.id !== id));
+  }
+  function renomearAgrupamento(id, nome) {
+    setAgrupamentosGrafico(prev => prev.map(a => a.id === id ? { ...a, nome } : a));
+  }
+  function toggleGrupoNoAgrupamento(id, grupoNome) {
+    setAgrupamentosGrafico(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      return { ...a, grupos: a.grupos.includes(grupoNome) ? a.grupos.filter(g => g !== grupoNome) : [...a.grupos, grupoNome] };
+    }));
+  }
+
+  const dadosGraficoAgrupado = useMemo(() => {
+    const colunas = linhasHeatmap[0]?.valores.map(v => v.periodo) || [];
+    return colunas.map(periodo => {
+      const linha = { mes: labelMes(periodo) };
+      agrupamentosGrafico.forEach(ag => {
+        let soma = 0, achou = false;
+        ag.grupos.forEach(catNome => {
+          const l = linhasHeatmap.find(x => x.categoria === catNome);
+          const item = l ? l.valores.find(v => v.periodo === periodo) : null;
+          if (item) { soma += item.valor || 0; achou = true; }
+        });
+        linha[`ag_${ag.id}`] = achou ? soma : null;
+      });
+      return linha;
+    });
+  }, [linhasHeatmap, agrupamentosGrafico]);
+
   const dadosGraficoHeatmap = useMemo(() => {
     const colunas = linhasHeatmap[0]?.valores.map(v => v.periodo) || [];
     return colunas.map(periodo => {
@@ -2469,39 +2509,91 @@ function DashboardTab() {
         <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
 
         <div style={{ marginTop: 20 }}>
-          <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
-            <Layers size={13} /> Grupos no gráfico ({gruposNoGrafico.length} de {categoriasDisponiveisGrafico.length}):
-          </div>
-          <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-            <button onClick={marcarTodosGrafico} style={chipBtnStyle}>Mostrar todos automaticamente</button>
-            <button onClick={desmarcarTodosGrafico} style={chipBtnStyle}>Desmarcar todos</button>
-          </div>
-          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-            {categoriasDisponiveisGrafico.map(cat => (
-              <label key={cat} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
-                <input type="checkbox" checked={gruposNoGrafico.includes(cat)} onChange={() => toggleGrupoGrafico(cat)} />
-                {cat}
-              </label>
-            ))}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <button onClick={() => setModoGraficoHeatmap("individual")} style={modoBtnStyle(modoGraficoHeatmap === "individual", "#4a90d9")}>
+              Grupos individuais
+            </button>
+            <button onClick={() => setModoGraficoHeatmap("agrupado")} style={modoBtnStyle(modoGraficoHeatmap === "agrupado", "#4a90d9")}>
+              Agrupar grupos
+            </button>
           </div>
 
-          {gruposNoGrafico.length === 0 ? (
-            <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
-              Marque pelo menos um grupo pra ver o gráfico.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={dadosGraficoHeatmap}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
-                <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-                <Legend content={<LegendaBranca />} />
-                {gruposNoGrafico.map((cat, idx) => (
-                  <Line key={cat} type="monotone" dataKey={cat} name={cat} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+          {modoGraficoHeatmap === "individual" ? (
+            <>
+              <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+                <Layers size={13} /> Grupos no gráfico ({gruposNoGrafico.length} de {categoriasDisponiveisGrafico.length}):
+              </div>
+              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button onClick={marcarTodosGrafico} style={chipBtnStyle}>Mostrar todos automaticamente</button>
+                <button onClick={desmarcarTodosGrafico} style={chipBtnStyle}>Desmarcar todos</button>
+              </div>
+              <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+                {categoriasDisponiveisGrafico.map(cat => (
+                  <label key={cat} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+                    <input type="checkbox" checked={gruposNoGrafico.includes(cat)} onChange={() => toggleGrupoGrafico(cat)} />
+                    {cat}
+                  </label>
                 ))}
-              </LineChart>
-            </ResponsiveContainer>
+              </div>
+
+              {gruposNoGrafico.length === 0 ? (
+                <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+                  Marque pelo menos um grupo pra ver o gráfico.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={dadosGraficoHeatmap}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                    <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
+                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                    <Legend content={<LegendaBranca />} />
+                    {gruposNoGrafico.map((cat, idx) => (
+                      <Line key={cat} type="monotone" dataKey={cat} name={cat} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <span style={{ color: "#888", fontSize: 12 }}>
+                  Cada agrupamento soma os grupos marcados nele (ex: "Varejo total" juntando 1., 1.2, 1.3 e 1.4) e vira uma linha só no gráfico.
+                </span>
+                <button onClick={adicionarAgrupamento} style={chipBtnStyle}>+ Novo agrupamento</button>
+              </div>
+
+              {agrupamentosGrafico.length > 0 && (
+                <div className="no-print" style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+                  {agrupamentosGrafico.map((ag, idx) => (
+                    <AgrupamentoGraficoCard key={ag.id} agrupamento={ag} opcoes={categoriasDisponiveisGrafico} cor={corDoAno(idx)}
+                      onRenomear={nome => renomearAgrupamento(ag.id, nome)}
+                      onToggleGrupo={grupoNome => toggleGrupoNoAgrupamento(ag.id, grupoNome)}
+                      onRemover={() => removerAgrupamento(ag.id)} />
+                  ))}
+                </div>
+              )}
+
+              {agrupamentosGrafico.length === 0 ? (
+                <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+                  Clique em "+ Novo agrupamento" pra começar (ex: juntar todos os grupos de Varejo numa linha só).
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={320}>
+                  <LineChart data={dadosGraficoAgrupado}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                    <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
+                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                    <Legend content={<LegendaBranca />} />
+                    {agrupamentosGrafico.map((ag, idx) => (
+                      <Line key={ag.id} type="monotone" dataKey={`ag_${ag.id}`} name={ag.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </>
           )}
         </div>
       </Section>
@@ -2993,6 +3085,29 @@ function GlobalTab() {
 
 // Card de um "grupo de comparação": pode ter 1 ou vários clientes (somados), com nome editável
 // e busca própria pra adicionar clientes só a esse grupo.
+// Card de um "agrupamento" de grupos (junta vários grupos numa linha só do gráfico, somados)
+function AgrupamentoGraficoCard({ agrupamento, opcoes, cor, onRenomear, onToggleGrupo, onRemover }) {
+  return (
+    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 12, background: "#1D1D1B", flex: "1 1 260px", minWidth: 240 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <input value={agrupamento.nome} onChange={e => onRenomear(e.target.value)}
+          style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${cor}`, color: cor, fontWeight: 700, fontSize: 13, padding: "3px 2px", outline: "none" }} />
+        <button onClick={onRemover} style={{ background: "transparent", border: "1px solid #444", color: "#888", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>
+          Remover
+        </button>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px" }}>
+        {opcoes.map(g => (
+          <label key={g} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={agrupamento.grupos.includes(g)} onChange={() => onToggleGrupo(g)} />
+            {g}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRemoverCliente, onRemoverGrupo, nomesVisiveis, labelDoCliente }) {
   const [busca, setBusca] = useState("");
   const sugestoes = useMemo(() => {
