@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.4";
+const APP_VERSION = "v8.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -2384,6 +2384,31 @@ function DashboardTab() {
     });
   }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo, inicioHeatmapGrupo, fimHeatmapGrupo, gruposSel]);
 
+  // histórico INTEIRO por grupo (todos os meses, não só a janela selecionada) - pra dar pra
+  // comparar com mês/ano anterior mesmo quando a janela mostrada for curta
+  const dadosCompletosHeatmapGrupo = useMemo(() => {
+    const nomesComGrupo = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
+    const semGrupo = nomes.filter(n => !nomesComGrupo.has(n));
+    const categorias = grupos.filter(g => gruposSel.includes(g));
+    if (semGrupo.length) categorias.push("Sem grupo");
+
+    const mapa = {};
+    categorias.forEach(cat => {
+      const clientesCat = cat === "Sem grupo" ? semGrupo : clientesPorGrupo[cat];
+      const porChave = {};
+      periodos.forEach(p => {
+        let fat = 0, lit = 0;
+        clientesCat.forEach(nome => {
+          const row = (dados[nome] || []).find(r => r.chave === p);
+          if (row) { fat += row.faturamento; lit += row.litros; }
+        });
+        porChave[p] = metricaHeatmapGrupo === "litros" ? lit : fat;
+      });
+      mapa[cat] = porChave;
+    });
+    return mapa;
+  }, [grupos, clientesPorGrupo, nomes, periodos, dados, metricaHeatmapGrupo, gruposSel]);
+
   // gráfico do heatmap por grupo: por padrão mostra TODOS os grupos que estão na tabela acima;
   // null = "todos automaticamente" (segue a tabela se o filtro mudar), array = seleção manual
   const [gruposGraficoOverride, setGruposGraficoOverride] = useState(null);
@@ -2506,7 +2531,7 @@ function DashboardTab() {
           valor (mês a mês e na Média/mês) compara com o mesmo mês/período do ano anterior. Passe o mouse numa célula pra ver a diferença em número
           também. A última coluna pode ser um mês ainda em andamento — compare com cautela. Só mostra os grupos marcados no filtro lá em cima.
         </div>
-        <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} />
+        <TabelaHeatmapCategoria linhas={linhasHeatmap} rotuloColuna="Grupo" unidade={metricaHeatmapGrupo === "litros" ? "L" : undefined} dadosCompletos={dadosCompletosHeatmapGrupo} />
 
         <div style={{ marginTop: 20 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
