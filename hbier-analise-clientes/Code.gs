@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.6
+ * Versão: v2.7
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -64,6 +64,14 @@
  * e "Descrição" em alguma coluna, e uma coluna por mês. Usa a coluna "Descrição"
  * como identificador do tipo de produto. Sem filtro por canal/grupo de cliente
  * nessa versão (o relatório não traz essa informação por linha).
+ *
+ * ESTOQUE (v2.7):
+ * Aba opcional "estoque" - uma linha por produto, formato simples (não é série
+ * mensal, é uma foto do estoque atual): colunas "Produto", e pelo menos uma de
+ * "Estoque (Unidades)" / "Unidades" ou "Estoque (Litros)" / "Litros" (procura pela
+ * palavra "unidade"/"litro" no cabeçalho, não precisa ser o nome exato). O nome do
+ * produto precisa bater com o que aparece em produtos_faturamento/produtos_litros
+ * (a coluna "Descrição") pra dar pra cruzar com as vendas.
  */
 
 const SHEET_FATURAMENTO = "faturamento";
@@ -71,6 +79,7 @@ const SHEET_LITROS = "litros";
 const SHEET_USUARIOS = "usuarios";
 const SHEET_PRODUTOS_FATURAMENTO = "produtos_faturamento";
 const SHEET_PRODUTOS_LITROS = "produtos_litros";
+const SHEET_ESTOQUE = "estoque";
 
 function doGet(e) {
   try {
@@ -90,15 +99,74 @@ function doGet(e) {
       produtosPorTipo = [];
     }
 
+    // estoque também é opcional
+    let estoque = [];
+    try {
+      estoque = lerEstoque(ss);
+    } catch (errEstoque) {
+      estoque = [];
+    }
+
     return jsonResponse({
       ok: true,
       dados: combinado,
       produtosPorTipo: produtosPorTipo,
+      estoque: estoque,
       atualizadoEm: new Date().toISOString(),
     });
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+// Lê a aba "estoque" (uma linha por produto, foto do estoque atual - não é série mensal).
+// Acha a linha de cabeçalho procurando "produto" numa coluna e "unidade"/"litro" em outras.
+function lerEstoque(ss) {
+  const sheet = ss.getSheetByName(SHEET_ESTOQUE);
+  if (!sheet) return [];
+
+  const valores = sheet.getDataRange().getValues();
+  if (valores.length < 2) return [];
+
+  let linhaCabecalho = -1, idxProduto = -1, idxUnidades = -1, idxLitros = -1;
+  const limiteLinhas = Math.min(valores.length, 10);
+  for (let i = 0; i < limiteLinhas; i++) {
+    let p = -1, u = -1, l = -1;
+    valores[i].forEach(function (celula, c) {
+      const texto = String(celula || "").trim().toLowerCase();
+      if (p === -1 && texto === "produto") p = c;
+      if (u === -1 && /unidade/.test(texto)) u = c;
+      if (l === -1 && /litro/.test(texto)) l = c;
+    });
+    if (p !== -1 && (u !== -1 || l !== -1)) {
+      linhaCabecalho = i; idxProduto = p; idxUnidades = u; idxLitros = l;
+      break;
+    }
+  }
+  if (linhaCabecalho === -1) return [];
+
+  function paraNumeroEstoque(bruto) {
+    if (typeof bruto === "number") return bruto;
+    if (bruto === "" || bruto === null || bruto === undefined) return null;
+    let texto = String(bruto).trim();
+    if (texto === "" || texto === "-") return null;
+    texto = texto.replace(/[R$\s]/g, "");
+    if (texto.indexOf(",") !== -1) texto = texto.replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(texto);
+    return isNaN(n) ? null : n;
+  }
+
+  const linhas = [];
+  for (let i = linhaCabecalho + 1; i < valores.length; i++) {
+    const produto = String(valores[i][idxProduto] || "").trim();
+    if (!produto) continue;
+    linhas.push({
+      produto: produto,
+      unidades: idxUnidades !== -1 ? paraNumeroEstoque(valores[i][idxUnidades]) : null,
+      litros: idxLitros !== -1 ? paraNumeroEstoque(valores[i][idxLitros]) : null,
+    });
+  }
+  return linhas;
 }
 
 // Lê o relatório "mês a mês por produtos" (mesmo formato largo do relatório de

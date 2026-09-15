@@ -55,6 +55,7 @@ Crie uma aba chamada **`usuarios`** com estas colunas:
 ## 3. Backend (Google Apps Script)
 
 - **Produtos (opcional)**: crie duas abas, **`produtos_faturamento`** e **`produtos_litros`**, no mesmo formato "largo" dos relatórios de cliente (uma linha por produto, cabeçalho com "Produto" numa coluna e "Descrição" em outra, e uma coluna por mês). O app usa a coluna "Descrição" como o nome do tipo de produto. Sem essas abas, a aba "Produtos" do app fica vazia, mas o resto do app funciona normal. Não tem filtro por canal/grupo de cliente nessa aba (o relatório não traz essa informação por linha de produto).
+- **Estoque (opcional)**: crie a aba **`estoque`**, uma linha por produto (foto do estoque atual, não é série mensal), com a coluna "Produto" e pelo menos uma de "Estoque (Unidades)"/"Unidades" ou "Estoque (Litros)"/"Litros". O nome do produto precisa bater com a coluna "Descrição" de `produtos_faturamento`/`produtos_litros`. Sem essa aba, a aba "Estoque" do app fica vazia, mas o resto do app funciona normal.
 
 1. Na planilha: **Extensões > Apps Script**.
 2. Apague o conteúdo padrão e cole o arquivo `Code.gs` (raiz deste projeto).

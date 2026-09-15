@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
   PieChart, Pie,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package, Boxes } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.5";
+const APP_VERSION = "v8.6";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -295,7 +295,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosPorTipo) {
+function processarDados(linhas, produtosPorTipo, linhasEstoque) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -359,10 +359,17 @@ function processarDados(linhas, produtosPorTipo) {
   Object.values(porProduto).forEach(rows => rows.forEach(r => produtosPeriodosSet.add(r.chave)));
   const produtosPeriodos = [...produtosPeriodosSet].sort();
 
+  // estoque: mapa simples produto -> {unidades, litros} (não é série mensal, é a foto atual)
+  const estoquePorProduto = {};
+  (linhasEstoque || []).forEach(r => {
+    estoquePorProduto[r.produto] = { unidades: r.unidades, litros: r.litros };
+  });
+
   return {
     dados: porCliente, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, grupoDoCliente,
     labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
     produtosDados: porProduto, produtosNomes, produtosPeriodos,
+    estoquePorProduto,
   };
 }
 
@@ -3506,6 +3513,160 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
   );
 }
 
+// Estima a "taxa diária de venda" (litros/dia) de um produto, olhando os últimos N meses de
+// dados mensais - já que os dados são mensais, não diários, isso é uma ESTIMATIVA (mesma
+// lógica da Média 7d: total vendido no período ÷ dias corridos do período).
+function taxaDiariaVenda(rows, chavesPeriodo) {
+  let totalLitros = 0, totalDias = 0;
+  chavesPeriodo.forEach(chave => {
+    const row = (rows || []).find(r => r.chave === chave);
+    totalLitros += row ? row.litros : 0;
+    totalDias += diasNoMes(chave);
+  });
+  return totalDias ? totalLitros / totalDias : 0;
+}
+
+function EstoqueTab() {
+  const { produtosDados, produtosNomes, produtosPeriodos, estoquePorProduto } = useData();
+  const [buscaTipo, setBuscaTipo] = useState("");
+  const [baseDestaque, setBaseDestaque] = useState("30"); // '30' | '60' | '90' | '120'
+  const [limiteAlerta, setLimiteAlerta] = useState(7);
+
+  const produtosComEstoque = useMemo(
+    () => produtosNomes.filter(nome => estoquePorProduto[nome] != null),
+    [produtosNomes, estoquePorProduto]
+  );
+
+  const linhas = useMemo(() => {
+    return produtosComEstoque.map(nome => {
+      const estoque = estoquePorProduto[nome] || {};
+      const rows = produtosDados[nome] || [];
+      const bases = {};
+      [30, 60, 90, 120].forEach(dias => {
+        const nMeses = Math.max(1, Math.round(dias / 30));
+        const chavesRecentes = produtosPeriodos.slice(-nMeses);
+        const taxa = taxaDiariaVenda(rows, chavesRecentes);
+        bases[dias] = {
+          taxaDiaria: taxa,
+          diasEstoque: (taxa > 0 && estoque.litros != null) ? estoque.litros / taxa : null,
+        };
+      });
+      return { nome, estoqueUnidades: estoque.unidades, estoqueLitros: estoque.litros, bases };
+    });
+  }, [produtosComEstoque, estoquePorProduto, produtosDados, produtosPeriodos]);
+
+  const linhasExibidas = buscaTipo.trim()
+    ? linhas.filter(l => l.nome.toLowerCase().includes(buscaTipo.toLowerCase()))
+    : linhas;
+
+  const linhasOrdenadas = [...linhasExibidas].sort((a, b) => {
+    const da = a.bases[baseDestaque].diasEstoque;
+    const db = b.bases[baseDestaque].diasEstoque;
+    if (da == null && db == null) return 0;
+    if (da == null) return 1;
+    if (db == null) return -1;
+    return da - db;
+  });
+
+  const semDadosDeEstoqueNenhum = produtosNomes.length > 0 && produtosComEstoque.length === 0;
+
+  return (
+    <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Estoque" />
+      </div>
+
+      {produtosNomes.length === 0 && (
+        <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
+          Nenhum dado de produtos encontrado ainda. Essa aba depende das abas de produtos (faturamento/litros) já configuradas.
+        </div>
+      )}
+
+      {semDadosDeEstoqueNenhum && (
+        <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
+          Nenhum dado de estoque encontrado ainda. Crie a aba <strong style={{ color: "#C69700" }}>estoque</strong> na planilha,
+          com colunas "Produto" e pelo menos uma de "Estoque (Unidades)" ou "Estoque (Litros)" — o nome do produto precisa bater
+          com o que já aparece em produtos_faturamento/produtos_litros.
+        </div>
+      )}
+
+      {produtosComEstoque.length > 0 && (
+        <Section title="Tempo de Estoque" icon={<Package size={18} color="#C69700" />}>
+          <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+              <span style={{ color: "#888", fontSize: 12 }}>Base em destaque (estimativa de venda/dia):</span>
+              {["30", "60", "90", "120"].map(d => (
+                <button key={d} onClick={() => setBaseDestaque(d)} style={modoBtnStyle(baseDestaque === d, "#C69700")}>
+                  {d} dias
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>Alertar quando dias de estoque forem menos que:</span>
+              <input type="number" min="0" max="90" value={limiteAlerta} onChange={e => setLimiteAlerta(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 60, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+              <span style={{ color: "#666", fontSize: 11 }}>dias</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+              <Search size={14} color="#C69700" />
+              <input placeholder="Buscar um produto específico..." value={buscaTipo} onChange={e => setBuscaTipo(e.target.value)}
+                style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+            </div>
+          </div>
+
+          <div style={{ color: "#888", fontSize: 11, marginBottom: 12 }}>
+            "Vendido/dia" e "Dias de estoque" são ESTIMATIVAS (os dados de venda são mensais, não diários): total vendido no período
+            ÷ dias corridos do período. Ordenado do menor pro maior "dias de estoque" na base em destaque (quem vai acabar primeiro, primeiro).
+            Produto sem nenhuma venda no período mostra "-" em vez de dias de estoque.
+          </div>
+
+          <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Produto</th>
+                  <th style={thStyle}>Estoque (un.)</th>
+                  <th style={thStyle}>Estoque (L)</th>
+                  {[30, 60, 90, 120].map(d => (
+                    <th key={d} style={{ ...thStyle, color: String(d) === baseDestaque ? "#C69700" : "#fff" }}>Dias estoque ({d}d)</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {linhasOrdenadas.map(l => {
+                  const destaqueVal = l.bases[baseDestaque].diasEstoque;
+                  const emAlerta = destaqueVal != null && destaqueVal < limiteAlerta;
+                  return (
+                    <tr key={l.nome}>
+                      <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{l.nome}</td>
+                      <td style={tdStyle}>{l.estoqueUnidades != null ? l.estoqueUnidades.toLocaleString("pt-BR") : "-"}</td>
+                      <td style={tdStyle}>{l.estoqueLitros != null ? fmtLitros(l.estoqueLitros) : "-"}</td>
+                      {[30, 60, 90, 120].map(d => {
+                        const v = l.bases[d].diasEstoque;
+                        const destaque = String(d) === baseDestaque;
+                        const alerta = v != null && v < limiteAlerta;
+                        return (
+                          <td key={d} title={`Estimativa de venda: ${fmtLitros(l.bases[d].taxaDiaria)}/dia`} style={{
+                            ...tdStyle, fontWeight: destaque ? 800 : 400,
+                            color: alerta ? "#e0645a" : (destaque ? "#C69700" : "#ddd"),
+                            background: destaque ? (alerta ? "rgba(224,101,90,0.12)" : "rgba(198,151,0,0.06)") : "transparent",
+                          }}>
+                            {v != null ? `${v.toFixed(1)} dias` : "-"}{alerta ? " ⚠" : ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
+
 function PositivacaoTab() {
   const { dados, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
@@ -4116,7 +4277,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || []));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || []));
         setStatus("ready");
       })
       .catch(err => {
@@ -4183,6 +4344,9 @@ export default function App() {
                 <button onClick={() => setTab("positivacao")} style={tabStyle(tab === "positivacao")}>
                   <Trophy size={14} /> Positivação
                 </button>
+                <button onClick={() => setTab("estoque")} style={tabStyle(tab === "estoque")}>
+                  <Boxes size={14} /> Estoque
+                </button>
                 {isAdmin && (
                   <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
                     <Globe size={14} /> Global
@@ -4196,6 +4360,7 @@ export default function App() {
               {tab === "mes" && <MesTab />}
               {tab === "produtos" && <ProdutosTab />}
               {tab === "positivacao" && <PositivacaoTab />}
+              {tab === "estoque" && <EstoqueTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}
