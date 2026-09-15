@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.6";
+const APP_VERSION = "v8.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -189,6 +189,18 @@ function litrosPorPallet(nomeProduto) {
   if (/500\s*ML/.test(n)) return 1050;
   if (/\b2\s*L\b/.test(n)) return 1152;
   if (/\b1\s*L\b/.test(n)) return 1080;
+  return null;
+}
+
+// Quantos litros tem UMA unidade (garrafa/embalagem), de acordo com o tamanho no nome do
+// produto. Usado pra converter estoque reportado em unidades pra litros automaticamente,
+// quando a planilha de estoque não traz litros direto (comum pra PET, que é contado em
+// garrafas, diferente do Chope que já vem em litros).
+function litrosPorUnidade(nomeProduto) {
+  const n = (nomeProduto || "").toUpperCase();
+  if (/500\s*ML/.test(n)) return 0.5;
+  if (/\b2\s*L\b/.test(n)) return 2;
+  if (/\b1\s*L\b/.test(n)) return 1;
   return null;
 }
 
@@ -3527,10 +3539,20 @@ function taxaDiariaVenda(rows, chavesPeriodo) {
 }
 
 function EstoqueTab() {
-  const { produtosDados, produtosNomes, produtosPeriodos, estoquePorProduto } = useData();
+  const { produtosDados, produtosNomes: todosProdutosNomes, produtosPeriodos, estoquePorProduto } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
   const [baseDestaque, setBaseDestaque] = useState("30"); // '30' | '60' | '90' | '120'
   const [limiteAlerta, setLimiteAlerta] = useState(7);
+
+  // filtro por embalagem: Chope / Pet / Outros (mesmo padrão da aba Produtos)
+  const [embalagensSel, setEmbalagensSel] = useState(["chope", "pet", "outros"]);
+  function toggleEmbalagem(e) {
+    setEmbalagensSel(prev => prev.includes(e) ? prev.filter(x => x !== e) : [...prev, e]);
+  }
+  const produtosNomes = useMemo(
+    () => todosProdutosNomes.filter(nome => embalagensSel.includes(classificarEmbalagem(nome))),
+    [todosProdutosNomes, embalagensSel]
+  );
 
   const produtosComEstoque = useMemo(
     () => produtosNomes.filter(nome => estoquePorProduto[nome] != null),
@@ -3540,6 +3562,14 @@ function EstoqueTab() {
   const linhas = useMemo(() => {
     return produtosComEstoque.map(nome => {
       const estoque = estoquePorProduto[nome] || {};
+      // se a planilha não trouxe litros direto (comum pra PET, que é contado em unidades),
+      // converte automaticamente pelo tamanho da embalagem no nome do produto
+      const litrosPorUnid = litrosPorUnidade(nome);
+      const estoqueLitrosEfetivo = estoque.litros != null
+        ? estoque.litros
+        : (estoque.unidades != null && litrosPorUnid != null ? estoque.unidades * litrosPorUnid : null);
+      const litrosConvertidos = estoque.litros == null && estoqueLitrosEfetivo != null;
+
       const rows = produtosDados[nome] || [];
       const bases = {};
       [30, 60, 90, 120].forEach(dias => {
@@ -3548,10 +3578,10 @@ function EstoqueTab() {
         const taxa = taxaDiariaVenda(rows, chavesRecentes);
         bases[dias] = {
           taxaDiaria: taxa,
-          diasEstoque: (taxa > 0 && estoque.litros != null) ? estoque.litros / taxa : null,
+          diasEstoque: (taxa > 0 && estoqueLitrosEfetivo != null) ? estoqueLitrosEfetivo / taxa : null,
         };
       });
-      return { nome, estoqueUnidades: estoque.unidades, estoqueLitros: estoque.litros, bases };
+      return { nome, estoqueUnidades: estoque.unidades, estoqueLitros: estoqueLitrosEfetivo, litrosConvertidos, bases };
     });
   }, [produtosComEstoque, estoquePorProduto, produtosDados, produtosPeriodos]);
 
@@ -3575,6 +3605,28 @@ function EstoqueTab() {
       <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
         <BotaoImprimir label="Imprimir Estoque" />
       </div>
+
+      {todosProdutosNomes.length > 0 && (
+        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+          <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+            <Package size={13} /> Embalagem ({produtosNomes.length} de {todosProdutosNomes.length} produtos):
+          </div>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={embalagensSel.includes("chope")} onChange={() => toggleEmbalagem("chope")} />
+              🍺 Chope
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={embalagensSel.includes("pet")} onChange={() => toggleEmbalagem("pet")} />
+              🧴 Pet
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={embalagensSel.includes("outros")} onChange={() => toggleEmbalagem("outros")} />
+              📦 Outros (garrafa, lata, etc.)
+            </label>
+          </div>
+        </div>
+      )}
 
       {produtosNomes.length === 0 && (
         <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
@@ -3617,7 +3669,9 @@ function EstoqueTab() {
           <div style={{ color: "#888", fontSize: 11, marginBottom: 12 }}>
             "Vendido/dia" e "Dias de estoque" são ESTIMATIVAS (os dados de venda são mensais, não diários): total vendido no período
             ÷ dias corridos do período. Ordenado do menor pro maior "dias de estoque" na base em destaque (quem vai acabar primeiro, primeiro).
-            Produto sem nenhuma venda no período mostra "-" em vez de dias de estoque.
+            Produto sem nenhuma venda no período mostra "-" em vez de dias de estoque. Estoque (L) com <strong>*</strong> foi convertido
+            automaticamente de unidades pra litros (comum pra PET/500ml, contado em garrafas na planilha de estoque) — garrafa/lata sem
+            tamanho reconhecido no nome não converte, fica "-".
           </div>
 
           <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
@@ -3640,7 +3694,9 @@ function EstoqueTab() {
                     <tr key={l.nome}>
                       <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{l.nome}</td>
                       <td style={tdStyle}>{l.estoqueUnidades != null ? l.estoqueUnidades.toLocaleString("pt-BR") : "-"}</td>
-                      <td style={tdStyle}>{l.estoqueLitros != null ? fmtLitros(l.estoqueLitros) : "-"}</td>
+                      <td style={tdStyle} title={l.litrosConvertidos ? "Convertido automaticamente de unidades pra litros, pelo tamanho da embalagem no nome do produto" : undefined}>
+                        {l.estoqueLitros != null ? `${fmtLitros(l.estoqueLitros)}${l.litrosConvertidos ? "*" : ""}` : "-"}
+                      </td>
                       {[30, 60, 90, 120].map(d => {
                         const v = l.bases[d].diasEstoque;
                         const destaque = String(d) === baseDestaque;

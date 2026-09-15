@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.7
+ * Versão: v2.8
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -65,13 +65,19 @@
  * como identificador do tipo de produto. Sem filtro por canal/grupo de cliente
  * nessa versão (o relatório não traz essa informação por linha).
  *
- * ESTOQUE (v2.7):
- * Aba opcional "estoque" - uma linha por produto, formato simples (não é série
- * mensal, é uma foto do estoque atual): colunas "Produto", e pelo menos uma de
- * "Estoque (Unidades)" / "Unidades" ou "Estoque (Litros)" / "Litros" (procura pela
- * palavra "unidade"/"litro" no cabeçalho, não precisa ser o nome exato). O nome do
- * produto precisa bater com o que aparece em produtos_faturamento/produtos_litros
- * (a coluna "Descrição") pra dar pra cruzar com as vendas.
+ * ESTOQUE (v2.8):
+ * Aba opcional "estoque" - uma linha por produto, foto do estoque atual (não é
+ * série mensal). Aceita DOIS formatos, sem precisar reformatar nada:
+ *   (a) exportação direta do ERP (ex: BeerSales): colunas "Produto", "Qtde." e
+ *       "Un." - cola o relatório exportado direto, sem editar nada. A coluna
+ *       "Un." de cada linha decide se aquela quantidade é litros ("L"/"LT") ou
+ *       unidades (qualquer outro valor).
+ *   (b) formato explícito manual: colunas "Produto" + "Estoque (Unidades)" /
+ *       "Unidades" e/ou "Estoque (Litros)" / "Litros".
+ * Em qualquer um dos dois, o nome do produto precisa bater com a coluna
+ * "Descrição" de produtos_faturamento/produtos_litros pra dar pra cruzar com
+ * as vendas. A linha de cabeçalho pode estar em qualquer lugar nas primeiras
+ * 15 linhas (o script acha sozinho, mesmo com título/data acima).
  */
 
 const SHEET_FATURAMENTO = "faturamento";
@@ -128,43 +134,74 @@ function lerEstoque(ss) {
   const valores = sheet.getDataRange().getValues();
   if (valores.length < 2) return [];
 
-  let linhaCabecalho = -1, idxProduto = -1, idxUnidades = -1, idxLitros = -1;
-  const limiteLinhas = Math.min(valores.length, 10);
-  for (let i = 0; i < limiteLinhas; i++) {
-    let p = -1, u = -1, l = -1;
-    valores[i].forEach(function (celula, c) {
-      const texto = String(celula || "").trim().toLowerCase();
-      if (p === -1 && texto === "produto") p = c;
-      if (u === -1 && /unidade/.test(texto)) u = c;
-      if (l === -1 && /litro/.test(texto)) l = c;
-    });
-    if (p !== -1 && (u !== -1 || l !== -1)) {
-      linhaCabecalho = i; idxProduto = p; idxUnidades = u; idxLitros = l;
-      break;
-    }
-  }
-  if (linhaCabecalho === -1) return [];
-
   function paraNumeroEstoque(bruto) {
     if (typeof bruto === "number") return bruto;
     if (bruto === "" || bruto === null || bruto === undefined) return null;
     let texto = String(bruto).trim();
     if (texto === "" || texto === "-") return null;
     texto = texto.replace(/[R$\s]/g, "");
-    if (texto.indexOf(",") !== -1) texto = texto.replace(/\./g, "").replace(",", ".");
+    if (texto.indexOf(",") !== -1) {
+      // formato BR com decimal: "4.931,030" -> ponto é milhar, vírgula é decimal
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+      // sem vírgula: se tiver mais de um ponto, são separadores de milhar mesmo
+      // (ex: "10.000.000"), não decimal - remove todos
+      const pontos = (texto.match(/\./g) || []).length;
+      if (pontos > 1) texto = texto.replace(/\./g, "");
+    }
     const n = parseFloat(texto);
     return isNaN(n) ? null : n;
   }
+
+  // procura a linha de cabeçalho reconhecendo DOIS formatos possíveis:
+  //  (a) formato explícito: "Produto" + "Estoque (Litros)"/"Estoque (Unidades)" (ou similar)
+  //  (b) exportação direta do ERP: "Produto" + "Qtde." + "Un." (a coluna "Un." diz se
+  //      aquela linha está em litros ou noutra unidade - não presume, lê por linha)
+  let linhaCabecalho = -1, idxProduto = -1, idxUnidades = -1, idxLitros = -1, idxQtde = -1, idxUn = -1;
+  const limiteLinhas = Math.min(valores.length, 15);
+  for (let i = 0; i < limiteLinhas; i++) {
+    let p = -1, u = -1, l = -1, q = -1, un = -1;
+    valores[i].forEach(function (celula, c) {
+      const texto = String(celula || "").trim().toLowerCase();
+      if (p === -1 && texto === "produto") p = c;
+      if (u === -1 && /unidade/.test(texto) && !/^qtde/.test(texto)) u = c;
+      if (l === -1 && /litro/.test(texto)) l = c;
+      if (q === -1 && (texto === "qtde." || texto === "qtde" || texto === "quantidade")) q = c;
+      if (un === -1 && (texto === "un." || texto === "un" || texto === "unid.")) un = c;
+    });
+    if (p !== -1 && (u !== -1 || l !== -1)) {
+      linhaCabecalho = i; idxProduto = p; idxUnidades = u; idxLitros = l;
+      break;
+    }
+    if (p !== -1 && q !== -1 && un !== -1) {
+      linhaCabecalho = i; idxProduto = p; idxQtde = q; idxUn = un;
+      break;
+    }
+  }
+  if (linhaCabecalho === -1) return [];
 
   const linhas = [];
   for (let i = linhaCabecalho + 1; i < valores.length; i++) {
     const produto = String(valores[i][idxProduto] || "").trim();
     if (!produto) continue;
-    linhas.push({
-      produto: produto,
-      unidades: idxUnidades !== -1 ? paraNumeroEstoque(valores[i][idxUnidades]) : null,
-      litros: idxLitros !== -1 ? paraNumeroEstoque(valores[i][idxLitros]) : null,
-    });
+
+    if (idxQtde !== -1) {
+      // formato ERP: uma coluna de quantidade + uma coluna de unidade por linha
+      const qtde = paraNumeroEstoque(valores[i][idxQtde]);
+      const unidadeTexto = String(valores[i][idxUn] || "").trim().toLowerCase();
+      const ehLitro = unidadeTexto === "l" || unidadeTexto === "lt" || unidadeTexto === "litro" || unidadeTexto === "litros";
+      linhas.push({
+        produto: produto,
+        unidades: ehLitro ? null : qtde,
+        litros: ehLitro ? qtde : null,
+      });
+    } else {
+      linhas.push({
+        produto: produto,
+        unidades: idxUnidades !== -1 ? paraNumeroEstoque(valores[i][idxUnidades]) : null,
+        litros: idxLitros !== -1 ? paraNumeroEstoque(valores[i][idxLitros]) : null,
+      });
+    }
   }
   return linhas;
 }
