@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.8";
+const APP_VERSION = "v9.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3549,8 +3549,9 @@ function dataPrevistaFimEstoque(dias) {
 function EstoqueTab() {
   const { produtosDados, produtosNomes: todosProdutosNomes, produtosPeriodos, estoquePorProduto } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
-  const [baseDestaque, setBaseDestaque] = useState("30"); // '30' | '60' | '90' | '120'
+  const [baseDestaque, setBaseDestaque] = useState("30"); // '30' | '60' | '90' | '120' - controla o ordenamento
   const [limiteAlerta, setLimiteAlerta] = useState(7);
+  const [pctCrescimento, setPctCrescimento] = useState(100); // 100% = repete exatamente o ano passado
 
   // filtro por embalagem: Chope / Pet / Outros (mesmo padrão da aba Produtos)
   const [embalagensSel, setEmbalagensSel] = useState(["chope", "pet", "outros"]);
@@ -3583,23 +3584,30 @@ function EstoqueTab() {
       [30, 60, 90, 120].forEach(dias => {
         const nMeses = Math.max(1, Math.round(dias / 30));
         const chavesRecentes = produtosPeriodos.slice(-nMeses);
-        const taxa = taxaDiariaVenda(rows, chavesRecentes);
+
+        const taxaRecente = taxaDiariaVenda(rows, chavesRecentes);
+        const chavesAnoPassado = chavesRecentes
+          .map(c => { const [ano, mes] = c.split("-").map(Number); return `${ano - 1}-${String(mes).padStart(2, "0")}`; })
+          .filter(c => produtosPeriodos.includes(c));
+        const taxaAnoPassadoBase = taxaDiariaVenda(rows, chavesAnoPassado);
+        const taxaAnoPassado = taxaAnoPassadoBase * (pctCrescimento / 100);
+
         bases[dias] = {
-          taxaDiaria: taxa,
-          diasEstoque: (taxa > 0 && estoqueLitrosEfetivo != null) ? estoqueLitrosEfetivo / taxa : null,
+          recente: { taxaDiaria: taxaRecente, diasEstoque: (taxaRecente > 0 && estoqueLitrosEfetivo != null) ? estoqueLitrosEfetivo / taxaRecente : null },
+          anoPassado: { taxaDiaria: taxaAnoPassado, diasEstoque: (taxaAnoPassado > 0 && estoqueLitrosEfetivo != null) ? estoqueLitrosEfetivo / taxaAnoPassado : null },
         };
       });
       return { nome, estoqueUnidades: estoque.unidades, estoqueLitros: estoqueLitrosEfetivo, litrosConvertidos, bases };
     });
-  }, [produtosComEstoque, estoquePorProduto, produtosDados, produtosPeriodos]);
+  }, [produtosComEstoque, estoquePorProduto, produtosDados, produtosPeriodos, pctCrescimento]);
 
   const linhasExibidas = buscaTipo.trim()
     ? linhas.filter(l => l.nome.toLowerCase().includes(buscaTipo.toLowerCase()))
     : linhas;
 
   const linhasOrdenadas = [...linhasExibidas].sort((a, b) => {
-    const da = a.bases[baseDestaque].diasEstoque;
-    const db = b.bases[baseDestaque].diasEstoque;
+    const da = a.bases[baseDestaque].recente.diasEstoque;
+    const db = b.bases[baseDestaque].recente.diasEstoque;
     if (da == null && db == null) return 0;
     if (da == null) return 1;
     if (db == null) return -1;
@@ -3653,8 +3661,15 @@ function EstoqueTab() {
       {produtosComEstoque.length > 0 && (
         <Section title="Tempo de Estoque" icon={<Package size={18} color="#C69700" />}>
           <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, background: "rgba(74,144,217,0.06)", border: "1px solid rgba(74,144,217,0.25)", borderRadius: 8, padding: 10 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>% de crescimento esperado vs ano passado (usado nas colunas "ano passado"):</span>
+              <input type="number" min="0" max="500" value={pctCrescimento} onChange={e => setPctCrescimento(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 65, background: "#141412", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+              <span style={{ color: "#666", fontSize: 11 }}>% (100% = repete exatamente o ritmo do ano passado; 120% = espera 20% de crescimento)</span>
+            </div>
+
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-              <span style={{ color: "#888", fontSize: 12 }}>Base em destaque (estimativa de venda/dia):</span>
+              <span style={{ color: "#888", fontSize: 12 }}>Ordenar pela coluna "Recente" de:</span>
               {["30", "60", "90", "120"].map(d => (
                 <button key={d} onClick={() => setBaseDestaque(d)} style={modoBtnStyle(baseDestaque === d, "#C69700")}>
                   {d} dias
@@ -3676,7 +3691,9 @@ function EstoqueTab() {
 
           <div style={{ color: "#888", fontSize: 11, marginBottom: 12 }}>
             "Vendido/dia" e "Dias de estoque" são ESTIMATIVAS (os dados de venda são mensais, não diários): total vendido no período
-            ÷ dias corridos do período. Ordenado do menor pro maior "dias de estoque" na base em destaque (quem vai acabar primeiro, primeiro).
+            ÷ dias corridos do período. Pra cada base (30/60/90/120d), a coluna <strong>"Ano passado"</strong> usa os meses equivalentes 1
+            ano antes + o % de crescimento configurado acima; a coluna <strong>"Recente"</strong> usa os últimos meses reais disponíveis.
+            Ordenado do menor pro maior "dias de estoque" na coluna "Recente" da base escolhida acima (quem vai acabar primeiro, primeiro).
             Produto sem nenhuma venda no período mostra "-" em vez de dias de estoque. Estoque (L) com <strong>*</strong> foi convertido
             automaticamente de unidades pra litros (comum pra PET/500ml, contado em garrafas na planilha de estoque) — garrafa/lata sem
             tamanho reconhecido no nome não converte, fica "-". "Acaba em" é a data prevista (hoje + dias de estoque) — acima de 150 dias
@@ -3691,41 +3708,56 @@ function EstoqueTab() {
                   <th style={thStyle}>Estoque (un.)</th>
                   <th style={thStyle}>Estoque (L)</th>
                   {[30, 60, 90, 120].map(d => (
-                    <th key={d} style={{ ...thStyle, color: String(d) === baseDestaque ? "#C69700" : "#fff" }}>Dias estoque ({d}d)</th>
+                    <React.Fragment key={d}>
+                      <th style={{ ...thStyle, color: "#4a90d9", borderLeft: "2px solid #444" }}>Ano passado ({d}d)</th>
+                      <th style={{ ...thStyle, color: String(d) === baseDestaque ? "#C69700" : "#fff" }}>Recente ({d}d)</th>
+                    </React.Fragment>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {linhasOrdenadas.map(l => {
-                  const destaqueVal = l.bases[baseDestaque].diasEstoque;
-                  const emAlerta = destaqueVal != null && destaqueVal < limiteAlerta;
-                  return (
-                    <tr key={l.nome}>
-                      <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{l.nome}</td>
-                      <td style={tdStyle}>{l.estoqueUnidades != null ? l.estoqueUnidades.toLocaleString("pt-BR") : "-"}</td>
-                      <td style={tdStyle} title={l.litrosConvertidos ? "Convertido automaticamente de unidades pra litros, pelo tamanho da embalagem no nome do produto" : undefined}>
-                        {l.estoqueLitros != null ? `${fmtLitros(l.estoqueLitros)}${l.litrosConvertidos ? "*" : ""}` : "-"}
-                      </td>
-                      {[30, 60, 90, 120].map(d => {
-                        const v = l.bases[d].diasEstoque;
-                        const destaque = String(d) === baseDestaque;
-                        const alerta = v != null && v < limiteAlerta;
-                        const cortado = v != null && v > 150;
-                        const dataPrevista = (v != null && !cortado) ? dataPrevistaFimEstoque(v) : null;
-                        return (
-                          <td key={d} title={`Estimativa de venda: ${fmtLitros(l.bases[d].taxaDiaria)}/dia`} style={{
-                            ...tdStyle, fontWeight: destaque ? 800 : 400,
-                            color: alerta ? "#e0645a" : (destaque ? "#C69700" : "#ddd"),
-                            background: destaque ? (alerta ? "rgba(224,101,90,0.12)" : "rgba(198,151,0,0.06)") : "transparent",
+                {linhasOrdenadas.map(l => (
+                  <tr key={l.nome}>
+                    <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{l.nome}</td>
+                    <td style={tdStyle}>{l.estoqueUnidades != null ? l.estoqueUnidades.toLocaleString("pt-BR") : "-"}</td>
+                    <td style={tdStyle} title={l.litrosConvertidos ? "Convertido automaticamente de unidades pra litros, pelo tamanho da embalagem no nome do produto" : undefined}>
+                      {l.estoqueLitros != null ? `${fmtLitros(l.estoqueLitros)}${l.litrosConvertidos ? "*" : ""}` : "-"}
+                    </td>
+                    {[30, 60, 90, 120].map(d => {
+                      const destaque = String(d) === baseDestaque;
+
+                      const vAno = l.bases[d].anoPassado.diasEstoque;
+                      const alertaAno = vAno != null && vAno < limiteAlerta;
+                      const cortadoAno = vAno != null && vAno > 150;
+                      const dataAno = (vAno != null && !cortadoAno) ? dataPrevistaFimEstoque(vAno) : null;
+
+                      const vRec = l.bases[d].recente.diasEstoque;
+                      const alertaRec = vRec != null && vRec < limiteAlerta;
+                      const cortadoRec = vRec != null && vRec > 150;
+                      const dataRec = (vRec != null && !cortadoRec) ? dataPrevistaFimEstoque(vRec) : null;
+
+                      return (
+                        <React.Fragment key={d}>
+                          <td title={`Estimativa de venda (ano passado × ${pctCrescimento}%): ${fmtLitros(l.bases[d].anoPassado.taxaDiaria)}/dia`} style={{
+                            ...tdStyle, borderLeft: "2px solid #444",
+                            color: alertaAno ? "#e0645a" : "#4a90d9",
                           }}>
-                            <div>{v != null ? (cortado ? "150+ dias" : `${v.toFixed(1)} dias`) : "-"}{alerta ? " ⚠" : ""}</div>
-                            {dataPrevista && <div style={{ fontSize: 10, color: "#888", fontWeight: 400, marginTop: 2 }}>Acaba em {dataPrevista}</div>}
+                            <div>{vAno != null ? (cortadoAno ? "150+ dias" : `${vAno.toFixed(1)} dias`) : "-"}{alertaAno ? " ⚠" : ""}</div>
+                            {dataAno && <div style={{ fontSize: 10, color: "#888", fontWeight: 400, marginTop: 2 }}>Acaba em {dataAno}</div>}
                           </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
+                          <td title={`Estimativa de venda (recente): ${fmtLitros(l.bases[d].recente.taxaDiaria)}/dia`} style={{
+                            ...tdStyle, fontWeight: destaque ? 800 : 400,
+                            color: alertaRec ? "#e0645a" : (destaque ? "#C69700" : "#ddd"),
+                            background: destaque ? (alertaRec ? "rgba(224,101,90,0.12)" : "rgba(198,151,0,0.06)") : "transparent",
+                          }}>
+                            <div>{vRec != null ? (cortadoRec ? "150+ dias" : `${vRec.toFixed(1)} dias`) : "-"}{alertaRec ? " ⚠" : ""}</div>
+                            {dataRec && <div style={{ fontSize: 10, color: "#888", fontWeight: 400, marginTop: 2 }}>Acaba em {dataRec}</div>}
+                          </td>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
