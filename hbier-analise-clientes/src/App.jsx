@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v8.7";
+const APP_VERSION = "v8.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3538,6 +3538,14 @@ function taxaDiariaVenda(rows, chavesPeriodo) {
   return totalDias ? totalLitros / totalDias : 0;
 }
 
+// Data prevista pro estoque zerar (hoje + dias de estoque), formatada dd/mm/aa
+function dataPrevistaFimEstoque(dias) {
+  if (dias == null) return null;
+  const hoje = new Date();
+  const data = new Date(hoje.getTime() + dias * 24 * 60 * 60 * 1000);
+  return data.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
+
 function EstoqueTab() {
   const { produtosDados, produtosNomes: todosProdutosNomes, produtosPeriodos, estoquePorProduto } = useData();
   const [buscaTipo, setBuscaTipo] = useState("");
@@ -3671,7 +3679,8 @@ function EstoqueTab() {
             ÷ dias corridos do período. Ordenado do menor pro maior "dias de estoque" na base em destaque (quem vai acabar primeiro, primeiro).
             Produto sem nenhuma venda no período mostra "-" em vez de dias de estoque. Estoque (L) com <strong>*</strong> foi convertido
             automaticamente de unidades pra litros (comum pra PET/500ml, contado em garrafas na planilha de estoque) — garrafa/lata sem
-            tamanho reconhecido no nome não converte, fica "-".
+            tamanho reconhecido no nome não converte, fica "-". "Acaba em" é a data prevista (hoje + dias de estoque) — acima de 150 dias
+            mostra só "150+ dias", sem data, já que fica longe demais pra ser uma previsão útil.
           </div>
 
           <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
@@ -3701,13 +3710,16 @@ function EstoqueTab() {
                         const v = l.bases[d].diasEstoque;
                         const destaque = String(d) === baseDestaque;
                         const alerta = v != null && v < limiteAlerta;
+                        const cortado = v != null && v > 150;
+                        const dataPrevista = (v != null && !cortado) ? dataPrevistaFimEstoque(v) : null;
                         return (
                           <td key={d} title={`Estimativa de venda: ${fmtLitros(l.bases[d].taxaDiaria)}/dia`} style={{
                             ...tdStyle, fontWeight: destaque ? 800 : 400,
                             color: alerta ? "#e0645a" : (destaque ? "#C69700" : "#ddd"),
                             background: destaque ? (alerta ? "rgba(224,101,90,0.12)" : "rgba(198,151,0,0.06)") : "transparent",
                           }}>
-                            {v != null ? `${v.toFixed(1)} dias` : "-"}{alerta ? " ⚠" : ""}
+                            <div>{v != null ? (cortado ? "150+ dias" : `${v.toFixed(1)} dias`) : "-"}{alerta ? " ⚠" : ""}</div>
+                            {dataPrevista && <div style={{ fontSize: 10, color: "#888", fontWeight: 400, marginTop: 2 }}>Acaba em {dataPrevista}</div>}
                           </td>
                         );
                       })}
