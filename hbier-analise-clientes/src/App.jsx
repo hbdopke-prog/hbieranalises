@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.1";
+const APP_VERSION = "v9.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3825,30 +3825,58 @@ function ProjecaoVendasTab() {
       return { chave, fatNovos: fatNovosMes, fatExistentes: fatExistentesMes, total: fatNovosMes + fatExistentesMes };
     });
 
-    // ritmo recente (último mês fechado ou média dos últimos 3), separado por novos/existentes,
-    // pra projetar o resto do ano
+    // ritmo pra projetar o resto do ano - 3 modos:
+    //  'ultimoMes' / 'media3': taxa fixa recente, separada por novos/existentes, repetida em
+    //  cada mês restante.
+    //  'anoAnterior': olha o MESMO MÊS do ano passado, mês a mês (não uma taxa fixa - reflete
+    //  a sazonalidade real) - aqui não dá pra separar novos/existentes, já que os "novos" de
+    //  2026 não existiam em 2025, então usa o total da empresa (todos os clientes filtrados).
     const anoAnalise = Number(fimNovos.split("-")[0]);
     const mesesFechadosDoAno = periodosFechados.filter(p => p.startsWith(`${anoAnalise}-`));
-    const chavesRitmo = ritmo === "ultimoMes" ? mesesFechadosDoAno.slice(-1) : mesesFechadosDoAno.slice(-3);
-
-    function taxaMensal(lista) {
-      if (!chavesRitmo.length) return 0;
-      let total = 0;
-      lista.forEach(c => (dados[c] || []).forEach(r => { if (chavesRitmo.includes(r.chave)) total += r.faturamento; }));
-      return total / chavesRitmo.length;
-    }
-    const taxaNovos = taxaMensal(novos);
-    const taxaExistentes = taxaMensal(existentes);
-
     const mesesRestantes = Math.max(0, 12 - mesesFechadosDoAno.length);
     const fatRealizadoAno = clientesFiltrados.reduce((s, c) => s + soma((dados[c] || []).filter(r => mesesFechadosDoAno.includes(r.chave)), "faturamento"), 0);
-    const projecaoRestante = (taxaNovos + taxaExistentes) * mesesRestantes * (pctAjuste / 100);
+
+    let taxaNovos = 0, taxaExistentes = 0, projecaoRestante = 0, detalheAnoAnterior = [];
+
+    if (ritmo === "anoAnterior") {
+      // chaves dos meses restantes (ex: fechou até Ago/26 -> restam Set,Out,Nov,Dez/26)
+      const ultimoMesFechadoNum = mesesFechadosDoAno.length ? Number(mesesFechadosDoAno[mesesFechadosDoAno.length - 1].split("-")[1]) : 0;
+      const chavesRestantes = [];
+      for (let m = ultimoMesFechadoNum + 1; m <= 12; m++) chavesRestantes.push(`${anoAnalise}-${String(m).padStart(2, "0")}`);
+
+      detalheAnoAnterior = chavesRestantes.map(chave => {
+        const [, mes] = chave.split("-");
+        const chaveAnoPassado = `${anoAnalise - 1}-${mes}`;
+        const valorAnoPassado = clientesFiltrados.reduce((s, c) => {
+          const row = (dados[c] || []).find(r => r.chave === chaveAnoPassado);
+          return s + (row ? row.faturamento : 0);
+        }, 0);
+        const valorAjustado = valorAnoPassado * (pctAjuste / 100);
+        return { chave, chaveAnoPassado, valorAnoPassado, valorAjustado };
+      });
+      projecaoRestante = detalheAnoAnterior.reduce((s, d) => s + d.valorAjustado, 0);
+      // pra manter os cards informativos preenchidos com uma média (só informativo, não usado no total)
+      taxaNovos = null;
+      taxaExistentes = null;
+    } else {
+      const chavesRitmo = ritmo === "ultimoMes" ? mesesFechadosDoAno.slice(-1) : mesesFechadosDoAno.slice(-3);
+      function taxaMensal(lista) {
+        if (!chavesRitmo.length) return 0;
+        let total = 0;
+        lista.forEach(c => (dados[c] || []).forEach(r => { if (chavesRitmo.includes(r.chave)) total += r.faturamento; }));
+        return total / chavesRitmo.length;
+      }
+      taxaNovos = taxaMensal(novos);
+      taxaExistentes = taxaMensal(existentes);
+      projecaoRestante = (taxaNovos + taxaExistentes) * mesesRestantes * (pctAjuste / 100);
+    }
+
     const totalAnoProjetado = fatRealizadoAno + projecaoRestante;
 
     return {
       novos, existentes, fatNovosTotal, litNovosTotal, pctDoTotal, mesAMes,
       anoAnalise, mesesFechadosDoAno, taxaNovos, taxaExistentes, mesesRestantes,
-      fatRealizadoAno, projecaoRestante, totalAnoProjetado,
+      fatRealizadoAno, projecaoRestante, totalAnoProjetado, detalheAnoAnterior,
     };
   }, [clientesFiltrados, dados, periodos, periodosFechados, inicioNovos, fimNovos, dataCriacaoDoCliente, ritmo, pctAjuste]);
 
@@ -3925,9 +3953,10 @@ function ProjecaoVendasTab() {
           </Section>
 
           <Section title={`Projeção Combinada · Fim de ${analise.anoAnalise}`} icon={<GitCompareArrows size={18} color="#4a90d9" />}>
-            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
               <button onClick={() => setRitmo("ultimoMes")} style={modoBtnStyle(ritmo === "ultimoMes", "#4a90d9")}>Ritmo: último mês fechado</button>
               <button onClick={() => setRitmo("media3")} style={modoBtnStyle(ritmo === "media3", "#4a90d9")}>Ritmo: média últimos 3 meses</button>
+              <button onClick={() => setRitmo("anoAnterior")} style={modoBtnStyle(ritmo === "anoAnterior", "#4a90d9")}>Mesmo mês do ano passado</button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <span style={{ color: "#888", fontSize: 12 }}>% de ajuste sobre o ritmo (100% = sem ajuste):</span>
@@ -3936,16 +3965,45 @@ function ProjecaoVendasTab() {
             </div>
 
             <div style={{ color: "#888", fontSize: 11, marginBottom: 14 }}>
-              Faturamento já realizado em {analise.anoAnalise} ({analise.mesesFechadosDoAno.length} meses fechados) + ritmo mensal recente (novos + existentes) × {analise.mesesRestantes} meses restantes, com o % de ajuste aplicado.
+              {ritmo === "anoAnterior"
+                ? `Faturamento já realizado em ${analise.anoAnalise} + o valor de cada mês restante busca o MESMO MÊS de ${analise.anoAnalise - 1} (mês a mês, reflete a sazonalidade real), com o % de ajuste aplicado. Aqui não dá pra separar novos/existentes, já que os clientes novos de ${analise.anoAnalise} não existiam em ${analise.anoAnalise - 1} — é o total da empresa.`
+                : `Faturamento já realizado em ${analise.anoAnalise} (${analise.mesesFechadosDoAno.length} meses fechados) + ritmo mensal recente (novos + existentes) × ${analise.mesesRestantes} meses restantes, com o % de ajuste aplicado.`}
             </div>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: ritmo === "anoAnterior" ? 20 : 0 }}>
               <StatCard label={`Já realizado em ${analise.anoAnalise}`} value={fmtMoeda(analise.fatRealizadoAno)} icon={<TrendingUp size={14} />} />
-              <StatCard label="Ritmo mensal · novos clientes" value={fmtMoeda(analise.taxaNovos)} icon={<TrendingUp size={14} />} />
-              <StatCard label="Ritmo mensal · clientes existentes" value={fmtMoeda(analise.taxaExistentes)} icon={<TrendingUp size={14} />} />
+              {ritmo !== "anoAnterior" && (
+                <>
+                  <StatCard label="Ritmo mensal · novos clientes" value={fmtMoeda(analise.taxaNovos)} icon={<TrendingUp size={14} />} />
+                  <StatCard label="Ritmo mensal · clientes existentes" value={fmtMoeda(analise.taxaExistentes)} icon={<TrendingUp size={14} />} />
+                </>
+              )}
               <StatCard label={`Projeção pros ${analise.mesesRestantes} meses restantes`} value={fmtMoeda(analise.projecaoRestante)} icon={<TrendingUp size={14} />} />
               <StatCard label={`Total projetado pra ${analise.anoAnalise}`} value={fmtMoeda(analise.totalAnoProjetado)} icon={<Trophy size={14} />} />
             </div>
+
+            {ritmo === "anoAnterior" && analise.detalheAnoAnterior.length > 0 && (
+              <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 500 }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Mês (a projetar)</th>
+                      <th style={thStyle}>Mesmo mês ano passado</th>
+                      <th style={thStyle}>Valor ajustado ({pctAjuste}%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analise.detalheAnoAnterior.map(d => (
+                      <tr key={d.chave}>
+                        <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{labelMes(d.chave)}</td>
+                        <td style={tdStyle}>{labelMes(d.chaveAnoPassado)}: {fmtMoeda(d.valorAnoPassado)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9" }}>{fmtMoeda(d.valorAjustado)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Section>
         </>
       )}
