@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.3";
+const APP_VERSION = "v9.4";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3776,6 +3776,7 @@ function ProjecaoVendasTab() {
   const [fimNovos, setFimNovos] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
   const [ritmo, setRitmo] = useState("media3"); // 'ultimoMes' | 'media3'
   const [pctAjuste, setPctAjuste] = useState(100);
+  const [pctNovos, setPctNovos] = useState(100); // ajuste específico pra estimativa dos novos PDVs (modo "mesmo mês ano passado")
 
   function toggleGrupoFiltro(g) {
     setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
@@ -3860,7 +3861,7 @@ function ProjecaoVendasTab() {
           return s + (row ? row.faturamento : 0);
         }, 0);
         const valorBaseAjustado = valorBaseAnoPassado * (pctAjuste / 100);
-        const valorNovosAjustado = taxaNovos * (pctAjuste / 100);
+        const valorNovosAjustado = taxaNovos * (pctNovos / 100);
         return {
           chave, chaveAnoPassado, valorBaseAnoPassado, valorBaseAjustado,
           valorNovosAjustado, valorTotal: valorBaseAjustado + valorNovosAjustado,
@@ -3888,7 +3889,7 @@ function ProjecaoVendasTab() {
       anoAnalise, mesesFechadosDoAno, taxaNovos, taxaExistentes, mesesRestantes,
       fatRealizadoAno, projecaoRestante, totalAnoProjetado, detalheAnoAnterior,
     };
-  }, [clientesFiltrados, dados, periodos, periodosFechados, inicioNovos, fimNovos, dataCriacaoDoCliente, ritmo, pctAjuste]);
+  }, [clientesFiltrados, dados, periodos, periodosFechados, inicioNovos, fimNovos, dataCriacaoDoCliente, ritmo, pctAjuste, pctNovos]);
 
   return (
     <div>
@@ -3968,15 +3969,23 @@ function ProjecaoVendasTab() {
               <button onClick={() => setRitmo("media3")} style={modoBtnStyle(ritmo === "media3", "#4a90d9")}>Ritmo: média últimos 3 meses</button>
               <button onClick={() => setRitmo("anoAnterior")} style={modoBtnStyle(ritmo === "anoAnterior", "#4a90d9")}>Mesmo mês do ano passado</button>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <span style={{ color: "#888", fontSize: 12 }}>% de ajuste sobre o ritmo (100% = sem ajuste):</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: ritmo === "anoAnterior" ? 8 : 16, flexWrap: "wrap" }}>
+              <span style={{ color: "#888", fontSize: 12 }}>{ritmo === "anoAnterior" ? "% de ajuste sobre a base (ano passado):" : "% de ajuste sobre o ritmo (100% = sem ajuste):"}</span>
               <input type="number" min="0" max="300" value={pctAjuste} onChange={e => setPctAjuste(Math.max(0, Number(e.target.value) || 0))}
                 style={{ width: 65, background: "#141412", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
             </div>
+            {ritmo === "anoAnterior" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                <span style={{ color: "#4caf6b", fontSize: 12 }}>% de ajuste sobre os Novos PDVs:</span>
+                <input type="number" min="0" max="500" value={pctNovos} onChange={e => setPctNovos(Math.max(0, Number(e.target.value) || 0))}
+                  style={{ width: 65, background: "#141412", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                <span style={{ color: "#666", fontSize: 11 }}>(separado da base — dá pra simular os novos PDVs crescendo mais rápido, por exemplo)</span>
+              </div>
+            )}
 
             <div style={{ color: "#888", fontSize: 11, marginBottom: 14 }}>
               {ritmo === "anoAnterior"
-                ? `Faturamento já realizado em ${analise.anoAnalise} + pra cada mês restante: BASE (o mesmo mês de ${analise.anoAnalise - 1} — na prática já é só o padrão dos clientes que existiam antes, já que os novos não tinham venda em ${analise.anoAnalise - 1}) + NOVOS PDVS (ritmo recente próprio deles, últimos 3 meses), os dois ajustados pelo %.`
+                ? `Faturamento já realizado em ${analise.anoAnalise} + pra cada mês restante: BASE (o mesmo mês de ${analise.anoAnalise - 1} — na prática já é só o padrão dos clientes que existiam antes, já que os novos não tinham venda em ${analise.anoAnalise - 1}), ajustada pelo % da base + NOVOS PDVS (ritmo recente próprio deles, últimos 3 meses), ajustado pelo % dos novos PDVs (independente um do outro).`
                 : `Faturamento já realizado em ${analise.anoAnalise} (${analise.mesesFechadosDoAno.length} meses fechados) + ritmo mensal recente (novos + existentes) × ${analise.mesesRestantes} meses restantes, com o % de ajuste aplicado.`}
             </div>
 
@@ -3997,7 +4006,7 @@ function ProjecaoVendasTab() {
                     <tr>
                       <th style={thStyle}>Mês (a projetar)</th>
                       <th style={thStyle}>Base: mesmo mês {analise.anoAnalise - 1}</th>
-                      <th style={{ ...thStyle, color: "#4caf6b" }}>+ Novos PDVs (estimado)</th>
+                      <th style={{ ...thStyle, color: "#4caf6b" }}>+ Novos PDVs ({pctNovos}%)</th>
                       <th style={{ ...thStyle, color: "#4a90d9" }}>= Total ajustado ({pctAjuste}%)</th>
                     </tr>
                   </thead>
