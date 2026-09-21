@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.0";
+const APP_VERSION = "v9.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3767,6 +3767,192 @@ function EstoqueTab() {
   );
 }
 
+function ProjecaoVendasTab() {
+  const { dados, grupos, clientesPorGrupo, periodos, labelDoCliente, dataCriacaoDoCliente } = useData();
+  const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
+  const [inicioNovos, setInicioNovos] = useState(() => periodos.includes("2026-01") ? "2026-01" : (periodos[0] || ""));
+  const mesAtualReal = chaveMesAtualReal();
+  const periodosFechados = periodos.filter(p => p !== mesAtualReal);
+  const [fimNovos, setFimNovos] = useState(() => periodosFechados[periodosFechados.length - 1] || "");
+  const [ritmo, setRitmo] = useState("media3"); // 'ultimoMes' | 'media3'
+  const [pctAjuste, setPctAjuste] = useState(100);
+
+  function toggleGrupoFiltro(g) {
+    setGruposSel(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
+  }
+  function marcarPadraoGrupos() { setGruposSel(gruposPadrao(grupos)); }
+  function marcarTodosGrupos() { setGruposSel([...grupos]); }
+  function desmarcarTodosGrupos() { setGruposSel([]); }
+
+  const clientesFiltrados = [...new Set(gruposSel.flatMap(g => clientesPorGrupo[g] || []))];
+
+  const analise = useMemo(() => {
+    if (!inicioNovos || !fimNovos) return null;
+    const periodosDoPeriodo = periodos.filter(p => p >= inicioNovos && p <= fimNovos);
+    const chavesPeriodoSet = new Set(periodosDoPeriodo);
+
+    const novos = clientesFiltrados.filter(c => {
+      const dt = (dataCriacaoDoCliente[c] || "").slice(0, 7);
+      return dt && dt >= inicioNovos && dt <= fimNovos;
+    });
+    const existentes = clientesFiltrados.filter(c => !novos.includes(c));
+
+    // faturamento TOTAL já gerado pelos novos clientes desde que entraram até hoje (não só
+    // dentro do período de cadastro - inclui meses depois que já compraram de novo)
+    let fatNovosTotal = 0, litNovosTotal = 0;
+    novos.forEach(c => (dados[c] || []).forEach(r => { fatNovosTotal += r.faturamento; litNovosTotal += r.litros; }));
+
+    // faturamento dentro do PERÍODO escolhido (pra comparar com o total da empresa no mesmo período, de forma justa)
+    let fatNovosNoPeriodo = 0, fatGeralNoPeriodo = 0;
+    clientesFiltrados.forEach(c => {
+      (dados[c] || []).forEach(r => {
+        if (!chavesPeriodoSet.has(r.chave)) return;
+        fatGeralNoPeriodo += r.faturamento;
+        if (novos.includes(c)) fatNovosNoPeriodo += r.faturamento;
+      });
+    });
+    const pctDoTotal = fatGeralNoPeriodo ? (fatNovosNoPeriodo / fatGeralNoPeriodo) * 100 : 0;
+
+    // mês a mês: novos vs existentes vs total, pra todo o período escolhido
+    const mesAMes = periodosDoPeriodo.map(chave => {
+      let fatNovosMes = 0, fatExistentesMes = 0;
+      clientesFiltrados.forEach(c => {
+        const row = (dados[c] || []).find(r => r.chave === chave);
+        if (!row) return;
+        if (novos.includes(c)) fatNovosMes += row.faturamento;
+        else fatExistentesMes += row.faturamento;
+      });
+      return { chave, fatNovos: fatNovosMes, fatExistentes: fatExistentesMes, total: fatNovosMes + fatExistentesMes };
+    });
+
+    // ritmo recente (último mês fechado ou média dos últimos 3), separado por novos/existentes,
+    // pra projetar o resto do ano
+    const anoAnalise = Number(fimNovos.split("-")[0]);
+    const mesesFechadosDoAno = periodosFechados.filter(p => p.startsWith(`${anoAnalise}-`));
+    const chavesRitmo = ritmo === "ultimoMes" ? mesesFechadosDoAno.slice(-1) : mesesFechadosDoAno.slice(-3);
+
+    function taxaMensal(lista) {
+      if (!chavesRitmo.length) return 0;
+      let total = 0;
+      lista.forEach(c => (dados[c] || []).forEach(r => { if (chavesRitmo.includes(r.chave)) total += r.faturamento; }));
+      return total / chavesRitmo.length;
+    }
+    const taxaNovos = taxaMensal(novos);
+    const taxaExistentes = taxaMensal(existentes);
+
+    const mesesRestantes = Math.max(0, 12 - mesesFechadosDoAno.length);
+    const fatRealizadoAno = clientesFiltrados.reduce((s, c) => s + soma((dados[c] || []).filter(r => mesesFechadosDoAno.includes(r.chave)), "faturamento"), 0);
+    const projecaoRestante = (taxaNovos + taxaExistentes) * mesesRestantes * (pctAjuste / 100);
+    const totalAnoProjetado = fatRealizadoAno + projecaoRestante;
+
+    return {
+      novos, existentes, fatNovosTotal, litNovosTotal, pctDoTotal, mesAMes,
+      anoAnalise, mesesFechadosDoAno, taxaNovos, taxaExistentes, mesesRestantes,
+      fatRealizadoAno, projecaoRestante, totalAnoProjetado,
+    };
+  }, [clientesFiltrados, dados, periodos, periodosFechados, inicioNovos, fimNovos, dataCriacaoDoCliente, ritmo, pctAjuste]);
+
+  return (
+    <div>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <BotaoImprimir label="Imprimir Projeção" />
+      </div>
+
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <span style={{ color: "#888", fontSize: 12 }}>Período que define "clientes novos":</span>
+          <MonthPicker periodosDisponiveis={periodos} valor={inicioNovos} onSelecionar={setInicioNovos} placeholder="Início" />
+          <span style={{ color: "#666" }}>até</span>
+          <MonthPicker periodosDisponiveis={periodos} valor={fimNovos} onSelecionar={setFimNovos} placeholder="Fim" />
+        </div>
+
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados):
+        </div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <button onClick={marcarPadraoGrupos} style={chipBtnStyle}>Padrão (sem grupos pesados)</button>
+          <button onClick={marcarTodosGrupos} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosGrupos} style={chipBtnStyle}>Desmarcar todos</button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {grupos.map(g => (
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
+              {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {!analise && (
+        <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>Selecione o período.</div>
+      )}
+
+      {analise && (
+        <>
+          <Section title={`Novos Clientes · ${labelMes(inicioNovos)} a ${labelMes(fimNovos)}`} icon={<Users size={18} color="#C69700" />}>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+              <StatCard label="Quantidade de clientes novos" value={String(analise.novos.length)} icon={<Users size={14} />} />
+              <StatCard label="Faturamento total gerado (desde o cadastro até hoje)" value={fmtMoeda(analise.fatNovosTotal)} icon={<TrendingUp size={14} />} />
+              <StatCard label="Litros total gerado (desde o cadastro até hoje)" value={fmtLitros(analise.litNovosTotal)} icon={<Droplets size={14} />} />
+              <StatCard label="Faturamento médio por cliente novo" value={fmtMoeda(analise.novos.length ? analise.fatNovosTotal / analise.novos.length : 0)} icon={<TrendingUp size={14} />} />
+              <StatCard label={`% do faturamento da empresa (${labelMes(inicioNovos)}–${labelMes(fimNovos)})`} value={`${analise.pctDoTotal.toFixed(1)}%`} icon={<TrendingUp size={14} />} />
+            </div>
+
+            <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Mês a mês: novos vs clientes existentes</div>
+            <div style={{ overflowX: "auto", border: "1px solid #333", borderRadius: 8, marginBottom: 8 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 600 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Mês</th>
+                    <th style={{ ...thStyle, color: "#4caf6b" }}>Novos</th>
+                    <th style={{ ...thStyle, color: "#4a90d9" }}>Existentes</th>
+                    <th style={thStyle}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analise.mesAMes.map(m => (
+                    <tr key={m.chave}>
+                      <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{labelMes(m.chave)}</td>
+                      <td style={{ ...tdStyle, color: "#4caf6b" }}>{fmtMoeda(m.fatNovos)}</td>
+                      <td style={{ ...tdStyle, color: "#4a90d9" }}>{fmtMoeda(m.fatExistentes)}</td>
+                      <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{fmtMoeda(m.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+
+          <Section title={`Projeção Combinada · Fim de ${analise.anoAnalise}`} icon={<GitCompareArrows size={18} color="#4a90d9" />}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              <button onClick={() => setRitmo("ultimoMes")} style={modoBtnStyle(ritmo === "ultimoMes", "#4a90d9")}>Ritmo: último mês fechado</button>
+              <button onClick={() => setRitmo("media3")} style={modoBtnStyle(ritmo === "media3", "#4a90d9")}>Ritmo: média últimos 3 meses</button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <span style={{ color: "#888", fontSize: 12 }}>% de ajuste sobre o ritmo (100% = sem ajuste):</span>
+              <input type="number" min="0" max="300" value={pctAjuste} onChange={e => setPctAjuste(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 65, background: "#141412", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+            </div>
+
+            <div style={{ color: "#888", fontSize: 11, marginBottom: 14 }}>
+              Faturamento já realizado em {analise.anoAnalise} ({analise.mesesFechadosDoAno.length} meses fechados) + ritmo mensal recente (novos + existentes) × {analise.mesesRestantes} meses restantes, com o % de ajuste aplicado.
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <StatCard label={`Já realizado em ${analise.anoAnalise}`} value={fmtMoeda(analise.fatRealizadoAno)} icon={<TrendingUp size={14} />} />
+              <StatCard label="Ritmo mensal · novos clientes" value={fmtMoeda(analise.taxaNovos)} icon={<TrendingUp size={14} />} />
+              <StatCard label="Ritmo mensal · clientes existentes" value={fmtMoeda(analise.taxaExistentes)} icon={<TrendingUp size={14} />} />
+              <StatCard label={`Projeção pros ${analise.mesesRestantes} meses restantes`} value={fmtMoeda(analise.projecaoRestante)} icon={<TrendingUp size={14} />} />
+              <StatCard label={`Total projetado pra ${analise.anoAnalise}`} value={fmtMoeda(analise.totalAnoProjetado)} icon={<Trophy size={14} />} />
+            </div>
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PositivacaoTab() {
   const { dados, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
@@ -4447,6 +4633,9 @@ export default function App() {
                 <button onClick={() => setTab("estoque")} style={tabStyle(tab === "estoque")}>
                   <Boxes size={14} /> Estoque
                 </button>
+                <button onClick={() => setTab("projecao")} style={tabStyle(tab === "projecao")}>
+                  <TrendingUp size={14} /> Projeção
+                </button>
                 {isAdmin && (
                   <button onClick={() => setTab("global")} style={tabStyle(tab === "global")}>
                     <Globe size={14} /> Global
@@ -4461,6 +4650,7 @@ export default function App() {
               {tab === "produtos" && <ProdutosTab />}
               {tab === "positivacao" && <PositivacaoTab />}
               {tab === "estoque" && <EstoqueTab />}
+              {tab === "projecao" && <ProjecaoVendasTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
             </DataContext.Provider>
           )}
