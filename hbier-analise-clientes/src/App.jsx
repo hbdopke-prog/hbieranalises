@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.8";
+const APP_VERSION = "v9.9";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -576,7 +576,13 @@ function calcularTrimestres(rowsDoAno, rowsAnoAnterior, totalFatAno, totalLitAno
 }
 
 function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
-  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit, rowsDoAno, rowsAnoAnterior } = dados;
+  const { ano, meses, totalFat, totalLit, mediaFat, mediaLit, variacaoFat, variacaoLit, rowsDoAno, rowsAnoAnterior, rowsAnoAnteriorMesmoPeriodo, rowsAtualComparavel } = dados;
+  // o ano anterior é comparado só nos meses em comum; se não for o ano inteiro, mostra o período equivalente
+  const nMesesComparados = rowsAnoAnteriorMesmoPeriodo ? rowsAnoAnteriorMesmoPeriodo.length : 0;
+  const comparacaoParcial = nMesesComparados > 0 && nMesesComparados < 12;
+  // se o ano anterior é parcial, a variação usa só os meses em comum - aí o "atual" da base também é um recorte
+  const atualDifere = comparacaoParcial && rowsAtualComparavel && rowsAtualComparavel.length !== rowsDoAno.length;
+  const rotuloComparacao = comparacaoParcial ? `média/mês vs mesmo período de ${ano - 1}` : `média/mês vs ${ano - 1}`;
   const trimestres = mostrarTrimestres ? calcularTrimestres(rowsDoAno, rowsAnoAnterior, totalFat, totalLit) : [];
   return (
     <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
@@ -588,19 +594,51 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Faturamento total</div>
           <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>{fmtMoeda(totalFat)}</div>
           <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>Média/mês: {fmtMoeda(mediaFat)}</div>
-          <BadgeTendencia variacao={variacaoFat} formatador={fmtMoeda} periodoTexto={variacaoFat ? `média/mês vs ${ano - 1}` : ""} />
+          <BadgeTendencia variacao={variacaoFat} formatador={fmtMoeda} periodoTexto={variacaoFat ? rotuloComparacao : ""} />
         </div>
         <div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Litros total</div>
           <div style={{ color: "#fff", fontSize: 18, fontWeight: 800 }}>{fmtLitros(totalLit)}</div>
           <div style={{ color: "#888", fontSize: 11, marginTop: 2 }}>Média/mês: {fmtLitros(mediaLit)}</div>
-          <BadgeTendencia variacao={variacaoLit} formatador={fmtLitros} periodoTexto={variacaoLit ? `média/mês vs ${ano - 1}` : ""} />
+          <BadgeTendencia variacao={variacaoLit} formatador={fmtLitros} periodoTexto={variacaoLit ? rotuloComparacao : ""} />
         </div>
         <div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Preço médio/L</div>
           <div style={{ color: "#C69700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
         </div>
       </div>
+
+      {comparacaoParcial && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #2a2a28" }}>
+          <div style={{ color: "#666", fontSize: 10, marginBottom: 6 }}>
+            {ano - 1} no mesmo período ({periodoTexto(rowsAnoAnteriorMesmoPeriodo)}) — base da comparação acima
+          </div>
+          {atualDifere && (
+            <div style={{ color: "#777", fontSize: 10, marginBottom: 8 }}>
+              {ano} nesses mesmos meses ({periodoTexto(rowsAtualComparavel)}): média/mês {fmtMoeda(media(rowsAtualComparavel, "faturamento"))} · {fmtLitros(media(rowsAtualComparavel, "litros"))}
+              (a variação acima usa este recorte, não o ano inteiro)
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ color: "#555", fontSize: 9 }}>Faturamento total</div>
+              <div style={{ color: "#aaa", fontSize: 14, fontWeight: 700 }}>{fmtMoeda(soma(rowsAnoAnteriorMesmoPeriodo, "faturamento"))}</div>
+              <div style={{ color: "#777", fontSize: 10 }}>Média/mês: {fmtMoeda(media(rowsAnoAnteriorMesmoPeriodo, "faturamento"))}</div>
+            </div>
+            <div>
+              <div style={{ color: "#555", fontSize: 9 }}>Litros total</div>
+              <div style={{ color: "#aaa", fontSize: 14, fontWeight: 700 }}>{fmtLitros(soma(rowsAnoAnteriorMesmoPeriodo, "litros"))}</div>
+              <div style={{ color: "#777", fontSize: 10 }}>Média/mês: {fmtLitros(media(rowsAnoAnteriorMesmoPeriodo, "litros"))}</div>
+            </div>
+            <div>
+              <div style={{ color: "#555", fontSize: 9 }}>Preço médio/L</div>
+              <div style={{ color: "#aaa", fontSize: 14, fontWeight: 700 }}>
+                {fmtPrecoLitro(precoMedioLitro(soma(rowsAnoAnteriorMesmoPeriodo, "faturamento"), soma(rowsAnoAnteriorMesmoPeriodo, "litros")))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {trimestres.length > 0 && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
@@ -985,14 +1023,21 @@ function ClienteDashboard() {
       const rowsAnoAnterior = idx > 0 ? rowsFechadas.filter(r => r.ano === anos[idx - 1]) : [];
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
+      // comparação justa: só os meses que existem nos DOIS anos. Ex: 2026 com Jan-Ago fechados
+      // compara só com Jan-Ago/2025 (e não com a média do 2025 inteiro, que mistura a sazonalidade
+      // de Nov/Dez com meses que ainda nem aconteceram em 2026)
+      const mesesAtual = new Set(rowsDoAno.map(r => r.mes));
+      const mesesAnt = new Set(rowsAnoAnterior.map(r => r.mes));
+      const rowsAtualComparavel = rowsDoAno.filter(r => mesesAnt.has(r.mes));
+      const rowsAnoAnteriorMesmoPeriodo = rowsAnoAnterior.filter(r => mesesAtual.has(r.mes));
+      const temComparacao = rowsAtualComparavel.length > 0 && rowsAnoAnteriorMesmoPeriodo.length > 0;
       return {
-        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior,
+        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior, rowsAnoAnteriorMesmoPeriodo, rowsAtualComparavel,
         totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
-        // variação calculada em cima da MÉDIA mensal (não do total), pra ser justa mesmo quando
-        // o ano corrente ainda não fechou todos os 12 meses
-        variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
-        variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
+        // variação da MÉDIA mensal, comparando só os meses em comum com o ano anterior
+        variacaoFat: temComparacao ? calcularVariacao(media(rowsAtualComparavel, "faturamento"), media(rowsAnoAnteriorMesmoPeriodo, "faturamento")) : null,
+        variacaoLit: temComparacao ? calcularVariacao(media(rowsAtualComparavel, "litros"), media(rowsAnoAnteriorMesmoPeriodo, "litros")) : null,
       };
     });
   }, [rowsFechadas]);
@@ -1012,8 +1057,12 @@ function ClienteDashboard() {
           const mensal = [["Cliente(s)", titulo], [], ["Mês", "Faturamento (R$)", "Litros", "Preço médio (R$/L)"],
             ...(rowsFiltradas || []).map(r => [labelMes(r.chave), nx(r.faturamento), nx(r.litros), r.litros ? nx(r.faturamento / r.litros) : ""])];
           const anual = [["Ano", "Meses fechados", "Faturamento total (R$)", "Litros total", "Média fat./mês (R$)", "Média litros/mês",
-            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)"],
-            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : ""])];
+            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)",
+            "Período do ano ant. comparado", "Fat. total no período ano ant. (R$)", "Fat. média/mês no período ano ant. (R$)", "Litros total no período ano ant.", "Litros média/mês no período ano ant."],
+            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : "",
+              ...(m.rowsAnoAnteriorMesmoPeriodo && m.rowsAnoAnteriorMesmoPeriodo.length
+                ? [periodoTexto(m.rowsAnoAnteriorMesmoPeriodo), nx(soma(m.rowsAnoAnteriorMesmoPeriodo, "faturamento")), nx(media(m.rowsAnoAnteriorMesmoPeriodo, "faturamento")), nx(soma(m.rowsAnoAnteriorMesmoPeriodo, "litros")), nx(media(m.rowsAnoAnteriorMesmoPeriodo, "litros"))]
+                : ["", "", "", "", ""])])];
           const tri = [["Ano", "Trimestre", "Meses fechados", "Litros", "Média litros/mês", "% do ano (litros)", "Var. litros vs mesmo tri. ano ant. (%)",
             "Faturamento (R$)", "Média fat./mês (R$)", "% do ano (fat.)", "Var. fat. vs mesmo tri. ano ant. (%)"]];
           mediasPorAno.forEach(m => calcularTrimestres(m.rowsDoAno, m.rowsAnoAnterior, m.totalFat, m.totalLit).forEach(t =>
@@ -3030,12 +3079,20 @@ function GlobalTab() {
       const rowsAnoAnterior = idx > 0 ? rowsFechadas.filter(r => r.ano === anos[idx - 1]) : [];
       const mediaFatAno = media(rowsDoAno, "faturamento");
       const mediaLitAno = media(rowsDoAno, "litros");
+      // comparação justa: só os meses que existem nos DOIS anos. Ex: 2026 com Jan-Ago fechados
+      // compara só com Jan-Ago/2025 (e não com a média do 2025 inteiro, que mistura a sazonalidade
+      // de Nov/Dez com meses que ainda nem aconteceram em 2026)
+      const mesesAtual = new Set(rowsDoAno.map(r => r.mes));
+      const mesesAnt = new Set(rowsAnoAnterior.map(r => r.mes));
+      const rowsAtualComparavel = rowsDoAno.filter(r => mesesAnt.has(r.mes));
+      const rowsAnoAnteriorMesmoPeriodo = rowsAnoAnterior.filter(r => mesesAtual.has(r.mes));
+      const temComparacao = rowsAtualComparavel.length > 0 && rowsAnoAnteriorMesmoPeriodo.length > 0;
       return {
-        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior,
+        ano, meses: rowsDoAno.length, rowsDoAno, rowsAnoAnterior, rowsAnoAnteriorMesmoPeriodo, rowsAtualComparavel,
         totalFat: soma(rowsDoAno, "faturamento"), totalLit: soma(rowsDoAno, "litros"),
         mediaFat: mediaFatAno, mediaLit: mediaLitAno,
-        variacaoFat: rowsAnoAnterior.length ? calcularVariacao(mediaFatAno, media(rowsAnoAnterior, "faturamento")) : null,
-        variacaoLit: rowsAnoAnterior.length ? calcularVariacao(mediaLitAno, media(rowsAnoAnterior, "litros")) : null,
+        variacaoFat: temComparacao ? calcularVariacao(media(rowsAtualComparavel, "faturamento"), media(rowsAnoAnteriorMesmoPeriodo, "faturamento")) : null,
+        variacaoLit: temComparacao ? calcularVariacao(media(rowsAtualComparavel, "litros"), media(rowsAnoAnteriorMesmoPeriodo, "litros")) : null,
       };
     });
   }, [rowsFechadas]);
@@ -3171,8 +3228,12 @@ function GlobalTab() {
             ["Total de clientes cadastrados", nomes.length, pctX(variacaoTotalClientes)],
             ["Novos clientes (12 meses)", novosClientes12m == null ? "" : novosClientes12m, pctX(variacaoNovosClientes)]];
           const anual = [["Ano", "Meses fechados", "Faturamento total (R$)", "Litros total", "Média fat./mês (R$)", "Média litros/mês",
-            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)"],
-            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : ""])];
+            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)",
+            "Período do ano ant. comparado", "Fat. total no período ano ant. (R$)", "Fat. média/mês no período ano ant. (R$)", "Litros total no período ano ant.", "Litros média/mês no período ano ant."],
+            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : "",
+              ...(m.rowsAnoAnteriorMesmoPeriodo && m.rowsAnoAnteriorMesmoPeriodo.length
+                ? [periodoTexto(m.rowsAnoAnteriorMesmoPeriodo), nx(soma(m.rowsAnoAnteriorMesmoPeriodo, "faturamento")), nx(media(m.rowsAnoAnteriorMesmoPeriodo, "faturamento")), nx(soma(m.rowsAnoAnteriorMesmoPeriodo, "litros")), nx(media(m.rowsAnoAnteriorMesmoPeriodo, "litros"))]
+                : ["", "", "", "", ""])])];
           const tri = [["Ano", "Trimestre", "Meses fechados", "Litros", "Média litros/mês", "% do ano (litros)", "Var. litros vs mesmo tri. ano ant. (%)",
             "Faturamento (R$)", "Média fat./mês (R$)", "% do ano (fat.)", "Var. fat. vs mesmo tri. ano ant. (%)"]];
           mediasPorAno.forEach(m => calcularTrimestres(m.rowsDoAno, m.rowsAnoAnterior, m.totalFat, m.totalLit).forEach(t =>
