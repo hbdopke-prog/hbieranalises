@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.4";
+const APP_VERSION = "v9.7";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -733,6 +733,96 @@ const chipBtnStyle = {
   borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600,
 };
 
+// Exporta um ou mais "quadros" pra um arquivo .xlsx num clique.
+// abas = [{ nome: "Resumo", linhas: [ [cabecalho1, cabecalho2], [v1, v2], ... ] }]
+// Os valores saem como NÚMEROS de verdade (não texto formatado tipo "R$ 14.7k"), pra dar
+// pra somar/filtrar no Excel. Nome do arquivo: HBier_<Aba>_<data>.xlsx
+async function exportarExcel(nomeAba, abas) {
+  // a biblioteca do Excel só é carregada na hora do clique (não pesa na abertura do app)
+  const XLSX = await import("xlsx");
+  const wb = XLSX.utils.book_new();
+  const usados = new Set();
+  abas.forEach((aba, i) => {
+    if (!aba || !aba.linhas || !aba.linhas.length) return;
+    const ws = XLSX.utils.aoa_to_sheet(aba.linhas);
+    // largura das colunas: ajusta pelo maior texto de cada coluna (com limite)
+    const nCols = Math.max(...aba.linhas.map(l => l.length));
+    ws["!cols"] = Array.from({ length: nCols }, (_, c) => ({
+      wch: Math.min(45, Math.max(10, ...aba.linhas.map(l => String(l[c] == null ? "" : l[c]).length + 2))),
+    }));
+    // nome de planilha: máx 31 caracteres, sem caracteres proibidos, sem repetir
+    let nome = String(aba.nome || `Planilha${i + 1}`).replace(/[\\/?*\[\]:]/g, "-").slice(0, 31);
+    let base = nome, n = 2;
+    while (usados.has(nome)) { nome = `${base.slice(0, 28)} ${n++}`; }
+    usados.add(nome);
+    XLSX.utils.book_append_sheet(wb, ws, nome);
+  });
+  if (!wb.SheetNames.length) { alert("Não há dados na tela pra exportar."); return; }
+  const hoje = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `HBier_${nomeAba.replace(/\s+/g, "")}_${hoje}.xlsx`);
+}
+
+// número "limpo" pro Excel (2 casas, vazio se não houver) e % de uma variação
+const nx = v => (v == null || v === "" || isNaN(v) ? "" : Number(Number(v).toFixed(2)));
+const pctX = variacao => (variacao && variacao.pct != null && !isNaN(variacao.pct) ? Number(variacao.pct.toFixed(2)) : "");
+
+// Monta as 2 planilhas de uma tabela "mês a mês" (linhas = produtos/grupos, colunas = meses):
+// 1) valores (com Total, Média/mês, opcionalmente Média 7d, e uma linha TOTAL no fim)
+// 2) % de cada célula vs o mesmo mês do ano anterior (o que a tela mostra entre parênteses)
+function abasDeHeatmap(nomeValores, nomePct, rotuloColuna, linhas, dadosCompletos, opcoes) {
+  if (!linhas || !linhas.length) return [];
+  const opc = opcoes || {};
+  const periodos = linhas[0].valores.map(v => v.periodo);
+  const media7d = vals => {
+    let soma = 0, dias = 0;
+    vals.forEach(v => { soma += v.valor || 0; dias += diasNoMes(v.periodo); });
+    return dias ? nx(soma / dias * 7) : "";
+  };
+  const cab = [rotuloColuna, ...periodos.map(labelMes), "Total", "Média/mês"];
+  if (opc.media7d) cab.push("Média 7d (últ. mês)", "Média 7d (últ. 3 meses)", "Média 7d (período)");
+
+  const corpo = linhas.map(l => {
+    const total = l.valores.reduce((s, v) => s + (v.valor || 0), 0);
+    const linha = [l.categoria, ...l.valores.map(v => nx(v.valor)), nx(total), nx(l.valores.length ? total / l.valores.length : 0)];
+    if (opc.media7d) linha.push(media7d(l.valores.slice(-1)), media7d(l.valores.slice(-3)), media7d(l.valores));
+    return linha;
+  });
+
+  const totVals = periodos.map((p, i) => ({ periodo: p, valor: linhas.reduce((s, l) => s + ((l.valores[i] && l.valores[i].valor) || 0), 0) }));
+  const totalGeral = totVals.reduce((s, v) => s + v.valor, 0);
+  const linhaTotal = ["TOTAL", ...totVals.map(v => nx(v.valor)), nx(totalGeral), nx(totVals.length ? totalGeral / totVals.length : 0)];
+  if (opc.media7d) linhaTotal.push(media7d(totVals.slice(-1)), media7d(totVals.slice(-3)), media7d(totVals));
+
+  const buscar = (l, chave) => {
+    if (dadosCompletos && dadosCompletos[l.categoria]) return dadosCompletos[l.categoria][chave];
+    const item = l.valores.find(v => v.periodo === chave);
+    return item ? item.valor : undefined;
+  };
+  const corpoPct = linhas.map(l => [l.categoria, ...l.valores.map(v => {
+    const anterior = buscar(l, chaveAnoAnterior(v.periodo));
+    return anterior != null ? pctX(calcularVariacao(v.valor || 0, anterior)) : "";
+  })]);
+
+  return [
+    { nome: nomeValores, linhas: [cab, ...corpo, linhaTotal] },
+    { nome: nomePct, linhas: [[rotuloColuna, ...periodos.map(labelMes)], ...corpoPct] },
+  ];
+}
+
+// Botão "Exportar Excel": recebe uma função que devolve as abas (montada na hora do clique,
+// assim sempre exporta o que está na tela naquele momento, com os filtros aplicados).
+function BotaoExcel({ nomeAba, gerar }) {
+  return (
+    <button onClick={() => exportarExcel(nomeAba, gerar())} style={{
+      background: "transparent", border: "1px solid #4caf6b", color: "#4caf6b",
+      borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600,
+      display: "flex", alignItems: "center", gap: 6,
+    }}>
+      📊 Exportar Excel
+    </button>
+  );
+}
+
 // Botão pra gerar impressão (ou "Salvar como PDF" via caixa de diálogo do navegador) da aba
 // atual. O CSS de impressão (em index.html) já força fundo branco e some com os botões/nav.
 function BotaoImprimir({ label }) {
@@ -869,7 +959,20 @@ function ClienteDashboard() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Cliente" gerar={() => {
+          const titulo = clientesSel.length ? clientesSel.map(c => labelDoCliente[c]).join(" + ") : "Nenhum cliente selecionado";
+          const mensal = [["Cliente(s)", titulo], [], ["Mês", "Faturamento (R$)", "Litros", "Preço médio (R$/L)"],
+            ...(rowsFiltradas || []).map(r => [labelMes(r.chave), nx(r.faturamento), nx(r.litros), r.litros ? nx(r.faturamento / r.litros) : ""])];
+          const anual = [["Ano", "Meses fechados", "Faturamento total (R$)", "Litros total", "Média fat./mês (R$)", "Média litros/mês",
+            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)"],
+            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : ""])];
+          const tri = [["Ano", "Trimestre", "Meses fechados", "Litros", "Média litros/mês", "% do ano (litros)", "Var. litros vs mesmo tri. ano ant. (%)",
+            "Faturamento (R$)", "Média fat./mês (R$)", "% do ano (fat.)", "Var. fat. vs mesmo tri. ano ant. (%)"]];
+          mediasPorAno.forEach(m => calcularTrimestres(m.rowsDoAno, m.rowsAnoAnterior, m.totalFat, m.totalLit).forEach(t =>
+            tri.push([m.ano, `${t.nome} (${t.label})`, t.mesesFechados, nx(t.totalLit), nx(t.mediaLit), nx(t.pctLit), pctX(t.variacaoLit), nx(t.totalFat), nx(t.mediaFat), nx(t.pctFat), pctX(t.variacaoFat)])));
+          return [{ nome: "Mensal", linhas: mensal }, { nome: "Anual", linhas: anual }, { nome: "Trimestres", linhas: tri }];
+        }} />
         <BotaoImprimir label="Imprimir Cliente" />
       </div>
       <div style={{ position: "relative", marginBottom: 12 }}>
@@ -1468,7 +1571,33 @@ function ComparacaoTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Comparacao" gerar={() => {
+          const abas = [];
+          if (pronto) {
+            abas.push({ nome: "Cenário A vs B", linhas: [
+              ["Período", `Faturamento ${labelA} (R$)`, `Faturamento ${labelB} (R$)`, "Diferença faturamento A-B (R$)", `Litros ${labelA}`, `Litros ${labelB}`, "Diferença litros A-B"],
+              ...chartFat.map((f, i) => [f.periodo, nx(f.faturamentoA), nx(f.faturamentoB), nx(f.diferencaFat), nx(chartLit[i].litrosA), nx(chartLit[i].litrosB), nx(chartLit[i].diferencaLit)]),
+            ] });
+            abas.push({ nome: "Resumo A vs B", linhas: [
+              ["Indicador", labelA, labelB],
+              ["Faturamento total (R$)", nx(totFatA), nx(totFatB)], ["Litros total", nx(totLitA), nx(totLitB)],
+              ["Faturamento médio/mês (R$)", nx(mediaFatA), nx(mediaFatB)], ["Litros médio/mês", nx(mediaLitA), nx(mediaLitB)],
+              ["Faturamento média últ. 3 meses (R$)", nx(media3FatA), nx(media3FatB)], ["Litros média últ. 3 meses", nx(media3LitA), nx(media3LitB)],
+            ] });
+          }
+          if (gruposComparar.length) {
+            const cabG = ["Mês"];
+            gruposComparar.forEach(g => cabG.push(`${g.nome} - Faturamento (R$)`, `${g.nome} - Litros`));
+            abas.push({ nome: "Grupos - mensal", linhas: [cabG, ...seriesComparacaoGrupos.map(r => [r.mes, ...gruposComparar.flatMap(g => [nx(r[`fat_${g.id}`]), nx(r[`lit_${g.id}`])])])] });
+            const ordenado = [...resumoComparacaoGrupos].sort((a, b) => b.fat - a.fat);
+            const maior = ordenado[0] ? ordenado[0].fat : 0;
+            const somaF = ordenado.reduce((s, r) => s + r.fat, 0);
+            abas.push({ nome: "Grupos - resumo", linhas: [["#", "Grupo", "Litros (total)", "Faturamento (total, R$)", "% do líder", "% do total"],
+              ...ordenado.map((g, i) => [i + 1, g.nome, nx(g.lit), nx(g.fat), maior ? nx(g.fat / maior * 100) : "", somaF ? nx(g.fat / somaF * 100) : ""])] });
+          }
+          return abas;
+        }} />
         <BotaoImprimir label="Imprimir Comparação" />
       </div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
@@ -2499,8 +2628,52 @@ function DashboardTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <BotaoImprimir label="Imprimir Dashboard" />
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Canais" gerar={() => {
+          const unid = metricaHeatmapGrupo === "litros" ? "litros" : "R$";
+          const abas = abasDeHeatmap("Grupos mês a mês", "Grupos - % vs ano ant", `Grupo (${unid})`, linhasHeatmap, dadosCompletosHeatmapGrupo);
+          if (novosClientesPorMes.length) {
+            abas.push({ nome: "Novos clientes", linhas: [["Mês", "Novos clientes (qtd)", "Nomes"], ...novosClientesPorMes.map(m => [labelMes(m.mes), m.quantidade, m.clientes.join("; ")])] });
+          }
+          const longa = [["Lista", "#", "Cliente", "Variação (%)", "Diferença"]];
+          const add = (titulo, itens) => itens.forEach((it, i) => longa.push([titulo, i + 1, labelDoCliente[it.nome] || it.nome, pctX(it.variacao), nx(it.variacao.diff)]));
+          add("Crescimento - Faturamento vs mês anterior", top10FatMesCresc);
+          add("Crescimento - Faturamento vs mesmo mês ano anterior", top10FatAnoCresc);
+          add("Crescimento - Litros vs mês anterior", top10LitMesCresc);
+          add("Crescimento - Litros vs mesmo mês ano anterior", top10LitAnoCresc);
+          add("Queda - Faturamento vs mês anterior", top10FatMesQueda);
+          add("Queda - Faturamento vs mesmo mês ano anterior", top10FatAnoQueda);
+          add("Queda - Litros vs mês anterior", top10LitMesQueda);
+          add("Queda - Litros vs mesmo mês ano anterior", top10LitAnoQueda);
+          if (inicioTopN && fimTopN) {
+            const per = `${labelMes(inicioTopN)} a ${labelMes(fimTopN)}`;
+            add(`Crescimento - Faturamento ${per}`, topFatPeriodoCresc);
+            add(`Crescimento - Litros ${per}`, topLitPeriodoCresc);
+            add(`Queda - Faturamento ${per}`, topFatPeriodoQueda);
+            add(`Queda - Litros ${per}`, topLitPeriodoQueda);
+          }
+          abas.push({ nome: `Top ${tamanhoTopN}`, linhas: longa });
+          const melhores = [["#", "Cliente",
+            "Último mês - Fat. (R$)", "Último mês - Litros", "Último mês - Var. fat. vs mês ant. (%)", "Último mês - Var. litros vs mês ant. (%)",
+            "Últ. 3 meses - Fat. (R$)", "Últ. 3 meses - Litros", "Últ. 3 meses - Var. fat. (%)", "Últ. 3 meses - Var. litros (%)",
+            "Últ. 6 meses - Fat. (R$)", "Últ. 6 meses - Litros", "Últ. 6 meses - Var. fat. (%)", "Últ. 6 meses - Var. litros (%)",
+            "Últ. 12 meses - Fat. (R$)", "Últ. 12 meses - Litros", "Últ. 12 meses - Var. fat. (%)", "Últ. 12 meses - Var. litros (%)",
+            "Mês vs ano ant. - Var. fat. (%)", "Mês vs ano ant. - Var. litros (%)", "3 meses vs ano ant. - Var. fat. (%)", "3 meses vs ano ant. - Var. litros (%)",
+            "6 meses vs ano ant. - Var. fat. (%)", "6 meses vs ano ant. - Var. litros (%)", "12 meses vs ano ant. - Var. fat. (%)", "12 meses vs ano ant. - Var. litros (%)"]];
+          clientesExibidos.forEach(c => {
+            const m = c.metricas, um = m.ultimoMesFechado, ca = m.comparacaoAno;
+            melhores.push([c.posicao, labelDoCliente[c.nome],
+              nx(um && um.fat), nx(um && um.lit), pctX(um && um.varFat), pctX(um && um.varLit),
+              nx(m.j3.fat), nx(m.j3.lit), pctX(m.j3.varFat), pctX(m.j3.varLit),
+              nx(m.j6.fat), nx(m.j6.lit), pctX(m.j6.varFat), pctX(m.j6.varLit),
+              nx(m.j12.fat), nx(m.j12.lit), pctX(m.j12.varFat), pctX(m.j12.varLit),
+              pctX(ca && ca.m1 && ca.m1.varFat), pctX(ca && ca.m1 && ca.m1.varLit), pctX(ca && ca.m3 && ca.m3.varFat), pctX(ca && ca.m3 && ca.m3.varLit),
+              pctX(ca && ca.m6 && ca.m6.varFat), pctX(ca && ca.m6 && ca.m6.varLit), pctX(ca && ca.m12 && ca.m12.varFat), pctX(ca && ca.m12 && ca.m12.varLit)]);
+          });
+          abas.push({ nome: "Melhores clientes", linhas: melhores });
+          return abas;
+        }} />
+        <BotaoImprimir label="Imprimir Canais" />
       </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
@@ -2939,7 +3112,30 @@ function GlobalTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Global" gerar={() => {
+          const resumo = [["Indicador", "Valor", "Var. vs ano anterior (%)"],
+            ["Faturamento (12 meses) (R$)", nx(soma(ultimos12, "faturamento")), pctX(variacaoFat12)],
+            ["Litros (12 meses)", nx(soma(ultimos12, "litros")), pctX(variacaoLit12)],
+            ["Preço médio geral (R$/L) (12 meses)", nx(precoLitroGeral12m), pctX(variacaoPrecoLitro12)],
+            ["Clientes ativos (último mês fechado)", clientesAtivos, pctX(variacaoClientesAtivos)],
+            ["Total de clientes cadastrados", nomes.length, pctX(variacaoTotalClientes)],
+            ["Novos clientes (12 meses)", novosClientes12m == null ? "" : novosClientes12m, pctX(variacaoNovosClientes)]];
+          const anual = [["Ano", "Meses fechados", "Faturamento total (R$)", "Litros total", "Média fat./mês (R$)", "Média litros/mês",
+            "Var. média fat. vs ano ant. (%)", "Var. média litros vs ano ant. (%)", "Preço médio (R$/L)"],
+            ...mediasPorAno.map(m => [m.ano, m.meses, nx(m.totalFat), nx(m.totalLit), nx(m.mediaFat), nx(m.mediaLit), pctX(m.variacaoFat), pctX(m.variacaoLit), m.totalLit ? nx(m.totalFat / m.totalLit) : ""])];
+          const tri = [["Ano", "Trimestre", "Meses fechados", "Litros", "Média litros/mês", "% do ano (litros)", "Var. litros vs mesmo tri. ano ant. (%)",
+            "Faturamento (R$)", "Média fat./mês (R$)", "% do ano (fat.)", "Var. fat. vs mesmo tri. ano ant. (%)"]];
+          mediasPorAno.forEach(m => calcularTrimestres(m.rowsDoAno, m.rowsAnoAnterior, m.totalFat, m.totalLit).forEach(t =>
+            tri.push([m.ano, `${t.nome} (${t.label})`, t.mesesFechados, nx(t.totalLit), nx(t.mediaLit), nx(t.pctLit), pctX(t.variacaoLit), nx(t.totalFat), nx(t.mediaFat), nx(t.pctFat), pctX(t.variacaoFat)])));
+          const evol = ser => [["Mês", ...ser.anos.map(String)], ...ser.dados.map(d => [d.mes, ...ser.anos.map(a => nx(d[a]))])];
+          const porGrupo = [[`Período: ${inicioPizza ? labelMes(inicioPizza) : ""} a ${fimPizza ? labelMes(fimPizza) : ""}`], [],
+            ["Grupo", "Faturamento (R$)", "Litros", "% do faturamento", "% dos litros"],
+            ...dadosPizza.map(d => [d.grupo, nx(d.fat), nx(d.lit), totalFatPizza ? nx(d.fat / totalFatPizza * 100) : "", totalLitPizza ? nx(d.lit / totalLitPizza * 100) : ""])];
+          return [{ nome: "Resumo 12 meses", linhas: resumo }, { nome: "Anual", linhas: anual }, { nome: "Trimestres", linhas: tri },
+            { nome: "Evolução mensal - Fat.", linhas: evol(seriesFat) }, { nome: "Evolução mensal - Litros", linhas: evol(seriesLit) },
+            { nome: "Por grupo", linhas: porGrupo }];
+        }} />
         <BotaoImprimir label="Imprimir Global" />
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
@@ -3292,8 +3488,15 @@ function MesTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-        <BotaoImprimir label="Imprimir Mês" />
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="TopClientes" gerar={() => {
+          const resumo = [["Período", rotuloPeriodo], ["Litros total", nx(totalLit)], ["Faturamento total (R$)", nx(totalFat)],
+            ["Preço médio geral (R$/L)", nx(precoLitroGeral)], ["Clientes com venda no período", clientesMes.length]];
+          const ranking = [["#", "Cliente", "Litros", "Litros - Var. vs ano ant. (%)", "Faturamento (R$)", "Faturamento - Var. vs ano ant. (%)", "Preço médio (R$/L)"],
+            ...clientesExibidos.map((c, i) => [i + 1, labelDoCliente[c.codigo], nx(c.lit), pctX(c.varLit), nx(c.fat), pctX(c.varFat), nx(c.precoLitro)])];
+          return [{ nome: "Resumo", linhas: resumo }, { nome: "Ranking de clientes", linhas: ranking }];
+        }} />
+        <BotaoImprimir label="Imprimir Top Clientes" />
       </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -3618,7 +3821,20 @@ function EstoqueTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Estoque" gerar={() => {
+          const cab = ["Produto", "Estoque (un.)", "Estoque (L)", "Litros convertidos de unidades?"];
+          [30, 60, 90, 120].forEach(d => cab.push(`Dias estoque - Ano passado (${d}d)`, `Vendido/dia - Ano passado (${d}d) (L)`, `Dias estoque - Recente (${d}d)`, `Vendido/dia - Recente (${d}d) (L)`));
+          cab.push(`Acaba em (recente ${baseDestaque}d)`);
+          const corpo = linhasOrdenadas.map(l => {
+            const linha = [l.nome, nx(l.estoqueUnidades), nx(l.estoqueLitros), l.litrosConvertidos ? "sim" : "não"];
+            [30, 60, 90, 120].forEach(d => linha.push(nx(l.bases[d].anoPassado.diasEstoque), nx(l.bases[d].anoPassado.taxaDiaria), nx(l.bases[d].recente.diasEstoque), nx(l.bases[d].recente.taxaDiaria)));
+            const dd = l.bases[baseDestaque].recente.diasEstoque;
+            linha.push(dd != null ? dataPrevistaFimEstoque(dd) : "");
+            return linha;
+          });
+          return [{ nome: "Estoque", linhas: [[`% de crescimento aplicado no "ano passado": ${pctCrescimento}%`], [], cab, ...corpo] }];
+        }} />
         <BotaoImprimir label="Imprimir Estoque" />
       </div>
 
@@ -3856,7 +4072,7 @@ function ProjecaoVendasTab() {
       detalheAnoAnterior = chavesRestantes.map(chave => {
         const [, mes] = chave.split("-");
         const chaveAnoPassado = `${anoAnalise - 1}-${mes}`;
-        const valorBaseAnoPassado = clientesFiltrados.reduce((s, c) => {
+        const valorBaseAnoPassado = existentes.reduce((s, c) => {
           const row = (dados[c] || []).find(r => r.chave === chaveAnoPassado);
           return s + (row ? row.faturamento : 0);
         }, 0);
@@ -3893,7 +4109,40 @@ function ProjecaoVendasTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Projecao" gerar={() => {
+          if (!analise) return [];
+          const a = analise;
+          const modoTxt = ritmo === "ultimoMes" ? "Ritmo: último mês fechado" : ritmo === "media3" ? "Ritmo: média últimos 3 meses" : "Mesmo mês do ano passado";
+          const resumo = [["Período que define novos clientes", `${labelMes(inicioNovos)} a ${labelMes(fimNovos)}`], [], ["Indicador", "Valor"],
+            ["Quantidade de clientes novos", a.novos.length],
+            ["Faturamento total gerado pelos novos (R$)", nx(a.fatNovosTotal)],
+            ["Litros total gerado pelos novos", nx(a.litNovosTotal)],
+            ["Faturamento médio por cliente novo (R$)", nx(a.novos.length ? a.fatNovosTotal / a.novos.length : 0)],
+            ["% do faturamento da empresa no período", nx(a.pctDoTotal)], [],
+            [`Projeção ${a.anoAnalise}`, ""], ["Modo", modoTxt],
+            [ritmo === "anoAnterior" ? "% de ajuste sobre a base (ano passado)" : "% de ajuste sobre o ritmo", pctAjuste],
+            ...(ritmo === "anoAnterior" ? [["% de ajuste sobre os novos PDVs", pctNovos]] : []),
+            ["Já realizado no ano (R$)", nx(a.fatRealizadoAno)],
+            ["Ritmo mensal - novos clientes (R$)", nx(a.taxaNovos)],
+            ["Ritmo mensal - clientes existentes (R$)", a.taxaExistentes == null ? "" : nx(a.taxaExistentes)],
+            [`Projeção pros ${a.mesesRestantes} meses restantes (R$)`, nx(a.projecaoRestante)],
+            [`Total projetado pra ${a.anoAnalise} (R$)`, nx(a.totalAnoProjetado)]];
+          const mes = [["Mês", "Novos (R$)", "Existentes (R$)", "Total (R$)"], ...a.mesAMes.map(m => [labelMes(m.chave), nx(m.fatNovos), nx(m.fatExistentes), nx(m.total)])];
+          const abas = [{ nome: "Resumo", linhas: resumo }, { nome: "Mês a mês", linhas: mes }];
+          if (ritmo === "anoAnterior" && a.detalheAnoAnterior.length) {
+            abas.push({ nome: "Projeção ano passado", linhas: [["Mês (a projetar)", "Mesmo mês ano passado (R$)", "Base ajustada (R$)", "Novos PDVs (R$)", "Total (R$)"],
+              ...a.detalheAnoAnterior.map(d => [labelMes(d.chave), nx(d.valorBaseAnoPassado), nx(d.valorBaseAjustado), nx(d.valorNovosAjustado), nx(d.valorTotal)])] });
+          }
+          const novosLista = a.novos.map(c => {
+            let f = 0, l = 0;
+            (dados[c] || []).forEach(r => { f += r.faturamento; l += r.litros; });
+            const dt = dataCriacaoDoCliente[c];
+            return [labelDoCliente[c], dt ? dt.split("-").reverse().join("/") : "", nx(f), nx(l)];
+          }).sort((x, y) => (y[2] || 0) - (x[2] || 0));
+          abas.push({ nome: "Novos clientes", linhas: [["Cliente", "Data de cadastro", "Faturamento total (R$)", "Litros total"], ...novosLista] });
+          return abas;
+        }} />
         <BotaoImprimir label="Imprimir Projeção" />
       </div>
 
@@ -4076,7 +4325,19 @@ function PositivacaoTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Positivacao" gerar={() => {
+          const resumo = [["Mês de referência", mesRef ? labelMes(mesRef) : ""], [], ["Situação", "Clientes"],
+            ["Positivados", classificacao.positivados.length], ["Sem compra no mês", classificacao.semCompraMes.length],
+            ["Sem compra há 2+ meses", classificacao.semCompra2Meses.length], ["Nunca comprou", classificacao.nuncaComprou.length]];
+          const lista = [["Situação", "Cliente", "Última compra", "Último pedido - Faturamento (R$)", "Último pedido - Litros"]];
+          const add = (nome, itens) => itens.forEach(i => lista.push([nome, labelDoCliente[i.codigo], i.ultimaCompra ? labelMes(i.ultimaCompra) : "nunca", nx(i.ultimoFat), nx(i.ultimoLit)]));
+          add("Positivado", classificacao.positivados);
+          add("Sem compra no mês", classificacao.semCompraMes);
+          add("Sem compra há 2+ meses", classificacao.semCompra2Meses);
+          add("Nunca comprou", classificacao.nuncaComprou);
+          return [{ nome: "Resumo", linhas: resumo }, { nome: "Clientes", linhas: lista }];
+        }} />
         <BotaoImprimir label="Imprimir Positivação" />
       </div>
 
@@ -4212,21 +4473,26 @@ function ProdutosTab() {
     return mapa;
   }, [produtosNomes, produtosDados, metricaHeatmap]);
 
-  const linhasHeatmapVisiveis = expandidoHeatmap ? linhasHeatmap : linhasHeatmap.slice(0, LIMITE_HEATMAP);
-
   // se estiver em modo pallets, converte litros -> pallets por produto (cada um tem seu
   // próprio "litros por pallet" de acordo com o tamanho da embalagem no nome). Produto sem
   // tamanho reconhecido (garrafa/lata/chope) mantém o valor em litros mesmo.
   const emModoPallets = unidadeExibicao === "pallets" && metricaHeatmap === "litros";
 
-  const linhasHeatmapExibidas = useMemo(() => {
-    if (!emModoPallets) return linhasHeatmapVisiveis;
-    return linhasHeatmapVisiveis.map(linha => {
+  // TODAS as linhas (já convertidas se for pallets) - base da projeção e da exportação pro Excel
+  const linhasHeatmapConvertidas = useMemo(() => {
+    if (!emModoPallets) return linhasHeatmap;
+    return linhasHeatmap.map(linha => {
       const porPallet = litrosPorPallet(linha.categoria);
       if (!porPallet) return linha;
       return { ...linha, valores: linha.valores.map(v => ({ ...v, valor: v.valor / porPallet })) };
     });
-  }, [linhasHeatmapVisiveis, emModoPallets]);
+  }, [linhasHeatmap, emModoPallets]);
+
+  // o que aparece na tela: as 20 primeiras, até clicar em "Ver todos"
+  const linhasHeatmapExibidas = useMemo(
+    () => (expandidoHeatmap ? linhasHeatmapConvertidas : linhasHeatmapConvertidas.slice(0, LIMITE_HEATMAP)),
+    [linhasHeatmapConvertidas, expandidoHeatmap]
+  );
 
   const dadosCompletosExibidos = useMemo(() => {
     if (!emModoPallets) return dadosCompletosHeatmap;
@@ -4319,7 +4585,7 @@ function ProdutosTab() {
 
     if (modoProjecao === "anoAnterior") {
       if (!chavesReferenciaProjecao.length) return [];
-      return linhasHeatmapExibidas.map(linha => {
+      return linhasHeatmapConvertidas.map(linha => {
         const completos = dadosCompletosExibidos[linha.categoria] || {};
         const valores = chavesReferenciaProjecao.map((chaveRef, idx) => {
           const valorRef = completos[chaveRef] || 0;
@@ -4336,7 +4602,7 @@ function ProdutosTab() {
 
     // modo "mediaRecente"
     if (!indiceSazonal || !chavesBaseMedia.length || !chavesProjecaoMediaRecente.length) return [];
-    return linhasHeatmapExibidas.map(linha => {
+    return linhasHeatmapConvertidas.map(linha => {
       const completos = dadosCompletosExibidos[linha.categoria] || {};
       const baseValores = chavesBaseMedia.map(c => completos[c] || 0);
       const baseMedia = baseValores.reduce((a, b) => a + b, 0) / baseValores.length;
@@ -4353,7 +4619,7 @@ function ProdutosTab() {
       });
       return { categoria: linha.categoria, valores };
     });
-  }, [incluirProjecao, modoProjecao, linhasHeatmapExibidas, dadosCompletosExibidos, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
+  }, [incluirProjecao, modoProjecao, linhasHeatmapConvertidas, dadosCompletosExibidos, chavesReferenciaProjecao, chavesProjecaoAnoAnterior,
       pctMin, pctBase, pctMax, indiceSazonal, chavesBaseMedia, chavesProjecaoMediaRecente]);
 
   if (!todosProdutosNomes.length) {
@@ -4368,7 +4634,38 @@ function ProdutosTab() {
 
   return (
     <div>
-      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+      <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
+        <BotaoExcel nomeAba="Produtos" gerar={() => {
+          const unid = metricaHeatmap === "litros" ? (emModoPallets ? "pallets" : "litros") : "R$";
+          const abas = abasDeHeatmap("Mês a mês", "% vs ano anterior", `Produto (${unid})`, linhasHeatmapConvertidas, dadosCompletosExibidos, { media7d: true });
+          if (incluirProjecao && linhasProjecao.length) {
+            const per = linhasProjecao[0].valores.map(v => v.periodo);
+            const n = per.length || 1;
+            const cab = [`Produto (${unid})`];
+            per.forEach(p => cab.push(`${labelMes(p)} Base`, `${labelMes(p)} Mín`, `${labelMes(p)} Máx`));
+            cab.push("Total Base", "Total Mín", "Total Máx", "Média/mês Base", "Média/mês Mín", "Média/mês Máx");
+            const soma3 = l => [l.valores.reduce((s, v) => s + (v.base || 0), 0), l.valores.reduce((s, v) => s + (v.min || 0), 0), l.valores.reduce((s, v) => s + (v.max || 0), 0)];
+            const corpo = linhasProjecao.map(l => {
+              const [tb, tm, tx] = soma3(l);
+              return [l.categoria, ...l.valores.flatMap(v => [nx(v.base), nx(v.min), nx(v.max)]), nx(tb), nx(tm), nx(tx), nx(tb / n), nx(tm / n), nx(tx / n)];
+            });
+            const colTot = per.flatMap((p, i) => {
+              let b = 0, mi = 0, ma = 0;
+              linhasProjecao.forEach(l => { const v = l.valores[i]; if (v) { b += v.base || 0; mi += v.min || 0; ma += v.max || 0; } });
+              return [nx(b), nx(mi), nx(ma)];
+            });
+            let gb = 0, gm = 0, gx = 0;
+            linhasProjecao.forEach(l => { const [tb, tm, tx] = soma3(l); gb += tb; gm += tm; gx += tx; });
+            abas.push({ nome: "Projeção", linhas: [cab, ...corpo, ["TOTAL", ...colTot, nx(gb), nx(gm), nx(gx), nx(gb / n), nx(gm / n), nx(gx / n)]] });
+          }
+          abas.push({ nome: "Por tipo (último mês)", linhas: [
+            ["Produto", "Último mês fechado", "Faturamento (R$)", "Fat. Var. vs mês ant. (%)", "Fat. Var. vs mesmo mês ano ant. (%)", "Litros", "Litros Var. vs mês ant. (%)", "Litros Var. vs mesmo mês ano ant. (%)", "Preço (R$/L)"],
+            ...produtosExibidos.map(({ nome, comp }) => comp
+              ? [nome, comp.mesTexto, nx(comp.fat), pctX(comp.varFatMes), pctX(comp.varFatAno), nx(comp.lit), pctX(comp.varLitMes), pctX(comp.varLitAno), nx(comp.precoLitro)]
+              : [nome]),
+          ] });
+          return abas;
+        }} />
         <BotaoImprimir label="Imprimir Produtos (comparação + projeção)" />
       </div>
       <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
@@ -4572,7 +4869,7 @@ function ProdutosTab() {
                 <div style={{ color: "#C69700", fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
                   📈 Projeção (estimativa — colunas com * não são dado real)
                 </div>
-                <TabelaProjecao linhas={linhasProjecao} rotuloColuna="Produto" unidade={unidadeAtual} />
+                <TabelaProjecao linhas={expandidoHeatmap ? linhasProjecao : linhasProjecao.slice(0, LIMITE_HEATMAP)} rotuloColuna="Produto" unidade={unidadeAtual} />
               </div>
             )}
           </>
@@ -4696,10 +4993,10 @@ export default function App() {
                   <GitCompareArrows size={14} /> Comparação
                 </button>
                 <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
-                  <LayoutDashboard size={14} /> Dashboard
+                  <LayoutDashboard size={14} /> Canais
                 </button>
                 <button onClick={() => setTab("mes")} style={tabStyle(tab === "mes")}>
-                  <Calendar size={14} /> Mês
+                  <Calendar size={14} /> Top Clientes
                 </button>
                 <button onClick={() => setTab("produtos")} style={tabStyle(tab === "produtos")}>
                   <Package size={14} /> Produtos
