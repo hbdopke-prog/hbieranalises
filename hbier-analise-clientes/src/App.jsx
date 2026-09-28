@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.7";
+const APP_VERSION = "v9.8";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -438,12 +438,20 @@ function StatCard({ label, value, icon, badge }) {
 // Card completo de janela (ex: "Últimos 3 meses"): mostra total e média do período atual,
 // o badge de crescimento/queda, e — pra deixar claro contra o que está comparando — o total
 // e a média do período anterior também.
-function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, formatador }) {
+// detalhado (opcional): mostra também a variação da MÉDIA/mês e uma tabelinha recolhível com o
+// comparativo mês a mês (cada mês da janela vs o mesmo mês do ano anterior).
+// chaveParcial (opcional): chave do mês ainda em andamento - se a janela incluir esse mês,
+// avisa que total e média estão parciais.
+function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, formatador, detalhado, chaveParcial }) {
   const totalAtual = soma(rowsAtual, campo);
   const mediaAtual = media(rowsAtual, campo);
   const totalAnterior = rowsAnterior.length ? soma(rowsAnterior, campo) : null;
   const mediaAnterior = rowsAnterior.length ? media(rowsAnterior, campo) : null;
   const variacao = rowsAnterior.length ? calcularVariacao(totalAtual, totalAnterior) : null;
+  const variacaoMedia = rowsAnterior.length ? calcularVariacao(mediaAtual, mediaAnterior) : null;
+  const temParcial = !!chaveParcial && rowsAtual.some(r => r.chave === chaveParcial);
+  const diaParcial = temParcial ? new Date().getDate() : null;
+  const diasParcial = temParcial ? diasNoMes(chaveParcial) : null;
 
   return (
     <div style={{
@@ -466,7 +474,13 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
         </div>
       </div>
 
-      <BadgeTendencia variacao={variacao} formatador={formatador} periodoTexto="" />
+      <BadgeTendencia variacao={variacao} formatador={formatador} periodoTexto={detalhado ? "total" : ""} />
+      {detalhado && <BadgeTendencia variacao={variacaoMedia} formatador={formatador} periodoTexto="média/mês" />}
+      {temParcial && (
+        <div style={{ color: "#888", fontSize: 10, marginTop: 6 }}>
+          ⏳ Inclui {labelMes(chaveParcial)} ainda em andamento (dia {diaParcial} de {diasParcial}) — total e média parciais.
+        </div>
+      )}
 
       {rowsAnterior.length > 0 && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2a2a28" }}>
@@ -482,6 +496,39 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
             </div>
           </div>
         </div>
+      )}
+
+      {detalhado && rowsAnterior.length > 0 && (
+        <details style={{ marginTop: 10 }}>
+          <summary style={{ cursor: "pointer", color: "#888", fontSize: 11 }}>Ver mês a mês</summary>
+          <table style={{ borderCollapse: "collapse", width: "100%", marginTop: 6, fontSize: 11 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", color: "#666", fontWeight: 600, padding: "3px 4px" }}>Mês</th>
+                <th style={{ textAlign: "right", color: "#666", fontWeight: 600, padding: "3px 4px" }}>Atual</th>
+                <th style={{ textAlign: "right", color: "#666", fontWeight: 600, padding: "3px 4px" }}>Ano anterior</th>
+                <th style={{ textAlign: "right", color: "#666", fontWeight: 600, padding: "3px 4px" }}>Var.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rowsAtual.map(r => {
+                const ant = rowsAnterior.find(x => x.mes === r.mes);
+                const v = ant ? calcularVariacao(r[campo], ant[campo]) : null;
+                const parcial = r.chave === chaveParcial;
+                return (
+                  <tr key={r.chave}>
+                    <td style={{ color: "#ccc", padding: "3px 4px" }}>{labelMes(r.chave)}{parcial ? " ⏳" : ""}</td>
+                    <td style={{ textAlign: "right", color: "#fff", padding: "3px 4px" }}>{formatador(r[campo])}</td>
+                    <td style={{ textAlign: "right", color: "#aaa", padding: "3px 4px" }}>{ant ? formatador(ant[campo]) : "-"}</td>
+                    <td style={{ textAlign: "right", padding: "3px 4px", color: v ? classificarTendencia(v.pct).cor : "#666" }}>
+                      {v ? `${v.pct >= 0 ? "+" : ""}${v.pct.toFixed(1)}%` : "-"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </details>
       )}
     </div>
   );
@@ -2963,15 +3010,17 @@ function GlobalTab() {
 
   const [mesRefAno, setMesRefAno] = useState(() => rowsFechadas.length ? rowsFechadas[rowsFechadas.length - 1].chave : "");
 
+  // usa TODOS os meses (inclusive o em andamento) pra dar pra escolher o mês corrente como
+  // referência - a comparação avisa quando a janela inclui o mês parcial
   const janelasAno = useMemo(() => {
-    if (!rowsFechadas.length || !mesRefAno) return null;
+    if (!rowsGlobais.length || !mesRefAno) return null;
     return {
-      m1: janelaAnoAnterior(rowsFechadas, mesRefAno, 1),
-      m3: janelaAnoAnterior(rowsFechadas, mesRefAno, 3),
-      m6: janelaAnoAnterior(rowsFechadas, mesRefAno, 6),
-      m12: janelaAnoAnterior(rowsFechadas, mesRefAno, 12),
+      m1: janelaAnoAnterior(rowsGlobais, mesRefAno, 1),
+      m3: janelaAnoAnterior(rowsGlobais, mesRefAno, 3),
+      m6: janelaAnoAnterior(rowsGlobais, mesRefAno, 6),
+      m12: janelaAnoAnterior(rowsGlobais, mesRefAno, 12),
     };
-  }, [rowsFechadas, mesRefAno]);
+  }, [rowsGlobais, mesRefAno]);
 
   const mediasPorAno = useMemo(() => {
     if (!rowsFechadas.length) return [];
@@ -3128,11 +3177,33 @@ function GlobalTab() {
             "Faturamento (R$)", "Média fat./mês (R$)", "% do ano (fat.)", "Var. fat. vs mesmo tri. ano ant. (%)"]];
           mediasPorAno.forEach(m => calcularTrimestres(m.rowsDoAno, m.rowsAnoAnterior, m.totalFat, m.totalLit).forEach(t =>
             tri.push([m.ano, `${t.nome} (${t.label})`, t.mesesFechados, nx(t.totalLit), nx(t.mediaLit), nx(t.pctLit), pctX(t.variacaoLit), nx(t.totalFat), nx(t.mediaFat), nx(t.pctFat), pctX(t.variacaoFat)])));
+          // comparação ano a ano (mês de referência escolhido): total e média/mês, atual vs ano anterior
+          const comp = [[`Mês de referência: ${mesRefAno ? labelMes(mesRefAno) : ""}`], [],
+            ["Métrica", "Janela", "Período atual", "Total atual", "Média/mês atual", "Período ano anterior", "Total ano anterior", "Média/mês ano anterior", "Var. total (%)", "Var. média/mês (%)"]];
+          const compMes = [["Métrica", "Janela", "Mês", "Atual", "Ano anterior", "Var. (%)"]];
+          if (janelasAno) {
+            [["Faturamento (R$)", "faturamento"], ["Litros", "litros"]].forEach(([nome, campo]) => {
+              [["Último mês", "m1"], ["Últimos 3 meses", "m3"], ["Últimos 6 meses", "m6"], ["Últimos 12 meses", "m12"]].forEach(([jn, k]) => {
+                const j = janelasAno[k];
+                const ta = soma(j.atual, campo), ma = media(j.atual, campo);
+                const tem = j.anoAnterior.length > 0;
+                const tp = tem ? soma(j.anoAnterior, campo) : null, mp = tem ? media(j.anoAnterior, campo) : null;
+                comp.push([nome, jn, periodoTexto(j.atual), nx(ta), nx(ma), periodoTexto(j.anoAnterior), nx(tp), nx(mp),
+                  tem ? pctX(calcularVariacao(ta, tp)) : "", tem ? pctX(calcularVariacao(ma, mp)) : ""]);
+                j.atual.forEach(r => {
+                  const ant = j.anoAnterior.find(x => x.mes === r.mes);
+                  compMes.push([nome, jn, labelMes(r.chave) + (emAndamento && r.chave === emAndamento.chave ? " (parcial)" : ""),
+                    nx(r[campo]), ant ? nx(ant[campo]) : "", ant ? pctX(calcularVariacao(r[campo], ant[campo])) : ""]);
+                });
+              });
+            });
+          }
           const evol = ser => [["Mês", ...ser.anos.map(String)], ...ser.dados.map(d => [d.mes, ...ser.anos.map(a => nx(d[a]))])];
           const porGrupo = [[`Período: ${inicioPizza ? labelMes(inicioPizza) : ""} a ${fimPizza ? labelMes(fimPizza) : ""}`], [],
             ["Grupo", "Faturamento (R$)", "Litros", "% do faturamento", "% dos litros"],
             ...dadosPizza.map(d => [d.grupo, nx(d.fat), nx(d.lit), totalFatPizza ? nx(d.fat / totalFatPizza * 100) : "", totalLitPizza ? nx(d.lit / totalLitPizza * 100) : ""])];
           return [{ nome: "Resumo 12 meses", linhas: resumo }, { nome: "Anual", linhas: anual }, { nome: "Trimestres", linhas: tri },
+            { nome: "Comparação ano a ano", linhas: comp }, { nome: "Comparação mês a mês", linhas: compMes },
             { nome: "Evolução mensal - Fat.", linhas: evol(seriesFat) }, { nome: "Evolução mensal - Litros", linhas: evol(seriesLit) },
             { nome: "Por grupo", linhas: porGrupo }];
         }} />
@@ -3195,25 +3266,31 @@ function GlobalTab() {
         <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
-            <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+            <MonthPicker periodosDisponiveis={rowsGlobais.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
+            {emAndamento && mesRefAno === emAndamento.chave && (
+              <span style={{ color: "#888", fontSize: 11 }}>
+                ⏳ {labelMes(emAndamento.chave)} ainda em andamento (dia {new Date().getDate()} de {diasNoMes(emAndamento.chave)}): os valores do mês são parciais,
+                então a comparação com o mês cheio do ano passado tende a mostrar queda. A projeção do fechamento está no quadro lá em cima.
+              </span>
+            )}
           </div>
 
           {janelasAno && (
             <>
               <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-                <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
-                <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
               </div>
 
               <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
-                <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
-                <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
-                <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m6.atual} rowsAnterior={janelasAno.m6.anoAnterior} campo="litros" formatador={fmtLitros} />
+                <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 12 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="litros" formatador={fmtLitros} />
               </div>
             </>
           )}
