@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.1";
+const APP_VERSION = "v10.2";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -179,36 +179,6 @@ function classificarEmbalagem(nomeProduto) {
   if (n.startsWith("CHOPE")) return "chope";
   if (n.startsWith("PET")) return "pet";
   return "outros";
-}
-
-// Remove acentos e deixa maiúsculo, pra comparação de nome de produto tolerante a acento/caixa.
-function normalizarTextoProduto(s) {
-  return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
-}
-
-// Lista de produtos que ficam sempre visíveis (pré-selecionados) no gráfico comparativo da
-// aba Produtos, independente de busca. Cada entrada casa por palavras-chave (tolerante a
-// acento/variação de escrita), pra funcionar mesmo que o nome exato na planilha seja tipo
-// "PET 1L HELLES" em vez de "Helles 1L".
-const PRODUTOS_FIXOS_GRAFICO = [
-  { apelido: "Helles 1L", tokens: [/HELLES/, /\b1\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Helles 2L", tokens: [/HELLES/, /\b2\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Helles 500ml", tokens: [/HELLES/, /500\s*ML/], excluir: [/CHOPE/] },
-  { apelido: "IPA 500ml", tokens: [/\bIPA\b/, /500\s*ML/], excluir: [/CHOPE/] },
-  { apelido: "Red 500ml", tokens: [/\bRED\b/, /500\s*ML/], excluir: [/CHOPE/, /REDEFORT/] },
-  { apelido: "Sem Álcool 500ml", tokens: [/SEM/, /ALCOOL/, /500\s*ML/], excluir: [/CHOPE/] },
-  { apelido: "Redefort 1L", tokens: [/REDEFORT/, /\b1\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Oktoberfest 1L", tokens: [/OKTOBERFEST/, /\b1\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [] },
-  { apelido: "Chope Red", tokens: [/CHOPE/, /\bRED\b/], excluir: [/REDEFORT/] },
-];
-
-function encontrarProdutoFixo(def, nomes) {
-  return nomes.find(n => {
-    const norm = normalizarTextoProduto(n);
-    if (def.excluir && def.excluir.some(rx => rx.test(norm))) return false;
-    return def.tokens.every(rx => rx.test(norm));
-  });
 }
 
 // Paletas de cor do gráfico comparativo de produtos: envasados em tons de verde clarinho,
@@ -4596,25 +4566,37 @@ function ProdutosTab() {
   const produtosVisiveis = expandido ? produtosExibidos : produtosExibidos.slice(0, LIMITE_PADRAO);
 
   // --- gráfico comparativo: produto x ano, mês a mês (sempre em litros) ---
-  // Começa já com os produtos "fixos" marcados (os que existirem na planilha), pra não
-  // precisar buscar e adicionar toda vez. O usuário ainda pode remover ou adicionar outros.
-  const [produtosGrafico, setProdutosGrafico] = useState(() =>
-    PRODUTOS_FIXOS_GRAFICO.map(def => encontrarProdutoFixo(def, todosProdutosNomes)).filter(Boolean)
-  );
+  // Nenhum produto vem marcado por padrão - o usuário escolhe quais quer ver, igual um
+  // filtro de categoria (com "Marcar todos"/"Desmarcar todos"). Separado em 2 grupos
+  // (Envasados / Chopes) só pra organizar a lista, que mostra TODOS os produtos sempre.
+  const [produtosGrafico, setProdutosGrafico] = useState([]);
   const [buscaGrafico, setBuscaGrafico] = useState("");
-  // período (mês-calendário) exibido no gráfico - aplica a todos os anos selecionados
-  const [mesIniGrafico, setMesIniGrafico] = useState(1);
-  const [mesFimGrafico, setMesFimGrafico] = useState(12);
+  // período (de/até) no mesmo formato "MonthPicker" usado no resto do app - o mês-calendário
+  // de cada ponta (ignorando o ano escolhido) define a faixa de meses exibida, pra todos os
+  // anos que tiverem dado dos produtos selecionados.
+  const mesAtualRealGrafico = chaveMesAtualReal();
+  const [inicioGrafico, setInicioGrafico] = useState(() =>
+    produtosPeriodos.includes("2025-01") ? "2025-01" : (produtosPeriodos[0] || "")
+  );
+  const [fimGrafico, setFimGrafico] = useState(() =>
+    produtosPeriodos.includes(mesAtualRealGrafico) ? mesAtualRealGrafico : (produtosPeriodos[produtosPeriodos.length - 1] || "")
+  );
 
   function toggleProdutoGrafico(nome) {
     setProdutosGrafico(prev => prev.includes(nome) ? prev.filter(p => p !== nome) : [...prev, nome]);
   }
+  function marcarTodosGrafico() { setProdutosGrafico(todosProdutosNomes); }
+  function desmarcarTodosGrafico() { setProdutosGrafico([]); }
 
-  const candidatosGrafico = useMemo(() => {
-    if (!buscaGrafico.trim()) return [];
-    const termo = buscaGrafico.toLowerCase();
-    return todosProdutosNomes.filter(n => n.toLowerCase().includes(termo) && !produtosGrafico.includes(n)).slice(0, 15);
-  }, [buscaGrafico, todosProdutosNomes, produtosGrafico]);
+  const envasadosNomesGrafico = useMemo(() => todosProdutosNomes.filter(n => classificarEmbalagem(n) !== "chope"), [todosProdutosNomes]);
+  const chopesNomesGrafico = useMemo(() => todosProdutosNomes.filter(n => classificarEmbalagem(n) === "chope"), [todosProdutosNomes]);
+
+  const buscaGraficoAtiva = buscaGrafico.trim().toLowerCase();
+  const envasadosFiltrados = buscaGraficoAtiva ? envasadosNomesGrafico.filter(n => n.toLowerCase().includes(buscaGraficoAtiva)) : envasadosNomesGrafico;
+  const chopesFiltrados = buscaGraficoAtiva ? chopesNomesGrafico.filter(n => n.toLowerCase().includes(buscaGraficoAtiva)) : chopesNomesGrafico;
+
+  const mesIniGrafico = inicioGrafico ? Number(inicioGrafico.split("-")[1]) : 1;
+  const mesFimGrafico = fimGrafico ? Number(fimGrafico.split("-")[1]) : 12;
 
   // 1 linha no gráfico por combinação produto + ano (ex: "Helles 1L" selecionado com dado em
   // 2025 e 2026 gera 2 linhas: "Helles 1L 2025" e "Helles 1L 2026"). Valor sempre em litros,
@@ -4644,7 +4626,9 @@ function ProdutosTab() {
       });
       return linha;
     });
-    const dados = dadosCompletos.filter(d => d.mesIdx >= mesIniGrafico && d.mesIdx <= mesFimGrafico);
+    const dados = mesIniGrafico <= mesFimGrafico
+      ? dadosCompletos.filter(d => d.mesIdx >= mesIniGrafico && d.mesIdx <= mesFimGrafico)
+      : dadosCompletos.filter(d => d.mesIdx >= mesIniGrafico || d.mesIdx <= mesFimGrafico);
     return { linhas, dados };
   }, [produtosGrafico, produtosDados, mesIniGrafico, mesFimGrafico]);
 
@@ -5113,58 +5097,62 @@ function ProdutosTab() {
           }} />
         </div>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 10 }}>
-          Os produtos principais já ficam marcados automaticamente; busque e adicione outros se quiser. Cada combinação produto + ano
-          vira uma linha (ex: "Helles 1L" com dados em 2025 e 2026 gera "Helles 1L 2025" e "Helles 1L 2026"). Envasados em
-          verde clarinho, chopes em amarelo clarinho. Valores sempre em litros.
+          Marque os produtos que quer comparar. Cada combinação produto + ano vira uma linha (ex: "Helles 1L" com dados em 2025 e
+          2026 gera "Helles 1L 2025" e "Helles 1L 2026"). Envasados em verde clarinho, chopes em amarelo clarinho. Valores sempre
+          em litros.
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 10 }}>
-          <span style={{ color: "#888", fontSize: 12 }}>Período (mês):</span>
-          <select value={mesIniGrafico} onChange={e => setMesIniGrafico(Number(e.target.value))}
-            style={{ background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }}>
-            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
+        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
+          <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioGrafico} onSelecionar={setInicioGrafico} placeholder="Início" />
           <span style={{ color: "#666" }}>até</span>
-          <select value={mesFimGrafico} onChange={e => setMesFimGrafico(Number(e.target.value))}
-            style={{ background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }}>
-            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
+          <MonthPicker periodosDisponiveis={produtosPeriodos} valor={fimGrafico} onSelecionar={setFimGrafico} placeholder="Fim" />
+          <span style={{ color: "#666", fontSize: 11 }}>(considera só o mês de cada ponta - ex: Mar até Set mostra Mar-Set em todos os anos)</span>
         </div>
 
-        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
-          <Search size={14} color="#C69700" />
-          <input placeholder="Buscar produto pra adicionar ao gráfico..." value={buscaGrafico} onChange={e => setBuscaGrafico(e.target.value)}
-            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <Package size={13} /> Produtos no gráfico ({produtosGrafico.length} de {todosProdutosNomes.length} selecionados):
+        </div>
+        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+          <button onClick={marcarTodosGrafico} style={chipBtnStyle}>Marcar todos</button>
+          <button onClick={desmarcarTodosGrafico} style={chipBtnStyle}>Desmarcar todos</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "6px 10px", flex: 1, minWidth: 200 }}>
+            <Search size={13} color="#C69700" />
+            <input placeholder="Filtrar a lista abaixo..." value={buscaGrafico} onChange={e => setBuscaGrafico(e.target.value)}
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 12 }} />
+          </div>
         </div>
 
-        {candidatosGrafico.length > 0 && (
-          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            {candidatosGrafico.map(nome => (
-              <button key={nome} onClick={() => { toggleProdutoGrafico(nome); setBuscaGrafico(""); }} style={chipBtnStyle}>
-                + {nome}
-              </button>
-            ))}
+        <div className="no-print" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟢 Envasados ({envasadosFiltrados.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
+              {envasadosFiltrados.map(nome => (
+                <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+                  <input type="checkbox" checked={produtosGrafico.includes(nome)} onChange={() => toggleProdutoGrafico(nome)} />
+                  {nome}
+                </label>
+              ))}
+              {envasadosFiltrados.length === 0 && <div style={{ color: "#555", fontSize: 12 }}>Nenhum produto encontrado.</div>}
+            </div>
           </div>
-        )}
-
-        {produtosGrafico.length > 0 && (
-          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-            {produtosGrafico.map(nome => (
-              <span key={nome} style={{
-                display: "flex", alignItems: "center", gap: 6, background: "rgba(198,151,0,0.12)",
-                border: "1px solid #C69700", borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
-              }}>
-                {nome}
-                <button onClick={() => toggleProdutoGrafico(nome)} style={{ background: "transparent", border: "none", color: "#C69700", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 4px" }}>×</button>
-              </span>
-            ))}
-            <button onClick={() => setProdutosGrafico([])} style={chipBtnStyle}>Limpar todos</button>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟡 Chopes ({chopesFiltrados.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 260, overflowY: "auto", paddingRight: 4 }}>
+              {chopesFiltrados.map(nome => (
+                <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
+                  <input type="checkbox" checked={produtosGrafico.includes(nome)} onChange={() => toggleProdutoGrafico(nome)} />
+                  {nome}
+                </label>
+              ))}
+              {chopesFiltrados.length === 0 && <div style={{ color: "#555", fontSize: 12 }}>Nenhum produto encontrado.</div>}
+            </div>
           </div>
-        )}
+        </div>
 
         {produtosGrafico.length === 0 ? (
           <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
-            Busque e adicione pelo menos um produto acima pra ver o gráfico.
+            Marque pelo menos um produto acima pra ver o gráfico.
           </div>
         ) : (
           <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
