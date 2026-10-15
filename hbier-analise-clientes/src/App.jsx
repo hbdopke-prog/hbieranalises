@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.0";
+const APP_VERSION = "v10.1";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -180,6 +180,42 @@ function classificarEmbalagem(nomeProduto) {
   if (n.startsWith("PET")) return "pet";
   return "outros";
 }
+
+// Remove acentos e deixa maiúsculo, pra comparação de nome de produto tolerante a acento/caixa.
+function normalizarTextoProduto(s) {
+  return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+}
+
+// Lista de produtos que ficam sempre visíveis (pré-selecionados) no gráfico comparativo da
+// aba Produtos, independente de busca. Cada entrada casa por palavras-chave (tolerante a
+// acento/variação de escrita), pra funcionar mesmo que o nome exato na planilha seja tipo
+// "PET 1L HELLES" em vez de "Helles 1L".
+const PRODUTOS_FIXOS_GRAFICO = [
+  { apelido: "Helles 1L", tokens: [/HELLES/, /\b1\s*L\b/], excluir: [/CHOPE/] },
+  { apelido: "Helles 2L", tokens: [/HELLES/, /\b2\s*L\b/], excluir: [/CHOPE/] },
+  { apelido: "Helles 500ml", tokens: [/HELLES/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "IPA 500ml", tokens: [/\bIPA\b/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "Red 500ml", tokens: [/\bRED\b/, /500\s*ML/], excluir: [/CHOPE/, /REDEFORT/] },
+  { apelido: "Sem Álcool 500ml", tokens: [/SEM/, /ALCOOL/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "Redefort 1L", tokens: [/REDEFORT/, /\b1\s*L\b/], excluir: [/CHOPE/] },
+  { apelido: "Oktoberfest 1L", tokens: [/OKTOBERFEST/, /\b1\s*L\b/], excluir: [/CHOPE/] },
+  { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [] },
+  { apelido: "Chope Red", tokens: [/CHOPE/, /\bRED\b/], excluir: [/REDEFORT/] },
+];
+
+function encontrarProdutoFixo(def, nomes) {
+  return nomes.find(n => {
+    const norm = normalizarTextoProduto(n);
+    if (def.excluir && def.excluir.some(rx => rx.test(norm))) return false;
+    return def.tokens.every(rx => rx.test(norm));
+  });
+}
+
+// Paletas de cor do gráfico comparativo de produtos: envasados em tons de verde clarinho,
+// chopes em tons de amarelo clarinho. Cada combinação produto+ano pega uma tonalidade
+// diferente dentro da família da sua categoria, ciclando se passar do tamanho da paleta.
+const PALETA_ENVASADO_CLARO = ["#8BC9A0", "#5AA87A", "#B7E3C4", "#3F8F63", "#A3D9B5", "#6FBF8E"];
+const PALETA_CHOPE_CLARO = ["#E8D97A", "#D9C04D", "#F0E6A8", "#C9AA2E", "#DEDB8F", "#F2D96B"];
 
 // Quantos litros cabem num pallet, de acordo com o tamanho da embalagem no nome do produto.
 // Retorna null se não reconhecer o tamanho (ex: garrafa 355ml, lata 473ml, chope) - nesses
@@ -4560,8 +4596,15 @@ function ProdutosTab() {
   const produtosVisiveis = expandido ? produtosExibidos : produtosExibidos.slice(0, LIMITE_PADRAO);
 
   // --- gráfico comparativo: produto x ano, mês a mês (sempre em litros) ---
-  const [produtosGrafico, setProdutosGrafico] = useState([]);
+  // Começa já com os produtos "fixos" marcados (os que existirem na planilha), pra não
+  // precisar buscar e adicionar toda vez. O usuário ainda pode remover ou adicionar outros.
+  const [produtosGrafico, setProdutosGrafico] = useState(() =>
+    PRODUTOS_FIXOS_GRAFICO.map(def => encontrarProdutoFixo(def, todosProdutosNomes)).filter(Boolean)
+  );
   const [buscaGrafico, setBuscaGrafico] = useState("");
+  // período (mês-calendário) exibido no gráfico - aplica a todos os anos selecionados
+  const [mesIniGrafico, setMesIniGrafico] = useState(1);
+  const [mesFimGrafico, setMesFimGrafico] = useState(12);
 
   function toggleProdutoGrafico(nome) {
     setProdutosGrafico(prev => prev.includes(nome) ? prev.filter(p => p !== nome) : [...prev, nome]);
@@ -4575,7 +4618,8 @@ function ProdutosTab() {
 
   // 1 linha no gráfico por combinação produto + ano (ex: "Helles 1L" selecionado com dado em
   // 2025 e 2026 gera 2 linhas: "Helles 1L 2025" e "Helles 1L 2026"). Valor sempre em litros,
-  // independente do toggle litros/pallets usado na tabela acima.
+  // independente do toggle litros/pallets usado na tabela acima. Cor por categoria: envasado
+  // (tudo que não é chope) em verde clarinho, chope em amarelo clarinho.
   const seriesProdutosGrafico = useMemo(() => {
     if (!produtosGrafico.length) return { linhas: [], dados: [] };
     const linhas = [];
@@ -4584,19 +4628,25 @@ function ProdutosTab() {
       (produtosDados[nome] || []).forEach(r => anosSet.add(r.ano));
     });
     const anos = [...anosSet].sort((a, b) => a - b);
+    let idxEnvasado = 0, idxChope = 0;
     produtosGrafico.forEach(nome => {
-      anos.forEach(ano => linhas.push({ key: `${nome}__${ano}`, produto: nome, ano }));
+      const eChope = classificarEmbalagem(nome) === "chope";
+      anos.forEach(ano => {
+        const cor = eChope ? PALETA_CHOPE_CLARO[idxChope++ % PALETA_CHOPE_CLARO.length] : PALETA_ENVASADO_CLARO[idxEnvasado++ % PALETA_ENVASADO_CLARO.length];
+        linhas.push({ key: `${nome}__${ano}`, produto: nome, ano, cor });
+      });
     });
-    const dados = MESES.map((nomeMes, idx) => {
-      const linha = { mes: nomeMes };
+    const dadosCompletos = MESES.map((nomeMes, idx) => {
+      const linha = { mes: nomeMes, mesIdx: idx + 1 };
       linhas.forEach(l => {
         const row = (produtosDados[l.produto] || []).find(r => r.ano === l.ano && r.mes === idx + 1);
         linha[l.key] = row ? row.litros : null;
       });
       return linha;
     });
+    const dados = dadosCompletos.filter(d => d.mesIdx >= mesIniGrafico && d.mesIdx <= mesFimGrafico);
     return { linhas, dados };
-  }, [produtosGrafico, produtosDados]);
+  }, [produtosGrafico, produtosDados, mesIniGrafico, mesFimGrafico]);
 
   // --- heatmap mês a mês por produto ---
   const [metricaHeatmap, setMetricaHeatmap] = useState("faturamento"); // 'faturamento' | 'litros'
@@ -5063,9 +5113,22 @@ function ProdutosTab() {
           }} />
         </div>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 10 }}>
-          Busque e selecione um ou mais produtos pra comparar a evolução mês a mês, ano a ano — sempre em litros. Cada combinação
-          produto + ano vira uma linha (ex: selecionando "Helles 1L" e "Helles 2L" com dados em 2025 e 2026, aparecem 4 linhas:
-          "Helles 1L 2025", "Helles 1L 2026", "Helles 2L 2025" e "Helles 2L 2026").
+          Os produtos principais já ficam marcados automaticamente; busque e adicione outros se quiser. Cada combinação produto + ano
+          vira uma linha (ex: "Helles 1L" com dados em 2025 e 2026 gera "Helles 1L 2025" e "Helles 1L 2026"). Envasados em
+          verde clarinho, chopes em amarelo clarinho. Valores sempre em litros.
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 10 }}>
+          <span style={{ color: "#888", fontSize: 12 }}>Período (mês):</span>
+          <select value={mesIniGrafico} onChange={e => setMesIniGrafico(Number(e.target.value))}
+            style={{ background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }}>
+            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <span style={{ color: "#666" }}>até</span>
+          <select value={mesFimGrafico} onChange={e => setMesFimGrafico(Number(e.target.value))}
+            style={{ background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }}>
+            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
         </div>
 
         <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
@@ -5112,8 +5175,8 @@ function ProdutosTab() {
                 <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => rotuloCompactoGeral(v, "L")} />
                 <Tooltip formatter={(v, name) => [v == null ? "-" : rotuloCompactoGeral(v, "L"), name]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
-                {seriesProdutosGrafico.linhas.map((l, idx) => (
-                  <Line key={l.key} type="monotone" dataKey={l.key} name={`${l.produto} ${l.ano}`} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                {seriesProdutosGrafico.linhas.map(l => (
+                  <Line key={l.key} type="monotone" dataKey={l.key} name={`${l.produto} ${l.ano}`} stroke={l.cor} strokeWidth={2} dot={{ r: 2 }} connectNulls />
                 ))}
               </LineChart>
             </ResponsiveContainer>
