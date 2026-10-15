@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.4";
+const APP_VERSION = "v10.5";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -193,10 +193,10 @@ function normalizarTextoProduto(s) {
 const PRODUTOS_FIXOS_GRAFICO = [
   { apelido: "Helles 1L", tokens: [/HELLES/, /\b1\s*L\b/], excluir: [/CHOPE/] },
   { apelido: "Helles 2L", tokens: [/HELLES/, /\b2\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Helles 500ml", tokens: [/HELLES/, /500\s*ML/], excluir: [/CHOPE/] },
-  { apelido: "IPA 500ml", tokens: [/\bIPA\b/, /500\s*ML/], excluir: [/CHOPE/] },
-  { apelido: "Red 500ml", tokens: [/\bRED\b/, /500\s*ML/], excluir: [/CHOPE/, /REDEFORT/] },
-  { apelido: "Sem Álcool 500ml", tokens: [/SEM/, /ALCOOL/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "Helles 500ml", tokens: [/^PET\b/, /HELLES/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "IPA 500ml", tokens: [/^PET\b/, /\bIPA\b/, /500\s*ML/], excluir: [/CHOPE/] },
+  { apelido: "Red 500ml", tokens: [/^PET\b/, /\bRED\b/, /500\s*ML/], excluir: [/CHOPE/, /REDEFORT/] },
+  { apelido: "Sem Álcool 500ml", tokens: [/^PET\b/, /SEM/, /ALCOOL/, /500\s*ML/], excluir: [/CHOPE/] },
   { apelido: "Redefort 1L", tokens: [/REDEFORT/, /\b1\s*L\b/], excluir: [/CHOPE/] },
   { apelido: "Oktoberfest 1L", tokens: [/OKTOBERFEST/, /\b1\s*L\b/], excluir: [/CHOPE/] },
   { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [] },
