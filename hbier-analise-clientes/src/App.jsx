@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v9.9";
+const APP_VERSION = "v10.0";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4559,6 +4559,45 @@ function ProdutosTab() {
 
   const produtosVisiveis = expandido ? produtosExibidos : produtosExibidos.slice(0, LIMITE_PADRAO);
 
+  // --- gráfico comparativo: produto x ano, mês a mês (sempre em litros) ---
+  const [produtosGrafico, setProdutosGrafico] = useState([]);
+  const [buscaGrafico, setBuscaGrafico] = useState("");
+
+  function toggleProdutoGrafico(nome) {
+    setProdutosGrafico(prev => prev.includes(nome) ? prev.filter(p => p !== nome) : [...prev, nome]);
+  }
+
+  const candidatosGrafico = useMemo(() => {
+    if (!buscaGrafico.trim()) return [];
+    const termo = buscaGrafico.toLowerCase();
+    return todosProdutosNomes.filter(n => n.toLowerCase().includes(termo) && !produtosGrafico.includes(n)).slice(0, 15);
+  }, [buscaGrafico, todosProdutosNomes, produtosGrafico]);
+
+  // 1 linha no gráfico por combinação produto + ano (ex: "Helles 1L" selecionado com dado em
+  // 2025 e 2026 gera 2 linhas: "Helles 1L 2025" e "Helles 1L 2026"). Valor sempre em litros,
+  // independente do toggle litros/pallets usado na tabela acima.
+  const seriesProdutosGrafico = useMemo(() => {
+    if (!produtosGrafico.length) return { linhas: [], dados: [] };
+    const linhas = [];
+    const anosSet = new Set();
+    produtosGrafico.forEach(nome => {
+      (produtosDados[nome] || []).forEach(r => anosSet.add(r.ano));
+    });
+    const anos = [...anosSet].sort((a, b) => a - b);
+    produtosGrafico.forEach(nome => {
+      anos.forEach(ano => linhas.push({ key: `${nome}__${ano}`, produto: nome, ano }));
+    });
+    const dados = MESES.map((nomeMes, idx) => {
+      const linha = { mes: nomeMes };
+      linhas.forEach(l => {
+        const row = (produtosDados[l.produto] || []).find(r => r.ano === l.ano && r.mes === idx + 1);
+        linha[l.key] = row ? row.litros : null;
+      });
+      return linha;
+    });
+    return { linhas, dados };
+  }, [produtosGrafico, produtosDados]);
+
   // --- heatmap mês a mês por produto ---
   const [metricaHeatmap, setMetricaHeatmap] = useState("faturamento"); // 'faturamento' | 'litros'
   const [unidadeExibicao, setUnidadeExibicao] = useState("litros"); // 'litros' | 'pallets' (só aplica quando metricaHeatmap === 'litros')
@@ -5011,6 +5050,74 @@ function ProdutosTab() {
               </div>
             )}
           </>
+        )}
+      </Section>
+
+      <Section title="Comparação entre Produtos · Mês a Mês (Litros, por ano)" icon={<TrendingUp size={18} color="#02601D" />}>
+        <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <BotaoExcel nomeAba="Grafico Produtos" gerar={() => {
+            if (!seriesProdutosGrafico.linhas.length) return [{ nome: "Gráfico", linhas: [["Selecione produtos no app antes de exportar."]] }];
+            const cab = ["Mês", ...seriesProdutosGrafico.linhas.map(l => `${l.produto} ${l.ano}`)];
+            const corpo = seriesProdutosGrafico.dados.map(d => [d.mes, ...seriesProdutosGrafico.linhas.map(l => nx(d[l.key]))]);
+            return [{ nome: "Gráfico por produto", linhas: [cab, ...corpo] }];
+          }} />
+        </div>
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 10 }}>
+          Busque e selecione um ou mais produtos pra comparar a evolução mês a mês, ano a ano — sempre em litros. Cada combinação
+          produto + ano vira uma linha (ex: selecionando "Helles 1L" e "Helles 2L" com dados em 2025 e 2026, aparecem 4 linhas:
+          "Helles 1L 2025", "Helles 1L 2026", "Helles 2L 2025" e "Helles 2L 2026").
+        </div>
+
+        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
+          <Search size={14} color="#C69700" />
+          <input placeholder="Buscar produto pra adicionar ao gráfico..." value={buscaGrafico} onChange={e => setBuscaGrafico(e.target.value)}
+            style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+        </div>
+
+        {candidatosGrafico.length > 0 && (
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {candidatosGrafico.map(nome => (
+              <button key={nome} onClick={() => { toggleProdutoGrafico(nome); setBuscaGrafico(""); }} style={chipBtnStyle}>
+                + {nome}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {produtosGrafico.length > 0 && (
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+            {produtosGrafico.map(nome => (
+              <span key={nome} style={{
+                display: "flex", alignItems: "center", gap: 6, background: "rgba(198,151,0,0.12)",
+                border: "1px solid #C69700", borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
+              }}>
+                {nome}
+                <button onClick={() => toggleProdutoGrafico(nome)} style={{ background: "transparent", border: "none", color: "#C69700", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 4px" }}>×</button>
+              </span>
+            ))}
+            <button onClick={() => setProdutosGrafico([])} style={chipBtnStyle}>Limpar todos</button>
+          </div>
+        )}
+
+        {produtosGrafico.length === 0 ? (
+          <div style={{ color: "#888", textAlign: "center", padding: "20px 0", fontSize: 14 }}>
+            Busque e adicione pelo menos um produto acima pra ver o gráfico.
+          </div>
+        ) : (
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
+            <ResponsiveContainer width="100%" height={340}>
+              <LineChart data={seriesProdutosGrafico.dados}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
+                <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => rotuloCompactoGeral(v, "L")} />
+                <Tooltip formatter={(v, name) => [v == null ? "-" : rotuloCompactoGeral(v, "L"), name]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Legend content={<LegendaBranca />} />
+                {seriesProdutosGrafico.linhas.map((l, idx) => (
+                  <Line key={l.key} type="monotone" dataKey={l.key} name={`${l.produto} ${l.ano}`} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </Section>
 
