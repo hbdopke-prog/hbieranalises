@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v3.0
+ * Versão: v3.2
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -88,6 +88,7 @@ const SHEET_PRODUTOS_LITROS = "produtos_litros";
 const SHEET_ESTOQUE = "estoque";
 const SHEET_TANQUES = "tanques";
 const SHEET_RECEITAS = "receitas";
+const SHEET_PLANO = "plano_salvo";
 
 function doGet(e) {
   try {
@@ -120,9 +121,13 @@ function doGet(e) {
     try { tanques = lerTanques(ss); } catch (e1) { tanques = []; }
     try { receitas = lerReceitas(ss); } catch (e2) { receitas = []; }
 
+    let planoSalvo = "";
+    try { planoSalvo = lerPlanoSalvo(ss); } catch (e3) { planoSalvo = ""; }
+
     return jsonResponse({
       ok: true,
       dados: combinado,
+      planoSalvo: planoSalvo,
       tanques: tanques,
       receitas: receitas,
       produtosPorTipo: produtosPorTipo,
@@ -145,20 +150,72 @@ function numeroBR(bruto) {
   return isNaN(n) ? null : n;
 }
 
-// Aba "tanques": Nome | código | capacidade útil (L) | [opcional] bateladas para encher | [opcional] máx. bateladas por dia
+// Aba "tanques": Nome | código | capacidade útil (L) | [opc.] bateladas para encher | [opc.] máx. bateladas por dia
+// | [opc.] cerveja no tanque | [opc.] data da produção | [opc.] litros no tanque  (status atual)
+function dataParaISO(bruto) {
+  if (bruto instanceof Date && !isNaN(bruto.getTime())) {
+    return Utilities.formatDate(bruto, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  const t = String(bruto || "").trim();
+  if (!t) return "";
+  let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) {
+    const ano = m[3].length === 2 ? "20" + m[3] : m[3];
+    return ano + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2);
+  }
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[1] + "-" + m[2] + "-" + m[3] : "";
+}
+
 function lerTanques(ss) {
   const sheet = ss.getSheetByName(SHEET_TANQUES);
   if (!sheet) return [];
   const v = sheet.getDataRange().getValues();
+  if (v.length < 2) return [];
+  const cab = v[0].map(function (c) { return String(c || "").trim().toLowerCase(); });
+  function col(teste, padrao) {
+    for (let c = 0; c < cab.length; c++) if (teste(cab[c])) return c;
+    return padrao;
+  }
+  const iBat = col(function (t) { return t.indexOf("bateladas para encher") !== -1; }, 3);
+  const iMax = col(function (t) { return t.indexOf("bateladas por dia") !== -1; }, 4);
+  const iCerv = col(function (t) { return t.indexOf("cerveja no tanque") !== -1; }, 5);
+  const iData = col(function (t) { return t.indexOf("dias no tanque") !== -1 || (t.indexOf("data") !== -1 && t.indexOf("produ") !== -1); }, 6);
+  const iLit = col(function (t) { return t.indexOf("litros no tanque") !== -1; }, 7);
   const out = [];
   for (let i = 1; i < v.length; i++) {
     const nome = String(v[i][0] || "").trim();
     const codigo = String(v[i][1] || "").trim();
     const cap = numeroBR(v[i][2]);
     if (!nome || !cap) continue;
-    out.push({ nome: nome, codigo: codigo, capacidade: cap, bateladas: numeroBR(v[i][3]), maxDia: numeroBR(v[i][4]) });
+    out.push({
+      nome: nome, codigo: codigo, capacidade: cap,
+      bateladas: numeroBR(v[i][iBat]), maxDia: numeroBR(v[i][iMax]),
+      cerveja: String(v[i][iCerv] || "").trim(),
+      // a coluna aceita "dias no tanque" (número) ou, se alguém colocar uma data, a data da produção
+      dataProducao: (typeof v[i][iData] === "number" || /^\s*\d+([.,]\d+)?\s*$/.test(String(v[i][iData]))) ? "" : dataParaISO(v[i][iData]),
+      diasNoTanque: (typeof v[i][iData] === "number") ? v[i][iData] : (/^\s*\d+\s*$/.test(String(v[i][iData])) ? parseInt(v[i][iData], 10) : null),
+      litrosNoTanque: numeroBR(v[i][iLit]),
+    });
   }
   return out;
+}
+
+// Plano de produção salvo (compartilhado entre todos os aparelhos): JSON guardado na aba "plano_salvo", célula A1
+function lerPlanoSalvo(ss) {
+  const sheet = ss.getSheetByName(SHEET_PLANO);
+  if (!sheet) return "";
+  return String(sheet.getRange(1, 1).getValue() || "");
+}
+function salvarPlanoSalvo(plano) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_PLANO);
+  if (!sheet) sheet = ss.insertSheet(SHEET_PLANO);
+  const texto = String(plano || "");
+  if (texto.length > 49000) return { ok: false, erro: "Plano grande demais para salvar (" + texto.length + " caracteres)." };
+  sheet.getRange(1, 1).setValue(texto);
+  sheet.getRange(1, 2).setValue(new Date());
+  return { ok: true };
 }
 
 // Aba "receitas": Estilo | Dias até ficar pronto | Trecho do nome nos produtos | Derivada de (estilo base)
@@ -369,6 +426,9 @@ function doPost(e) {
     const corpo = JSON.parse(e.postData.contents);
     if (corpo.action === "login") {
       return jsonResponse(autenticar(corpo.usuario, corpo.senha));
+    }
+    if (corpo.action === "salvarPlano") {
+      return jsonResponse(salvarPlanoSalvo(corpo.plano));
     }
     return jsonResponse({ ok: false, erro: "Ação desconhecida." });
   } catch (err) {

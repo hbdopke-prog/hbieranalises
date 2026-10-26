@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
   PieChart, Pie,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package, Boxes } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package, Boxes, Factory } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.8";
+const APP_VERSION = "v10.10";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -345,7 +345,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas) {
+function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -420,7 +420,7 @@ function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receita
     labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
     produtosDados: porProduto, produtosNomes, produtosPeriodos,
     estoquePorProduto,
-    tanques: tanques || [], receitas: receitas || [],
+    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "",
   };
 }
 
@@ -4583,37 +4583,43 @@ function fmtDataCurta(d) { return `${String(d.getDate()).padStart(2, "0")}/${Str
 const DIAS_SEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 function fmtDataSem(d) { return `${DIAS_SEM[d.getDay()]} ${fmtDataCurta(d)}`; }
 function chaveDia(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function dataDeChave(k) { const [a, m, d] = String(k).slice(0, 10).split("-").map(Number); return new Date(a, m - 1, d); }
 function diaUtil(d) { const w = d.getDay(); return w >= 1 && w <= 5; }
 function proximoUtil(d) { let x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); while (!diaUtil(x)) x = somarDiasData(x, 1); return x; }
 function segundaDaSemana(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const w = x.getDay(); return somarDiasData(x, w === 0 ? -6 : 1 - w); }
 function bateladasDoTanque(t) { return t.bateladas > 0 ? Math.round(t.bateladas) : Math.max(1, Math.ceil(t.capacidade / LITROS_BATELADA - 0.05)); }
+function diasEntre(a, b) { return Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000); }
 
-// Programa lotes (tanque a tanque) respeitando: bateladas/dia da brassagem, só seg-sex,
-// tanque ocupado até ficar pronto + limpeza, e prazo (pronto até o dia 1º de cada mês).
-function planejarBrassagem({ meses, tanques, capDia, hoje, folga, limpeza, ocupadoAte, diasPadrao }) {
-  const usado = {}; // dia -> bateladas já usadas
-  const estado = tanques.map(t => ({
-    ...t,
-    livre: ocupadoAte[t.nome] ? new Date(ocupadoAte[t.nome] + "T00:00:00") : hoje,
-  }));
-  const sobraEstilo = {};
+// Programa lotes tanque a tanque, em SEQUÊNCIA: a brassagem só começa o próximo tanque quando o
+// anterior estiver cheio (um tanque pode começar num dia e terminar no seguinte, ex.: 1+5 ou 5+4,
+// mas nenhum outro tanque entra no meio). Só seg-sex. Pronto até o dia 1º de cada mês.
+function planejarBrassagem({ meses, tanques, capDia, hoje, folga, limpeza, diasPadrao, suprimentoInicial }) {
+  const usado = {};
+  const estado = tanques.map(t => ({ ...t, livre: t.livreDe && t.livreDe > hoje ? t.livreDe : hoje }));
+  const sobraEstilo = { ...(suprimentoInicial || {}) };
+  let ptrDia = hoje, ptrUso = 0;
   const lotes = [];
-  const avaliar = (t, release, b, dias, capT) => {
+
+  const colocar = (t, release, b, capT) => {
     let d = proximoUtil(release > t.livre ? release : t.livre);
-    let rest = b, cur = d, aloc = [], guard = 0;
-    while (rest > 0 && guard++ < 600) {
-      const livre = capDia - (usado[chaveDia(cur)] || 0);
-      if (livre > 0) { const q = Math.min(livre, rest, capT); aloc.push({ data: new Date(cur), n: q }); rest -= q; }
-      if (rest > 0) cur = proximoUtil(somarDiasData(cur, 1));
+    let uso = 0;
+    if (d <= ptrDia) { d = ptrDia; uso = ptrUso; }
+    let rest = b, guard = 0; const aloc = [];
+    while (rest > 0 && guard++ < 800) {
+      const q = Math.min(capDia - uso, rest, capT);
+      if (q > 0) { aloc.push({ data: new Date(d), n: q }); rest -= q; uso += q; }
+      if (rest > 0) { d = proximoUtil(somarDiasData(d, 1)); uso = 0; }
     }
-    const fim = aloc[aloc.length - 1].data;
-    return { inicio: aloc[0].data, fim, pronto: somarDiasData(fim, dias), aloc };
+    return { inicio: aloc[0].data, fim: aloc[aloc.length - 1].data, aloc, uso };
   };
+
   meses.forEach(mes => {
-    mes.necessidades.forEach(n => {
+    const ordem = mes.necessidades.slice().sort((a, b) => (b.dias || diasPadrao) - (a.dias || diasPadrao) || b.necessario - a.necessario);
+    ordem.forEach(n => {
       const dias = n.dias || diasPadrao;
-      let restante = Math.max(0, n.necessario - (sobraEstilo[n.estilo] || 0));
-      sobraEstilo[n.estilo] = Math.max(0, (sobraEstilo[n.estilo] || 0) - n.necessario);
+      const disponivel = sobraEstilo[n.estilo] || 0;
+      let restante = Math.max(0, n.necessario - disponivel);
+      sobraEstilo[n.estilo] = Math.max(0, disponivel - n.necessario);
       let guarda = 0;
       while (restante > 0.5 && guarda++ < 60) {
         const suficientes = estado.filter(t => t.capacidade >= restante).sort((a, b) => a.capacidade - b.capacidade);
@@ -4624,12 +4630,14 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, folga, limpeza, ocupa
           const capT = t.maxDia > 0 ? Math.min(capDia, t.maxDia) : capDia;
           const span = Math.ceil(b / capT);
           const release = new Date(Math.max(hoje.getTime(), somarDiasData(mes.prazo, -(dias + span + folga)).getTime()));
-          const av = avaliar(t, release, b, dias, capT);
+          const av = colocar(t, release, b, capT);
+          av.pronto = somarDiasData(av.fim, dias);
           if (av.pronto <= mes.prazo) { escolhido = { t, b, av }; break; }
           if (!escolhido || av.pronto < escolhido.av.pronto) escolhido = { t, b, av };
         }
         const { t, b, av } = escolhido;
         av.aloc.forEach(a => { usado[chaveDia(a.data)] = (usado[chaveDia(a.data)] || 0) + a.n; });
+        ptrDia = av.fim; ptrUso = av.uso;
         const atende = Math.min(t.capacidade, restante);
         const sobra = t.capacidade - atende;
         sobraEstilo[n.estilo] = (sobraEstilo[n.estilo] || 0) + sobra;
@@ -4652,10 +4660,31 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, folga, limpeza, ocupa
   return { lotes, usado, diasBrassagem, atrasados, ultimoPronto, bateladasTotal };
 }
 
+function serializarLotes(lotes) {
+  return lotes.map(l => ({
+    estilo: l.estilo, tanque: l.tanque, codigo: l.codigo, capacidade: l.capacidade, bateladas: l.bateladas,
+    volume: l.volume, atende: Math.round(l.atende), sobra: Math.round(l.sobra), dias: l.dias, diasPreenchido: l.diasPreenchido,
+    mes: l.mes, prazo: chaveDia(l.prazo), petPct: Number(l.petPct.toFixed(4)),
+    inicio: chaveDia(l.inicio), fim: chaveDia(l.fim), pronto: chaveDia(l.pronto), livreAte: chaveDia(l.livreAte),
+    aloc: l.aloc.map(a => [chaveDia(a.data), a.n]), atrasado: l.atrasado,
+  }));
+}
+function reviverLotes(arr) {
+  return (arr || []).map(l => ({
+    ...l, prazo: dataDeChave(l.prazo), inicio: dataDeChave(l.inicio), fim: dataDeChave(l.fim),
+    pronto: dataDeChave(l.pronto), livreAte: dataDeChave(l.livreAte),
+    aloc: (l.aloc || []).map(a => ({ data: dataDeChave(a[0]), n: a[1] })),
+  }));
+}
+
 function PlanejamentoProducao() {
-  const { produtosDados, produtosNomes, tanques, receitas, estoquePorProduto } = useData();
+  const { produtosDados, produtosNomes, produtosPeriodos, tanques, receitas, estoquePorProduto, planoSalvoTexto } = useData();
   const mesAtual = chaveMesAtualReal();
   const hoje = useMemo(() => proximoUtil(new Date()), []);
+  const hojeReal = useMemo(() => { const x = new Date(); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); }, []);
+
+  const salvoInicial = useMemo(() => { try { return planoSalvoTexto ? JSON.parse(planoSalvoTexto) : null; } catch (e) { return null; } }, [planoSalvoTexto]);
+  const cfg0 = (salvoInicial && salvoInicial.config) || {};
 
   const mesesAlvo = useMemo(() => {
     const out = [];
@@ -4665,24 +4694,31 @@ function PlanejamentoProducao() {
   }, [mesAtual]);
 
   const [alvo, setAlvo] = useState(() => {
+    if (cfg0.alvo) return cfg0.alvo;
     let [a, m] = mesAtual.split("-").map(Number);
     m++; if (m > 12) { m = 1; a++; }
     return `${a}-${String(m).padStart(2, "0")}`;
   });
-  const [cenario, setCenario] = useState("base");
-  const [pcts, setPcts] = useState({ min: 80, base: 100, max: 120 });
-  const [incluirOutros, setIncluirOutros] = useState(true);
-  const [descontarEstoque, setDescontarEstoque] = useState(false);
-  const [folga, setFolga] = useState(3);
-  const [limpezaDias, setLimpezaDias] = useState(1);
-  const [diasPadrao, setDiasPadrao] = useState(14);
-  const [ovBarril, setOvBarril] = useState({});
-  const [ovPet, setOvPet] = useState({});
-  const [ocupadoAte, setOcupadoAte] = useState({});
-  const [ritmo, setRitmo] = useState("auto"); // 'auto' | '3' | '6'
-  const [vista, setVista] = useState("30");   // '30' | 'mes' | '60' | '90'
+  const [cenario, setCenario] = useState(cfg0.cenario || "base");
+  const [pcts, setPcts] = useState(cfg0.pcts || { min: 80, base: 100, max: 120 });
+  const [incluirOutros, setIncluirOutros] = useState(cfg0.incluirOutros ?? true);
+  const [descontarEstoque, setDescontarEstoque] = useState(cfg0.descontarEstoque ?? false);
+  const [folga, setFolga] = useState(cfg0.folga ?? 3);
+  const [limpezaDias, setLimpezaDias] = useState(cfg0.limpezaDias ?? 1);
+  const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
+  const [semVendaMeses, setSemVendaMeses] = useState(cfg0.semVendaMeses ?? 3);
+  const [ovBarril, setOvBarril] = useState(cfg0.ovBarril || {});
+  const [ovPet, setOvPet] = useState(cfg0.ovPet || {});
+  const [ritmo, setRitmo] = useState(cfg0.ritmo || "auto"); // 'auto' | '3' | '6'
+  const [vista, setVista] = useState("30");
   const [mesVista, setMesVista] = useState(alvo);
-  const [granular, setGranular] = useState("dia"); // 'dia' | 'semana'
+  const [granular, setGranular] = useState("dia");
+  const [feitos, setFeitos] = useState(cfg0.feitos || {});
+  const [expandidos, setExpandidos] = useState({});
+  const [planoSalvo, setPlanoSalvo] = useState(salvoInicial);
+  const [previa, setPrevia] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [msgSalvar, setMsgSalvar] = useState("");
 
   const temConfig = tanques && tanques.length && receitas && receitas.length;
 
@@ -4705,6 +4741,45 @@ function PlanejamentoProducao() {
     return { receitaPorEstilo: porEstilo, resolverBase: resolver, matchers: ms };
   }, [receitas]);
 
+  const estiloDeTexto = (texto) => {
+    const n = normalizarPlano(texto);
+    if (!n) return null;
+    if (receitaPorEstilo[n]) return receitaPorEstilo[n].estilo;
+    const m = matchers.find(x => x.re.test(n));
+    return m ? m.estilo : null;
+  };
+
+  // status atual dos tanques (vem da aba "tanques")
+  const statusTanques = useMemo(() => (tanques || []).map(t => {
+    const temCerveja = !!(t.cerveja || t.litrosNoTanque > 0);
+    if (!temCerveja) return { ...t, situacao: "vazio", livreDe: null };
+    const estilo = estiloDeTexto(t.cerveja);
+    const base = estilo ? resolverBase(estilo) : null;
+    const rec = base ? receitaPorEstilo[normalizarPlano(base)] : null;
+    const diasRec = rec && rec.dias ? rec.dias : null;
+    let dataProd = t.dataProducao ? dataDeChave(t.dataProducao) : null;
+    let diasProd = dataProd ? Math.max(0, diasEntre(dataProd, hojeReal)) : null;
+    if (!dataProd && t.diasNoTanque != null) { diasProd = t.diasNoTanque; dataProd = somarDiasData(hojeReal, -t.diasNoTanque); }
+    const diasUsados = diasRec || diasPadrao;
+    let diasLiberar = null, pronto = null;
+    if (dataProd) { pronto = somarDiasData(dataProd, diasUsados); diasLiberar = Math.max(0, diasEntre(hojeReal, pronto)); }
+    const prontaJa = dataProd ? diasLiberar === 0 : false;
+    return {
+      ...t, estilo, base, diasRec, dataProd, diasProd, diasLiberar, pronto, diasUsados,
+      situacao: !dataProd ? "sem data" : prontaJa ? "pronta" : "maturando",
+      livreDe: pronto && pronto > hoje ? pronto : null,
+    };
+  }), [tanques, receitaPorEstilo, matchers, diasPadrao, hoje, hojeReal]);
+
+  const tanquesPlano = useMemo(() => statusTanques.map(t => ({ ...t })), [statusTanques]);
+  const suprimentoInicial = useMemo(() => {
+    const m = {};
+    statusTanques.forEach(t => {
+      if (t.base && t.litrosNoTanque > 0) m[t.base] = (m[t.base] || 0) + t.litrosNoTanque;
+    });
+    return m;
+  }, [statusTanques]);
+
   // meses planejados: prazos (dia 1º) nos próximos 120 dias + o mês-alvo escolhido
   const mesesPlano = useMemo(() => {
     const limite = somarDiasData(hoje, 120);
@@ -4713,37 +4788,41 @@ function PlanejamentoProducao() {
     return [...set].sort();
   }, [mesesAlvo, hoje, alvo]);
 
-  // projeção por estilo base para cada mês planejado
+  // projeção por estilo base para cada mês planejado (com a origem de cada número)
   const projecoes = useMemo(() => {
     if (!temConfig) return {};
     const pct = (pcts[cenario] || 100) / 100;
-    const estiloDoProduto = (nome) => { const n = normalizarPlano(nome); const m = matchers.find(x => x.re.test(n)); return m ? m.estilo : null; };
+    const fechados = (produtosPeriodos || []).filter(p => p < mesAtual);
+    const janelaVenda = new Set(fechados.slice(-Math.max(1, semVendaMeses)));
     const resultado = {};
     mesesPlano.forEach(chave => {
       const [aAlvo, mAlvo] = chave.split("-").map(Number);
       const refAno = `${aAlvo - 1}-${String(mAlvo).padStart(2, "0")}`;
-      const porEstilo = {}; const semReceita = {};
+      const porEstilo = {}; const semReceita = {}; const ignorados = {};
       produtosNomes.forEach(nome => {
         const rows = produtosDados[nome] || [];
-        let lit = 0;
+        const vendeuRecente = rows.some(r => janelaVenda.has(r.chave) && (r.litros || 0) > 0);
+        let lit = 0, origem = "";
         const refRow = rows.find(r => r.chave === refAno);
-        if (refRow) lit = refRow.litros || 0;
-        else { const f = rows.filter(r => r.chave < mesAtual).slice(-3); lit = f.length ? f.reduce((s, r) => s + (r.litros || 0), 0) / f.length : 0; }
+        if (refRow) { lit = refRow.litros || 0; origem = `mesmo mês do ano anterior (${labelMes(refAno)})`; }
+        else { const f = rows.filter(r => r.chave < mesAtual).slice(-3); lit = f.length ? f.reduce((s, r) => s + (r.litros || 0), 0) / f.length : 0; origem = "média dos 3 últimos meses (sem histórico no ano anterior)"; }
         lit *= pct;
         const est = (estoquePorProduto[nome] && estoquePorProduto[nome].litros) || 0;
         if (lit <= 0 && est <= 0) return;
-        const estilo = estiloDoProduto(nome);
+        if (semVendaMeses > 0 && !vendeuRecente) { if (lit > 0) ignorados[nome] = lit; return; }
+        const estilo = estiloDeTexto(nome);
         if (!estilo) { if (lit > 0) semReceita[nome] = Math.max(semReceita[nome] || 0, lit); return; }
         const base = resolverBase(estilo);
         const emb = classificarEmbalagem(nome);
-        const o = porEstilo[base] || (porEstilo[base] = { barril: 0, pet: 0, outros: 0, estoque: 0 });
+        const o = porEstilo[base] || (porEstilo[base] = { barril: 0, pet: 0, outros: 0, estoque: 0, det: [] });
         if (emb === "chope") o.barril += lit; else if (emb === "pet") o.pet += lit; else o.outros += lit;
         o.estoque += est;
+        if (lit > 0 || est > 0) o.det.push({ produto: nome, emb, lit, est, origem });
       });
-      resultado[chave] = { porEstilo, semReceita };
+      resultado[chave] = { porEstilo, semReceita, ignorados };
     });
     return resultado;
-  }, [temConfig, mesesPlano, cenario, pcts, produtosNomes, produtosDados, estoquePorProduto, mesAtual, matchers]);
+  }, [temConfig, mesesPlano, cenario, pcts, produtosNomes, produtosDados, produtosPeriodos, estoquePorProduto, mesAtual, semVendaMeses, matchers]);
 
   const montarNecessidades = (proj, usarOverrides, descontar) => {
     if (!proj) return [];
@@ -4758,7 +4837,7 @@ function PlanejamentoProducao() {
       const fator = bruto > 0 ? necessario / bruto : 0;
       const rec = receitaPorEstilo[normalizarPlano(estilo)];
       const dias = rec && rec.dias ? rec.dias : null;
-      return { estilo, barrilProj, petProj: o.pet, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasUsados: dias || diasPadrao };
+      return { estilo, barrilProj, petProj: o.pet, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasUsados: dias || diasPadrao, det: o.det };
     }).filter(n => n.necessario > 0 || n.barril > 0 || n.pet > 0 || n.estoque > 0).sort((a, b) => b.necessario - a.necessario);
   };
 
@@ -4772,20 +4851,22 @@ function PlanejamentoProducao() {
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
-    const args = { meses: mesesParaPlano, tanques, hoje, folga, limpeza: limpezaDias, ocupadoAte, diasPadrao };
-    return { p3: planejarBrassagem({ ...args, capDia: 3 }), p6: planejarBrassagem({ ...args, capDia: 6 }) };
-  }, [temConfig, mesesParaPlano, tanques, hoje, folga, limpezaDias, ocupadoAte, diasPadrao]);
+    const args = { meses: mesesParaPlano, tanques: tanquesPlano, hoje, folga, limpeza: limpezaDias, diasPadrao, suprimentoInicial };
+    return {
+      p3: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 3 }),
+      p6: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 6 }),
+    };
+  }, [temConfig, mesesParaPlano, tanquesPlano, hoje, folga, limpezaDias, diasPadrao, suprimentoInicial]);
 
   if (!temConfig) {
     return (
       <div style={{ color: "#888", fontSize: 13, padding: 16 }}>
         Não encontrei as abas <strong style={{ color: "#C69700" }}>tanques</strong> e <strong style={{ color: "#C69700" }}>receitas</strong> no retorno da planilha.
-        Atualize o Code.gs no Apps Script (versão v2.9), reimplante e recarregue o app.
+        Atualize o Code.gs no Apps Script (versão v3.1), reimplante e recarregue o app.
       </div>
     );
   }
 
-  // recomendação de ritmo
   const { p3, p6 } = planos;
   let recomendado = "3", motivo;
   if (p3.atrasados === 0) {
@@ -4793,16 +4874,44 @@ function PlanejamentoProducao() {
   } else if (p6.atrasados < p3.atrasados) {
     recomendado = "6";
     motivo = p6.atrasados === 0
-      ? `Com 3 bateladas/dia, ${p3.atrasados} lote(s) atrasam. Com 6/dia tudo fecha no prazo (${p6.diasBrassagem} dias de brassagem). Há pressa: use 6/dia nas semanas de maior volume.`
+      ? `Com 3 bateladas/dia, ${p3.atrasados} lote(s) atrasam. Com 6/dia tudo fecha no prazo (${p6.diasBrassagem} dias de brassagem). Há pressa: use 6/dia.`
       : `Mesmo com 6/dia ${p6.atrasados} lote(s) atrasam (contra ${p3.atrasados} com 3/dia): falta capacidade de tanque/brassagem para esse volume.`;
   } else {
     motivo = `Nem 3 nem 6 bateladas/dia resolvem os ${p3.atrasados} atraso(s): o gargalo são os tanques/prazos de maturação, não a brassagem.`;
   }
   const ritmoUsado = ritmo === "auto" ? recomendado : ritmo;
-  const plano = ritmoUsado === "6" ? p6 : p3;
-  const capDia = ritmoUsado === "6" ? 6 : 3;
+  const planoCalc = ritmoUsado === "6" ? p6 : p3;
 
-  // janela da vista
+  const usarSalvo = !!planoSalvo && !previa;
+  const lotesExibidos = usarSalvo ? reviverLotes(planoSalvo.lotes) : planoCalc.lotes;
+  const capDia = usarSalvo ? (planoSalvo.ritmo === "6" ? 6 : 3) : (ritmoUsado === "6" ? 6 : 3);
+  const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
+  const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
+
+  const configAtual = () => ({ alvo, cenario, pcts, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
+    setSalvando(true); setMsgSalvar("");
+    const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
+    try { localStorage.setItem("hbier_plano_producao", JSON.stringify(payload)); } catch (e) { /* ignora */ }
+    try {
+      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarPlano", plano: JSON.stringify(payload) }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.erro || "falha ao salvar");
+      setPlanoSalvo(payload); setPrevia(false);
+      setMsgSalvar("✅ Plano salvo na planilha (aba plano_salvo) — todos os aparelhos veem o mesmo plano.");
+    } catch (e) {
+      setMsgSalvar("⚠️ Não consegui salvar na planilha (" + (e.message || e) + "). Atualize o Code.gs para v3.1 e reimplante. O plano ficou guardado só neste navegador.");
+      setPlanoSalvo(payload); setPrevia(false);
+    }
+    setSalvando(false);
+  }
+  function alternarFeito(l) {
+    const k = chaveLote(l);
+    const novo = { ...feitos, [k]: !feitos[k] };
+    setFeitos(novo);
+    if (usarSalvo) salvarPlano(lotesExibidos, planoSalvo.ritmo, novo);
+  }
+
   let wIni = hoje, wFim;
   if (vista === "mes") {
     const [a, m] = mesVista.split("-").map(Number);
@@ -4810,15 +4919,13 @@ function PlanejamentoProducao() {
     if (wIni < hoje && a === hoje.getFullYear() && m === hoje.getMonth() + 1) wIni = hoje;
   } else wFim = somarDiasData(hoje, Number(vista) - 1);
 
-  const lotesJanela = plano.lotes.filter(l => l.aloc.some(a => a.data >= wIni && a.data <= wFim) || (l.pronto >= wIni && l.fim <= wFim) || (l.fim < wIni && l.pronto >= wIni));
   const semanas = [];
   for (let s = segundaDaSemana(wIni); s <= wFim; s = somarDiasData(s, 7)) semanas.push(s);
-
   const diasDaSemana = (seg) => [0, 1, 2, 3, 4].map(i => somarDiasData(seg, i));
   const eventosDia = (d) => {
     const k = chaveDia(d);
     const brass = []; const prontos = [];
-    plano.lotes.forEach(l => {
+    lotesExibidos.forEach(l => {
       l.aloc.forEach(a => { if (chaveDia(a.data) === k) brass.push({ l, n: a.n }); });
       if (chaveDia(proximoUtil(l.pronto)) === k) prontos.push(l);
     });
@@ -4830,8 +4937,12 @@ function PlanejamentoProducao() {
   const totNec = necessidades.reduce((s, n) => s + n.necessario, 0);
   const diasEnvasePet = totPet / CAPACIDADE_ENVASE_PET_DIA;
   const semDias = [...new Set(mesesParaPlano.flatMap(m => m.necessidades.filter(n => !n.dias).map(n => n.estilo)))];
-  const semReceitaLista = Object.entries((projecoes[alvo] || { semReceita: {} }).semReceita).sort((a, b) => b[1] - a[1]);
+  const projAlvo = projecoes[alvo] || { semReceita: {}, ignorados: {} };
+  const semReceitaLista = Object.entries(projAlvo.semReceita).sort((a, b) => b[1] - a[1]);
+  const ignoradosLista = Object.entries(projAlvo.ignorados).sort((a, b) => b[1] - a[1]);
+  const estoqueTotalConsiderado = necessidades.reduce((s, n) => s + n.estoque, 0);
   const L = v => Math.round(v || 0).toLocaleString("pt-BR");
+  const litrosTanques = statusTanques.reduce((s, t) => s + (t.litrosNoTanque || 0), 0);
 
   const inputNum = { background: "#111", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 6px", fontSize: 12, width: 78, textAlign: "right" };
   const th = { textAlign: "right", padding: "6px 8px", color: "#C69700", fontSize: 11, borderBottom: "1px solid #333", whiteSpace: "nowrap" };
@@ -4843,11 +4954,18 @@ function PlanejamentoProducao() {
       {sub && <div style={{ fontSize: 11, color: "#888" }}>{sub}</div>}
     </div>
   );
+  const btn = (cor) => ({ background: "transparent", border: `1px solid ${cor}`, color: cor, borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 });
 
   function fasesTanqueSemana(t, seg) {
     const fim = somarDiasData(seg, 6);
     const itens = [];
-    plano.lotes.filter(l => l.tanque === t.nome).forEach(l => {
+    // beer que já está no tanque hoje
+    const st = statusTanques.find(x => x.nome === t.nome);
+    if (st && st.situacao !== "vazio" && seg <= (st.pronto || hoje) ) {
+      const ate = st.pronto || hoje;
+      if (ate >= seg) itens.push({ txt: `${st.cerveja || "cerveja"} · ${st.situacao === "pronta" ? "✅ pronta no tanque" : "⏳ maturando (pronta " + fmtDataCurta(ate) + ")"}` });
+    }
+    lotesExibidos.filter(l => l.tanque === t.nome).forEach(l => {
       if (l.inicio > fim || l.livreAte < seg) return;
       let fase;
       if (l.fim >= seg && l.inicio <= fim) fase = `🍺 brassagem (${l.aloc.filter(a => a.data >= seg && a.data <= fim).reduce((s, a) => s + a.n, 0)} bat.)`;
@@ -4863,6 +4981,10 @@ function PlanejamentoProducao() {
     const diasLista = [];
     for (let d = wIni; d <= wFim; d = somarDiasData(d, 1)) if (diaUtil(d)) diasLista.push(d);
     return [
+      { nome: "Status dos tanques", linhas: [
+        ["Tanque", "Capacidade (L)", "Cerveja", "Produzida em", "Dias no tanque", "Dias p/ liberar", "Litros no tanque", "Situação"],
+        ...statusTanques.map(t => [t.nome, t.capacidade, t.cerveja || "", t.dataProducao || "", t.diasProd ?? "", t.diasLiberar ?? "", t.litrosNoTanque ?? "", t.situacao]),
+      ] },
       { nome: "Necessidades", linhas: [
         ["Estilo base", "Barril (L)", "PET (L)", "Estoque (L)", "A produzir (L)", "Dias até pronto"],
         ...necessidades.map(n => [n.estilo, nx(n.barril), nx(n.pet), nx(n.estoque), nx(n.necessario), n.dias || ""]),
@@ -4872,8 +4994,8 @@ function PlanejamentoProducao() {
         ...diasLista.flatMap(d => eventosDia(d).brass.map(({ l, n }) => [chaveDia(d), DIAS_SEM[d.getDay()], l.tanque, l.estilo, n, n * (l.capacidade / l.bateladas), l.mes])),
       ] },
       { nome: "Lotes por tanque", linhas: [
-        ["Tanque", "Estilo", "Mês-alvo", "Volume do lote (L)", "Atende (L)", "Sobra p/ estoque (L)", "Bateladas", "1ª brassagem", "Última brassagem", "Pronto", "Prazo", "Atrasado"],
-        ...plano.lotes.map(l => [l.tanque, l.estilo, l.mes, nx(l.volume), nx(l.atende), nx(l.sobra), l.bateladas, chaveDia(l.inicio), chaveDia(l.fim), chaveDia(l.pronto), chaveDia(l.prazo), l.atrasado ? "SIM" : ""]),
+        ["Tanque", "Estilo", "Mês-alvo", "Volume do lote (L)", "Atende (L)", "Sobra p/ estoque (L)", "Bateladas", "1ª brassagem", "Última brassagem", "Pronto", "Prazo", "Atrasado", "Feito"],
+        ...lotesExibidos.map(l => [l.tanque, l.estilo, l.mes, nx(l.volume), nx(l.atende), nx(l.sobra), l.bateladas, chaveDia(l.inicio), chaveDia(l.fim), chaveDia(l.pronto), chaveDia(l.prazo), l.atrasado ? "SIM" : "", feitos[chaveLote(l)] ? "SIM" : ""]),
       ] },
       { nome: "Envase", linhas: [
         ["Estilo base", "Barril (L)", "PET (L)", "Dias de envase PET"],
@@ -4884,10 +5006,70 @@ function PlanejamentoProducao() {
   }
 
   const rotuloRitmo = (r) => r === "auto" ? `Recomendado (${recomendado}/dia)` : `${r} bateladas/dia`;
+  const nomeCenario = { min: "Mínimo", base: "Base", max: "Máximo" }[cenario];
 
   return (
     <div>
-      {/* controles de demanda */}
+      {/* plano salvo */}
+      <div style={{ background: usarSalvo ? "#12261a" : "#2a2112", border: `1px solid ${usarSalvo ? "#1f5c35" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: usarSalvo ? "#bfe6cc" : "#e8c766" }}>
+        {usarSalvo ? (
+          <div>
+            <strong>📌 Plano salvo em {new Date(planoSalvo.salvoEm).toLocaleString("pt-BR")}</strong> (ritmo {planoSalvo.ritmo}/dia). É esse plano que a equipe segue — as datas só mudam se você replanejar.
+          </div>
+        ) : (
+          <div>
+            <strong>{planoSalvo ? "Prévia (não salva)" : "Nenhum plano salvo ainda"}</strong> — {planoSalvo ? "o plano salvo continua valendo até você salvar esta prévia." : "ajuste os dados abaixo e clique em “Salvar este plano”."}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+          {usarSalvo && <button style={btn("#C69700")} onClick={() => setPrevia(true)}>🔄 Replanejar com os dados atuais</button>}
+          {!usarSalvo && <button disabled={salvando} style={btn("#4caf6b")} onClick={() => salvarPlano(planoCalc.lotes, ritmoUsado, feitos)}>{salvando ? "Salvando…" : "💾 Salvar este plano"}</button>}
+          {!usarSalvo && planoSalvo && <button style={btn("#888")} onClick={() => setPrevia(false)}>↩ Voltar ao plano salvo</button>}
+          <BotaoExcel nomeAba="PlanejamentoProducao" gerar={gerarExcel} />
+        </div>
+        {msgSalvar && <div style={{ marginTop: 6 }}>{msgSalvar}</div>}
+      </div>
+
+      {/* status dos tanques */}
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Status atual dos tanques <span style={{ color: "#888", fontWeight: 400 }}>(preencha na aba “tanques” da planilha: cerveja, dias no tanque e litros)</span></h4>
+      <div style={{ overflowX: "auto", marginBottom: 18 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>Tanque</th><th style={th}>Capacidade (L)</th><th style={{ ...th, textAlign: "left" }}>Cerveja no tanque</th>
+            <th style={th}>Dias no tanque</th><th style={th}>Produzida em</th><th style={th}>Dias p/ liberar</th><th style={th}>Litros no tanque</th><th style={{ ...th, textAlign: "left" }}>Situação</th>
+          </tr></thead>
+          <tbody>
+            {statusTanques.map(t => (
+              <tr key={t.nome}>
+                <td style={{ ...td, textAlign: "left", color: "#fff", fontWeight: 600 }}>{t.nome}</td>
+                <td style={td}>{L(t.capacidade)}</td>
+                <td style={{ ...td, textAlign: "left" }}>{t.cerveja || <span style={{ color: "#555" }}>—</span>}{t.cerveja && !t.base && <span style={{ color: "#e57373" }}> (sem receita)</span>}</td>
+                <td style={td}>{t.diasProd ?? "—"}</td>
+                <td style={td}>{t.dataProd ? t.dataProd.toLocaleDateString("pt-BR") : "—"}</td>
+                <td style={{ ...td, color: t.situacao === "maturando" ? "#C69700" : "#ddd" }}>{t.diasLiberar ?? "—"}{t.dataProd && !t.diasRec ? "*" : ""}</td>
+                <td style={td}>{t.litrosNoTanque ? L(t.litrosNoTanque) : "—"}</td>
+                <td style={{ ...td, textAlign: "left" }}>
+                  {t.situacao === "vazio" && <span style={{ color: "#4caf6b" }}>🟢 livre</span>}
+                  {t.situacao === "maturando" && <span style={{ color: "#C69700" }}>⏳ maturando — libera {fmtDataCurta(t.pronto)}</span>}
+                  {t.situacao === "pronta" && <span style={{ color: "#4caf6b" }}>✅ cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
+                  {t.situacao === "sem data" && <span style={{ color: "#e57373" }}>informe os dias no tanque</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ fontSize: 11, color: "#777", marginTop: 4 }}>
+          Dias p/ liberar = dias da receita − dias no tanque. O planejamento começa daqui: tanque ocupado só entra a partir da data em que libera, e os {L(litrosTanques)} L que já estão nos tanques abatem a necessidade do estilo. * receita sem dias: usei {diasPadrao}.
+        </div>
+      </div>
+
+      {/* premissas */}
+      <div style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#bbb" }}>
+        <div><strong style={{ color: "#fff" }}>Cenário usado:</strong> {nomeCenario} ({pcts[cenario]}%) — projeção de cada produto = litros vendidos no <em>mesmo mês do ano anterior</em> × {pcts[cenario]}% (produto sem histórico no ano anterior: média dos 3 últimos meses fechados). Não usa a aba Projeção do app.</div>
+        <div><strong style={{ color: "#fff" }}>Estoque considerado:</strong> aba <em>estoque</em> da planilha (litros por produto, somados ao estilo). Hoje está <strong>{descontarEstoque ? `LIGADO (desconta ${L(estoqueTotalConsiderado)} L só do 1º mês)` : "DESLIGADO — a necessidade ignora o estoque de produtos acabados"}</strong>. A cerveja que já está nos tanques sempre é considerada.</div>
+        <div><strong style={{ color: "#fff" }}>Sem venda recente:</strong> produtos sem nenhuma venda nos últimos {semVendaMeses || "—"} meses fechados são ignorados (0 = não ignorar).</div>
+      </div>
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 14 }}>
         <label style={{ fontSize: 12, color: "#aaa" }}>Mês a atender (ajuste manual na tabela)<br />
           <select value={alvo} onChange={e => setAlvo(e.target.value)} style={{ ...inputNum, width: 110, textAlign: "left" }}>
@@ -4906,6 +5088,9 @@ function PlanejamentoProducao() {
         <label style={{ fontSize: 12, color: "#aaa" }}>% do cenário<br />
           <input type="number" value={pcts[cenario]} onChange={e => setPcts(p => ({ ...p, [cenario]: Math.max(0, Number(e.target.value) || 0) }))} style={inputNum} />
         </label>
+        <label style={{ fontSize: 12, color: "#aaa" }}>Ignorar sem venda há (meses)<br />
+          <input type="number" value={semVendaMeses} onChange={e => setSemVendaMeses(Math.max(0, Number(e.target.value) || 0))} style={inputNum} />
+        </label>
         <label style={{ fontSize: 12, color: "#aaa" }}>Folga antes do prazo (dias)<br />
           <input type="number" value={folga} onChange={e => setFolga(Math.max(0, Number(e.target.value) || 0))} style={inputNum} />
         </label>
@@ -4916,25 +5101,22 @@ function PlanejamentoProducao() {
           <input type="number" value={diasPadrao} onChange={e => setDiasPadrao(Math.max(1, Number(e.target.value) || 1))} style={inputNum} />
         </label>
         <label style={{ fontSize: 12, color: "#ddd", display: "flex", gap: 6, alignItems: "center" }}>
-          <input type="checkbox" checked={descontarEstoque} onChange={e => setDescontarEstoque(e.target.checked)} /> Descontar estoque atual
+          <input type="checkbox" checked={descontarEstoque} onChange={e => setDescontarEstoque(e.target.checked)} /> Descontar estoque atual (aba estoque)
         </label>
         <label style={{ fontSize: 12, color: "#ddd", display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={incluirOutros} onChange={e => setIncluirOutros(e.target.checked)} /> Incluir garrafa/lata no volume
         </label>
-        <BotaoExcel nomeAba="PlanejamentoProducao" gerar={gerarExcel} />
-      </div>
-      <div style={{ fontSize: 11, color: "#888", marginBottom: 12 }}>
-        Projeção = mesmo mês do ano anterior × % do cenário (sem histórico: média dos 3 últimos meses fechados). Cada mês precisa estar pronto até o dia 1º. Cada lote ocupa o tanque inteiro; a sobra vira estoque e abate a necessidade do mês seguinte. Brassagem: {LITROS_BATELADA} L/batelada, só de segunda a sexta.
       </div>
 
-      {(semDias.length > 0 || semReceitaLista.length > 0) && (
+      {(semDias.length > 0 || semReceitaLista.length > 0 || ignoradosLista.length > 0) && (
         <div style={{ background: "#2a2112", border: "1px solid #6b5300", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#e8c766" }}>
           {semDias.length > 0 && <div>⚠️ Sem “dias até ficar pronto” na aba receitas (usei {diasPadrao} dias): {semDias.join(", ")}.</div>}
+          {ignoradosLista.length > 0 && <div>ℹ️ Ignorados por não vender há {semVendaMeses} meses: {ignoradosLista.slice(0, 8).map(([n, v]) => `${n} (${L(v)} L no ano anterior)`).join("; ")}{ignoradosLista.length > 8 ? "…" : ""}.</div>}
           {semReceitaLista.length > 0 && <div>⚠️ Produtos sem receita/trecho cadastrado (fora do plano): {semReceitaLista.slice(0, 8).map(([n, v]) => `${n} (${L(v)} L)`).join("; ")}{semReceitaLista.length > 8 ? "…" : ""}.</div>}
         </div>
       )}
 
-      {/* necessidades + envase do mês-alvo */}
+      {/* necessidades */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Necessidade e envase · {labelMes(alvo)} (derivadas somadas ao estilo base)</h4>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
         {card("Necessidade (L)", L(totNec), `${L(totBarril)} barril · ${L(totPet)} PET`)}
@@ -4948,42 +5130,57 @@ function PlanejamentoProducao() {
             <th style={th}>Barril proj. (L)</th><th style={th}>Barril (L) ✏️</th>
             <th style={th}>PET proj. (L)</th><th style={th}>PET (L) ✏️</th>
             <th style={th}>Estoque (L)</th><th style={th}>A produzir (L)</th>
-            <th style={th}>Dias</th><th style={th}>Lotes</th><th style={th}>Envase PET (dias)</th>
+            <th style={th}>Dias</th><th style={th}>Lotes</th><th style={th}>Envase PET (dias)</th><th style={th}>Origem</th>
           </tr></thead>
           <tbody>
             {necessidades.map(n => (
-              <tr key={n.estilo}>
-                <td style={{ ...td, textAlign: "left", color: "#fff", fontWeight: 600 }}>{n.estilo}</td>
-                <td style={td}>{L(n.barrilProj)}</td>
-                <td style={td}><input type="number" placeholder={String(Math.round(n.barrilProj))} value={ovBarril[n.estilo] ?? ""} onChange={e => setOvBarril(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
-                <td style={td}>{L(n.petProj)}</td>
-                <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[n.estilo] ?? ""} onChange={e => setOvPet(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
-                <td style={td}>{L(n.estoque)}</td>
-                <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
-                <td style={{ ...td, color: n.dias ? "#ddd" : "#e57373" }}>{n.dias || "preencher"}</td>
-                <td style={td}>{plano.lotes.filter(l => l.mes === alvo && l.estilo === n.estilo).length}</td>
-                <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
-              </tr>
+              <React.Fragment key={n.estilo}>
+                <tr>
+                  <td style={{ ...td, textAlign: "left", color: "#fff", fontWeight: 600 }}>{n.estilo}</td>
+                  <td style={td}>{L(n.barrilProj)}</td>
+                  <td style={td}><input type="number" placeholder={String(Math.round(n.barrilProj))} value={ovBarril[n.estilo] ?? ""} onChange={e => setOvBarril(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
+                  <td style={td}>{L(n.petProj)}</td>
+                  <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[n.estilo] ?? ""} onChange={e => setOvPet(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
+                  <td style={td}>{L(n.estoque)}</td>
+                  <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
+                  <td style={{ ...td, color: n.dias ? "#ddd" : "#e57373" }}>{n.dias || "preencher"}</td>
+                  <td style={td}>{plano.lotes.filter(l => l.mes === alvo && l.estilo === n.estilo).length}</td>
+                  <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
+                  <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [n.estilo]: !p[n.estilo] }))}>{expandidos[n.estilo] ? "ocultar" : "por quê?"}</button></td>
+                </tr>
+                {expandidos[n.estilo] && (
+                  <tr><td colSpan={11} style={{ ...td, textAlign: "left", background: "#101010" }}>
+                    {n.det.length === 0 && <span style={{ color: "#777" }}>Sem produtos.</span>}
+                    {n.det.sort((a, b) => b.lit - a.lit).map((d, i) => (
+                      <div key={i} style={{ fontSize: 11, color: "#aaa" }}>
+                        • <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb}) → {L(d.lit)} L — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}
+                      </div>
+                    ))}
+                  </td></tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
 
       {/* brassagem */}
-      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia ({LITROS_BATELADA} L cada)</h4>
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia ({LITROS_BATELADA} L cada; um tanque por vez, só termina um para começar o outro)</h4>
       <div style={{ background: "#12261a", border: "1px solid #1f5c35", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#bfe6cc" }}>
-        <strong>Recomendação: {recomendado} bateladas/dia.</strong> {motivo}
+        <strong>Recomendação (com os dados atuais): {recomendado} bateladas/dia.</strong> {motivo}
         <div style={{ marginTop: 6, color: "#8fbf9f" }}>
           3/dia: {p3.diasBrassagem} dias de brassagem, {p3.bateladasTotal} bateladas, {p3.atrasados} atraso(s), último lote pronto em {fmtDataCurta(p3.ultimoPronto)}.
           {" "}6/dia: {p6.diasBrassagem} dias de brassagem, {p6.atrasados} atraso(s), último lote pronto em {fmtDataCurta(p6.ultimoPronto)}.
         </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-end", marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: "#aaa" }}>Ritmo da brassagem<br />
-          <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-            {["auto", "3", "6"].map(r => <button key={r} onClick={() => setRitmo(r)} style={modoBtnStyle(ritmo === r, "#C69700")}>{rotuloRitmo(r)}</button>)}
+        {!usarSalvo && (
+          <div style={{ fontSize: 12, color: "#aaa" }}>Ritmo da brassagem<br />
+            <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+              {["auto", "3", "6"].map(r => <button key={r} onClick={() => setRitmo(r)} style={modoBtnStyle(ritmo === r, "#C69700")}>{rotuloRitmo(r)}</button>)}
+            </div>
           </div>
-        </div>
+        )}
         <div style={{ fontSize: 12, color: "#aaa" }}>Período<br />
           <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
             {[["30", "30 dias"], ["mes", "Mês"], ["60", "60 dias"], ["90", "90 dias"]].map(([v, t]) => <button key={v} onClick={() => setVista(v)} style={modoBtnStyle(vista === v, "#4a90d9")}>{t}</button>)}
@@ -5004,12 +5201,11 @@ function PlanejamentoProducao() {
         </div>
       </div>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>
-        Mostrando {fmtDataSem(wIni)} até {fmtDataSem(wFim)} · {rotuloRitmo(ritmo)} · {plano.atrasados > 0 ? `⚠️ ${plano.atrasados} lote(s) atrasado(s) no plano completo (em vermelho)` : "todos os lotes no prazo"}.
+        Mostrando {fmtDataSem(wIni)} até {fmtDataSem(wFim)} · {capDia} bateladas/dia · {plano.atrasados > 0 ? `⚠️ ${plano.atrasados} lote(s) atrasado(s) (em vermelho)` : "todos os lotes no prazo"}.
       </div>
 
-      {/* tanque x semana */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Tanque a tanque, semana a semana</h4>
-      <div style={{ overflowX: "auto", marginBottom: 6 }}>
+      <div style={{ overflowX: "auto", marginBottom: 18 }}>
         <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
           <thead><tr>
             <th style={{ ...th, textAlign: "left", position: "sticky", left: 0, background: "#0d0d0d" }}>Tanque</th>
@@ -5020,7 +5216,6 @@ function PlanejamentoProducao() {
               <tr key={t.nome}>
                 <td style={{ ...td, textAlign: "left", whiteSpace: "nowrap", color: "#fff", fontWeight: 600, position: "sticky", left: 0, background: "#0d0d0d" }}>
                   {t.nome} <span style={{ color: "#888", fontWeight: 400 }}>{L(t.capacidade)} L</span>
-                  <div><input type="date" value={ocupadoAte[t.nome] || ""} onChange={e => setOcupadoAte(p => ({ ...p, [t.nome]: e.target.value }))} title="Tanque ocupado até (opcional)" style={{ ...inputNum, width: 112, fontSize: 10, textAlign: "left", marginTop: 3 }} /></div>
                 </td>
                 {semanas.map(s => {
                   const it = fasesTanqueSemana(t, s);
@@ -5035,9 +5230,7 @@ function PlanejamentoProducao() {
           </tbody>
         </table>
       </div>
-      <div style={{ fontSize: 11, color: "#777", marginBottom: 18 }}>O campo de data sob cada tanque (opcional) informa até quando ele já está ocupado hoje.</div>
 
-      {/* semana a semana / dia a dia */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Programação para a equipe</h4>
       {semanas.map(seg => {
         const dias = diasDaSemana(seg).filter(d => d >= wIni && d <= wFim);
@@ -5082,7 +5275,10 @@ function PlanejamentoProducao() {
                         <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/{capDia} bat.</td>
                         <td style={{ ...td, textAlign: "left" }}>
                           {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
-                          {brass.map(({ l, n }, i) => <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd" }}>🍺 {l.tanque} · {l.estilo} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){l.inicio.getTime() === d.getTime() ? " · início do lote" : ""}</div>)}
+                          {brass.map(({ l, n }, i) => {
+                            const ini = chaveDia(l.inicio) === chaveDia(d), fimL = chaveDia(l.fim) === chaveDia(d);
+                            return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>🍺 {l.tanque} · {l.estilo} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
+                          })}
                           {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>✅ {l.tanque} · {l.estilo} pronto · {L(l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
                         </td>
                       </tr>
@@ -5094,7 +5290,31 @@ function PlanejamentoProducao() {
           </div>
         );
       })}
-      <div style={{ fontSize: 11, color: "#777", marginTop: 4 }}>* Lotes com prazo cadastrado na aba receitas; estilos sem prazo usam {diasPadrao} dias. Vermelho = lote que não fica pronto até o dia 1º do mês-alvo.</div>
+
+      {/* lotes e acompanhamento */}
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "14px 0 6px" }}>Acompanhamento dos lotes {usarSalvo ? "" : "(marque “feito” depois de salvar o plano)"}</h4>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <thead><tr>
+            <th style={th}>Feito</th><th style={{ ...th, textAlign: "left" }}>Tanque</th><th style={{ ...th, textAlign: "left" }}>Estilo</th><th style={th}>Mês-alvo</th>
+            <th style={th}>Bateladas</th><th style={th}>Brassagem</th><th style={th}>Pronto</th><th style={th}>Atende (L)</th><th style={th}>Sobra (L)</th>
+          </tr></thead>
+          <tbody>
+            {lotesExibidos.slice().sort((a, b) => a.inicio - b.inicio).map((l, i) => (
+              <tr key={i} style={{ opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>
+                <td style={td}><input type="checkbox" disabled={!usarSalvo} checked={!!feitos[chaveLote(l)]} onChange={() => alternarFeito(l)} /></td>
+                <td style={{ ...td, textAlign: "left" }}>{l.tanque}</td>
+                <td style={{ ...td, textAlign: "left", color: l.atrasado ? "#e57373" : "#fff" }}>{l.estilo}</td>
+                <td style={td}>{labelMes(l.mes)}</td><td style={td}>{l.bateladas}</td>
+                <td style={td}>{fmtDataSem(l.inicio)}{chaveDia(l.inicio) !== chaveDia(l.fim) ? ` → ${fmtDataSem(l.fim)}` : ""}</td>
+                <td style={td}>{fmtDataSem(l.pronto)}{!l.diasPreenchido ? "*" : ""}</td>
+                <td style={td}>{L(l.atende)}</td><td style={td}>{L(l.sobra)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>* estilo sem prazo cadastrado (usei {diasPadrao} dias). Vermelho = lote que não fica pronto até o dia 1º do mês-alvo.</div>
     </div>
   );
 }
@@ -5783,10 +6003,6 @@ function ProdutosTab() {
         )}
       </Section>
 
-      <Section title="Planejamento de Produção · Tanques e Envase" icon={<TrendingUp size={18} color="#02601D" />}>
-        <PlanejamentoProducao />
-      </Section>
-
       <Section title={`Por Tipo de Produto (${produtosExibidos.length}${buscaTipo.trim() ? ` de ${produtosComComparativo.length}` : ""})`} icon={<TrendingUp size={18} color="#02601D" />}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
           <Search size={14} color="#C69700" />
@@ -5848,7 +6064,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || []));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || ""));
         setStatus("ready");
       })
       .catch(err => {
@@ -5912,6 +6128,9 @@ export default function App() {
                 <button onClick={() => setTab("produtos")} style={tabStyle(tab === "produtos")}>
                   <Package size={14} /> Produtos
                 </button>
+                <button onClick={() => setTab("planejamento")} style={tabStyle(tab === "planejamento")}>
+                  <Factory size={14} /> Planejamento
+                </button>
                 <button onClick={() => setTab("positivacao")} style={tabStyle(tab === "positivacao")}>
                   <Trophy size={14} /> Positivação
                 </button>
@@ -5933,6 +6152,7 @@ export default function App() {
               {tab === "dashboard" && <DashboardTab />}
               {tab === "mes" && <MesTab />}
               {tab === "produtos" && <ProdutosTab />}
+              {tab === "planejamento" && <PlanejamentoProducao />}
               {tab === "positivacao" && <PositivacaoTab />}
               {tab === "estoque" && <EstoqueTab />}
               {tab === "projecao" && <ProjecaoVendasTab />}
