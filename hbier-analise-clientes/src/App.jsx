@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.16";
+const APP_VERSION = "v10.17";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4605,33 +4605,53 @@ function diasEntre(a, b) { return Math.round((new Date(b.getFullYear(), b.getMon
 // anterior estiver cheio (um tanque pode começar num dia e terminar no seguinte, ex.: 1+5 ou 5+4,
 // mas nenhum outro tanque entra no meio). Só seg-sex. Pronto até o dia 1º de cada mês.
 function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, suprimentoInicial, horizonteDias, hellesNome, hellesDias }) {
-  const usado = {};
+  const DIA_TOTAL = 6;      // máximo de bateladas da brassagem por dia
+  const GRANDE = 8000;      // tanque grande: >= 8.000 L
+  const usado = {};         // dia -> bateladas usadas
+  const bigDia = {};        // dia -> já tem um tanque grande sendo enchido
   const estado = tanques.map(t => ({ ...t, livre: t.livreDe && t.livreDe > hoje ? t.livreDe : hoje }));
   const sobraEstilo = { ...(suprimentoInicial || {}) };
-  let ptrDia = hoje, ptrUso = 0;
   const lotes = [];
   const fimHorizonte = somarDiasData(hoje, horizonteDias || 120);
 
-  // um lote tem que começar e ENCHER o tanque na mesma semana (seg-sex): se atravessaria o fim de semana,
-  // o lote inteiro começa na segunda-feira seguinte.
-  const colocar = (t, release, b, capT) => {
-    let rel = release, res = null;
-    for (let tent = 0; tent < 60; tent++) {
-      let d = proximoUtil(rel > t.livre ? rel : t.livre);
-      let uso = 0;
-      if (d <= ptrDia) { d = ptrDia; uso = ptrUso; }
-      let rest = b, guard = 0; const aloc = [];
-      while (rest > 0 && guard++ < 800) {
-        const q = Math.min(capDia - uso, rest, capT);
-        if (q > 0) { aloc.push({ data: new Date(d), n: q }); rest -= q; uso += q; }
-        if (rest > 0) { d = proximoUtil(somarDiasData(d, 1)); uso = 0; }
+  // REGRAS DA BRASSAGEM
+  // - Tanque grande: enche em dias de 3 ou 6 bateladas (conforme o ritmo), seguidos e na MESMA semana (seg-sex).
+  // - Só um tanque grande por dia: nunca termina um e começa outro no mesmo dia (espera/adianta o início).
+  // - Tanque pequeno (1.000 L/batelada): entra junto no dia, nas vagas que sobraram (ex.: 3 Helles + 1 Stout).
+  const colocar = (t, release, b) => {
+    const grande = t.capacidade >= GRANDE;
+    let rel = release;
+    for (let tent = 0; tent < 400; tent++) {
+      const d0 = proximoUtil(rel > t.livre ? rel : t.livre);
+      if (grande) {
+        const pedacos = []; let rest = b;
+        while (rest > 0) { const c = Math.min(capDia, rest); pedacos.push(c); rest -= c; }
+        const aloc = []; let d = d0, ok = true;
+        for (let i = 0; i < pedacos.length; i++) {
+          if (i > 0) d = proximoUtil(somarDiasData(d, 1));
+          const k = chaveDia(d);
+          if (bigDia[k] || (usado[k] || 0) + pedacos[i] > DIA_TOTAL) { ok = false; break; }
+          aloc.push({ data: new Date(d), n: pedacos[i] });
+        }
+        if (ok && segundaDaSemana(aloc[0].data).getTime() === segundaDaSemana(aloc[aloc.length - 1].data).getTime()) {
+          return { inicio: aloc[0].data, fim: aloc[aloc.length - 1].data, aloc };
+        }
+      } else {
+        const k = chaveDia(d0);
+        if ((usado[k] || 0) + b <= DIA_TOTAL) {
+          return { inicio: d0, fim: d0, aloc: [{ data: new Date(d0), n: b }] };
+        }
       }
-      res = { inicio: aloc[0].data, fim: aloc[aloc.length - 1].data, aloc, uso };
-      const segIni = segundaDaSemana(res.inicio), segFim = segundaDaSemana(res.fim);
-      if (segIni.getTime() === segFim.getTime()) return res;
-      rel = segFim; // recomeça na segunda-feira da semana seguinte
+      rel = somarDiasData(d0, 1);
     }
-    return res;
+    return null;
+  };
+  const confirmar = (t, av) => {
+    av.aloc.forEach(a => {
+      const k = chaveDia(a.data);
+      usado[k] = (usado[k] || 0) + a.n;
+      if (t.capacidade >= GRANDE) bigDia[k] = true;
+    });
   };
 
   // demanda: entregas semanais em ordem de prazo (e, no mesmo prazo, as de maturação mais longa primeiro)
@@ -4648,12 +4668,9 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
   });
   const estilosRep = Object.keys(peso).filter(e => peso[e] > 0);
 
-  // REGRAS DE TANQUE: tanque grande (>= 8.000 L) fica sempre com Helles; tanques pequenos rodam os outros estilos.
-  // Estilo que não é Helles só entra em tanque grande se, com os pequenos, ficaria atrasado.
-  // Em tanque pequeno o lote enche o tanque (ex.: 6.000 L = 2 lotes de 3.000 L, não 8.000 L).
-  // TANQUE SEMPRE CHEIO: a cada passo, o tanque que libera primeiro recebe lote novo na hora (demanda; se não
-  // houver, reposição de estoque). A cerveja pode ficar mais tempo no tanque.
-  const GRANDE = 8000;
+  // Tanque grande sempre com Helles; pequenos rodam os outros estilos. Outro estilo só entra em tanque grande
+  // se, com os pequenos, ficaria atrasado. TANQUE SEMPRE CHEIO: o tanque que libera primeiro recebe lote novo na hora
+  // (demanda; se não houver, reposição de estoque). A cerveja pode ficar mais tempo no tanque.
   const ehHelles = e => normalizarPlano(e) === "HELLES";
   const pequenos = estado.filter(t => t.capacidade < GRANDE);
   const diasDe = e => diasEstilo[e] || (ehHelles(e) && hellesDias) || diasPadrao;
@@ -4683,12 +4700,11 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       else if (!hel && melhorPequeno(it, t)) { item = it; break; }
     }
     const b = bateladasDoTanque(t);
-    const capT = t.maxDia > 0 ? Math.min(capDia, t.maxDia) : capDia;
     if (item) {
-      const av = colocar(t, hoje, b, capT);
+      const av = colocar(t, hoje, b);
+      if (!av) break;
       av.pronto = somarDiasData(av.fim, item.dias);
-      av.aloc.forEach(a => { usado[chaveDia(a.data)] = (usado[chaveDia(a.data)] || 0) + a.n; });
-      ptrDia = av.fim; ptrUso = av.uso;
+      confirmar(t, av);
       const atende = Math.min(t.capacidade, item.restante);
       const sobra = t.capacidade - atende;
       sobraEstilo[item.n.estilo] = (sobraEstilo[item.n.estilo] || 0) + sobra;
@@ -4703,19 +4719,17 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       });
     } else {
       if (t.livre > fimHorizonte) break;
-      // reposição: grande -> Helles; pequeno -> outros estilos (pelo peso da demanda), senão Helles
-      let candidatos = grande ? estilosRep.filter(ehHelles) : estilosRep.filter(e => !ehHelles(e));
+      const candidatos = grande ? estilosRep.filter(ehHelles) : estilosRep.filter(e => !ehHelles(e));
       let e;
       if (candidatos.length) e = candidatos.slice().sort((x, y) => ((extra[x] || 0) / peso[x]) - ((extra[y] || 0) / peso[y]))[0];
       else if (grande && hellesNome) e = hellesNome;
       else if (estilosRep.length) e = estilosRep.slice().sort((x, y) => ((extra[x] || 0) / peso[x]) - ((extra[y] || 0) / peso[y]))[0];
       else break;
       const dEstilo = diasDe(e);
-      const av = colocar(t, hoje, b, capT);
-      if (av.inicio > fimHorizonte) break;
+      const av = colocar(t, hoje, b);
+      if (!av || av.inicio > fimHorizonte) break;
       av.pronto = somarDiasData(av.fim, dEstilo);
-      av.aloc.forEach(a => { usado[chaveDia(a.data)] = (usado[chaveDia(a.data)] || 0) + a.n; });
-      ptrDia = av.fim; ptrUso = av.uso;
+      confirmar(t, av);
       t.livre = somarDiasData(av.pronto, limpeza);
       extra[e] = (extra[e] || 0) + t.capacidade;
       lotes.push({
@@ -4725,7 +4739,6 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
         inicio: av.inicio, fim: av.fim, pronto: av.pronto, aloc: av.aloc, livreAte: t.livre,
         atrasado: false, reposicao: true,
       });
-      extra[e] = extra[e] || 0;
     }
   }
   const pend = {};
@@ -5334,7 +5347,7 @@ function PlanejamentoProducao() {
         </div>
       </div>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>
-        Mostrando {fmtDataSem(wIni)} até {fmtDataSem(wFim)} · {capDia} bateladas/dia · {plano.atrasados > 0 ? `⚠️ ${plano.atrasados} lote(s) atrasado(s) (em vermelho)` : "todos os lotes no prazo"}.
+        Mostrando {fmtDataSem(wIni)} até {fmtDataSem(wFim)} · {capDia} bateladas/dia por tanque grande · {plano.atrasados > 0 ? `⚠️ ${plano.atrasados} lote(s) atrasado(s) (em vermelho)` : "todos os lotes no prazo"}.
       </div>
 
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Tanque a tanque, semana a semana</h4>
@@ -5405,7 +5418,7 @@ function PlanejamentoProducao() {
                     return (
                       <tr key={d.getTime()}>
                         <td style={{ ...td, textAlign: "left", whiteSpace: "nowrap", color: "#fff", width: 90, verticalAlign: "top" }}>{fmtDataSem(d)}</td>
-                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/{capDia} bat.</td>
+                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/6 bat.</td>
                         <td style={{ ...td, textAlign: "left" }}>
                           {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
                           {brass.map(({ l, n }, i) => {
