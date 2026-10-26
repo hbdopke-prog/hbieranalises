@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.22";
+const APP_VERSION = "v10.25";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4909,6 +4909,7 @@ function PlanejamentoProducao() {
   const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
   const [semVendaMeses, setSemVendaMeses] = useState(cfg0.semVendaMeses ?? 3);
   const [pctMes, setPctMes] = useState(cfg0.pctMes || {});
+  const [ovProd, setOvProd] = useState(cfg0.ovProd || {}); // litros/mês digitados à mão por produto (mês|produto)
   const [diasEstilo, setDiasEstilo] = useState(cfg0.diasEstilo || {}); // dias de maturação por estilo (sobrescreve a receita)
   const [diasMes, setDiasMes] = useState(cfg0.diasMes || {});         // dias por mês+estilo (sobrescreve o do estilo)
   const [estilosOff, setEstilosOff] = useState(cfg0.estilosOff || {}); // estilos desmarcados (não entram no plano)
@@ -5017,12 +5018,17 @@ function PlanejamentoProducao() {
         const vendeuRecente = rows.some(r => janelaVenda.has(r.chave) && (r.litros || 0) > 0);
         let lit = 0, origem = "";
         const refRow = rows.find(r => r.chave === refAno);
-        if (refRow) { lit = refRow.litros || 0; origem = `mesmo mês do ano anterior (${labelMes(refAno)})`; }
-        else { const f = rows.filter(r => r.chave < mesAtual).slice(-3); lit = f.length ? f.reduce((s, r) => s + (r.litros || 0), 0) / f.length : 0; origem = "média dos 3 últimos meses (sem histórico no ano anterior)"; }
+        if (refRow && (refRow.litros || 0) > 0) { lit = refRow.litros; origem = `mesmo mês do ano anterior (${labelMes(refAno)})`; }
+        else {
+          // produto novo / sem histórico no mesmo mês do ano passado: média dos últimos meses fechados COM venda (até 3)
+          const f = rows.filter(r => r.chave < mesAtual && (r.litros || 0) > 0).slice(-3);
+          lit = f.length ? f.reduce((s, r) => s + r.litros, 0) / f.length : 0;
+          origem = f.length ? `produto sem histórico no ano anterior: média dos últimos ${f.length} mês(es) com venda (${f.map(r => labelMes(r.chave)).join(", ")})` : "sem vendas registradas — informe manualmente";
+        }
         lit *= pct;
         const est = (estoquePorProduto[nome] && estoquePorProduto[nome].litros) || 0;
-        if (lit <= 0 && est <= 0) return;
         if (semVendaMeses > 0 && !vendeuRecente) { if (lit > 0) ignorados[nome] = lit; return; }
+        if (lit <= 0 && est <= 0 && !vendeuRecente) return;
         const estilo = estiloDeTexto(nome);
         if (!estilo) { if (lit > 0) semReceita[nome] = Math.max(semReceita[nome] || 0, lit); return; }
         const base = resolverBase(estilo);
@@ -5030,7 +5036,7 @@ function PlanejamentoProducao() {
         const o = porEstilo[base] || (porEstilo[base] = { barril: 0, pet: 0, outros: 0, estoque: 0, det: [] });
         if (emb === "chope") o.barril += lit; else if (emb === "pet") o.pet += lit; else o.outros += lit;
         o.estoque += est;
-        if (lit > 0 || est > 0) o.det.push({ produto: nome, emb, lit, est, origem });
+        if (lit > 0 || est > 0 || vendeuRecente) o.det.push({ produto: nome, emb, lit, est, origem });
       });
       resultado[chave] = { porEstilo, semReceita, ignorados };
     });
@@ -5040,10 +5046,16 @@ function PlanejamentoProducao() {
   const montarNecessidades = (proj, chaveMes, usarOverrides, descontar) => {
     if (!proj) return [];
     return Object.entries(proj.porEstilo).filter(([estilo]) => !estilosOff[estilo]).map(([estilo, o]) => {
-      const barrilProj = o.barril;
+      const detAj = o.det.map(d => {
+        const v = usarOverrides ? ovProd[`${chaveMes}|${d.produto}`] : undefined;
+        const manual = v !== undefined && v !== "";
+        return { ...d, litProj: d.lit, lit: manual ? (Number(v) || 0) : d.lit, manual };
+      });
+      const barrilProj = detAj.filter(d => d.emb === "chope").reduce((s, d) => s + d.lit, 0);
+      const petProjAj = detAj.filter(d => d.emb === "pet").reduce((s, d) => s + d.lit, 0);
       const ovB = usarOverrides ? ovBarril[`${chaveMes}|${estilo}`] : undefined, ovP = usarOverrides ? ovPet[`${chaveMes}|${estilo}`] : undefined;
       const barril = ovB !== undefined && ovB !== "" ? Number(ovB) : barrilProj;
-      const pet = ovP !== undefined && ovP !== "" ? Number(ovP) : o.pet;
+      const pet = ovP !== undefined && ovP !== "" ? Number(ovP) : petProjAj;
       const bruto = barril + pet;
       const estoque = descontar ? o.estoque : 0;
       const necessario = Math.max(0, bruto - estoque);
@@ -5052,16 +5064,16 @@ function PlanejamentoProducao() {
       const diasReceita = rec && rec.dias ? rec.dias : null;
       const dOvMes = Number(diasMes[`${chaveMes}|${estilo}`]), dOvEstilo = Number(diasEstilo[estilo]);
       const dias = dOvMes > 0 ? dOvMes : dOvEstilo > 0 ? dOvEstilo : diasReceita;
-      return { estilo, barrilProj, petProj: o.pet, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasReceita, diasEstiloBase: dOvEstilo > 0 ? dOvEstilo : diasReceita, diasUsados: dias || diasPadrao, det: o.det };
+      return { estilo, barrilProj, petProj: petProjAj, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasReceita, diasEstiloBase: dOvEstilo > 0 ? dOvEstilo : diasReceita, diasUsados: dias || diasPadrao, det: detAj };
     }).filter(n => n.necessario > 0 || n.barril > 0 || n.pet > 0 || n.estoque > 0).sort((a, b) => b.necessario - a.necessario);
   };
 
   const primeiroMesProducao = mesesPlano.find(c => (semanasPorMes[c] || []).some(sm => sm > hoje));
   const descontaMes = (chave) => descontarEstoque && chave === primeiroMesProducao;
   const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
-    [mesesPlano, projecoes, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
+    [mesesPlano, projecoes, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
-    [projecoes, alvo, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
+    [projecoes, alvo, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   // cada mês vira N entregas semanais iguais (volume do mês ÷ nº de semanas), cada uma pronta até o início da semana
   const mesesParaPlano = useMemo(() => {
@@ -5076,7 +5088,7 @@ function PlanejamentoProducao() {
       });
     });
     return out.sort((a, b) => a.prazo - b.prazo);
-  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
@@ -5111,13 +5123,21 @@ function PlanejamentoProducao() {
   const ritmoUsado = ritmo === "auto" ? recomendado : ritmo;
   const planoCalc = ritmoUsado === "6" ? p6 : p3;
 
+  // qualquer mudança de premissa (estilos, %, overrides, dias) sai do plano salvo e mostra a prévia recalculada
+  const primeiraRef = useRef(true);
+  useEffect(() => {
+    if (primeiraRef.current) { primeiraRef.current = false; return; }
+    setPrevia(true);
+    if (planoSalvo) setCenarioValidado(true); // havia plano salvo: mantém a programação e a recomendação 3/6 visíveis
+  }, [estilosOff, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario]);
+
   const usarSalvo = !!planoSalvo && !previa;
   const lotesExibidos = usarSalvo ? reviverLotes(planoSalvo.lotes) : planoCalc.lotes;
   const capDia = usarSalvo ? (planoSalvo.ritmo === "6" ? 6 : 3) : (ritmoUsado === "6" ? 6 : 3);
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ ovProd, diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5154,7 +5174,7 @@ function PlanejamentoProducao() {
     necPorMes.forEach(({ chave, nec }) => { resumo[chave] = Math.round(nec.reduce((s, n) => s + n.necessario, 0)); });
     const novo = {
       nome, salvoEm: new Date().toISOString(), resumo,
-      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
+      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, ovProd, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
     };
     const existe = cenariosSalvos.some(c => c.nome.toLowerCase() === nome.toLowerCase());
     const lista = existe ? cenariosSalvos.map(c => (c.nome.toLowerCase() === nome.toLowerCase() ? novo : c)) : [...cenariosSalvos, novo];
@@ -5165,7 +5185,7 @@ function PlanejamentoProducao() {
     const g = c.config || {};
     setCenario(g.cenario || "base"); setPcts(g.pcts || { min: 80, base: 100, max: 120 }); setPctMes(g.pctMes || {});
     setEstilosOff(g.estilosOff || {}); setOvBarril(g.ovBarril || {}); setOvPet(g.ovPet || {});
-    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque); setDiasEstilo(g.diasEstilo || {}); setDiasMes(g.diasMes || {});
+    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque); setDiasEstilo(g.diasEstilo || {}); setDiasMes(g.diasMes || {}); setOvProd(g.ovProd || {});
     setCenarioCarregado(c.nome); setNomeNovoCenario(c.nome); setCenarioValidado(false);
     setMsgCenario(`Cenário “${c.nome}” carregado. Confira os números e valide para ver a programação.`);
   }
@@ -5466,11 +5486,17 @@ function PlanejamentoProducao() {
                         {expandidos[kx] && (
                           <tr><td colSpan={10} style={{ ...td, textAlign: "left", background: "#101010" }}>
                             {n.det.length === 0 && <span style={{ color: "#777" }}>Sem produtos.</span>}
-                            {n.det.slice().sort((x, y) => y.lit - x.lit).map((d, i) => (
-                              <div key={i} style={{ fontSize: 11, color: "#aaa" }}>
-                                • <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb}) → {L(d.lit)} L — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}
-                              </div>
-                            ))}
+                            <div style={{ fontSize: 11, color: "#777", marginBottom: 4 }}>Projeção por produto — digite litros/mês à mão para sobrescrever (a soma dos produtos vira a projeção do estilo).</div>
+                            {n.det.slice().sort((x, y) => y.litProj - x.litProj).map((d, i) => {
+                              const kp = `${chave}|${d.produto}`;
+                              return (
+                                <div key={i} style={{ fontSize: 11, color: "#aaa", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "2px 0" }}>
+                                  <span style={{ minWidth: 230 }}>• <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb === "chope" ? "🛢️ barril" : "🧴 PET"})</span>
+                                  <input type="number" placeholder={String(Math.round(d.litProj))} value={ovProd[kp] ?? ""} onChange={ev => setOvProd(p => ({ ...p, [kp]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: d.manual ? "#C69700" : "#444" }} />
+                                  <span>L/mês{d.manual ? " (manual)" : ""} — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}</span>
+                                </div>
+                              );
+                            })}
                           </td></tr>
                         )}
                       </React.Fragment>
