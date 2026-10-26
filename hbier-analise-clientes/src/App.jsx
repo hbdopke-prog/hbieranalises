@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.19";
+const APP_VERSION = "v10.20";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4799,6 +4799,8 @@ function PlanejamentoProducao() {
   const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
   const [semVendaMeses, setSemVendaMeses] = useState(cfg0.semVendaMeses ?? 3);
   const [pctMes, setPctMes] = useState(cfg0.pctMes || {});
+  const [diasEstilo, setDiasEstilo] = useState(cfg0.diasEstilo || {}); // dias de maturação por estilo (sobrescreve a receita)
+  const [diasMes, setDiasMes] = useState(cfg0.diasMes || {});         // dias por mês+estilo (sobrescreve o do estilo)
   const [estilosOff, setEstilosOff] = useState(cfg0.estilosOff || {}); // estilos desmarcados (não entram no plano)
   const [ovBarril, setOvBarril] = useState(cfg0.ovBarril || {});
   const [ovPet, setOvPet] = useState(cfg0.ovPet || {});
@@ -4936,16 +4938,18 @@ function PlanejamentoProducao() {
       const necessario = Math.max(0, bruto - estoque);
       const fator = bruto > 0 ? necessario / bruto : 0;
       const rec = receitaPorEstilo[normalizarPlano(estilo)];
-      const dias = rec && rec.dias ? rec.dias : null;
-      return { estilo, barrilProj, petProj: o.pet, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasUsados: dias || diasPadrao, det: o.det };
+      const diasReceita = rec && rec.dias ? rec.dias : null;
+      const dOvMes = Number(diasMes[`${chaveMes}|${estilo}`]), dOvEstilo = Number(diasEstilo[estilo]);
+      const dias = dOvMes > 0 ? dOvMes : dOvEstilo > 0 ? dOvEstilo : diasReceita;
+      return { estilo, barrilProj, petProj: o.pet, barril, pet, estoque: o.estoque, necessario, barrilProd: barril * fator, petProd: pet * fator, dias, diasReceita, diasEstiloBase: dOvEstilo > 0 ? dOvEstilo : diasReceita, diasUsados: dias || diasPadrao, det: o.det };
     }).filter(n => n.necessario > 0 || n.barril > 0 || n.pet > 0 || n.estoque > 0).sort((a, b) => b.necessario - a.necessario);
   };
 
   const descontaMes = (chave) => descontarEstoque && chave === mesesPlano[0];
   const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
-    [mesesPlano, projecoes, ovBarril, ovPet, estilosOff, descontarEstoque, diasPadrao, receitaPorEstilo]);
+    [mesesPlano, projecoes, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
-    [projecoes, alvo, ovBarril, ovPet, estilosOff, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
+    [projecoes, alvo, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   // cada mês vira N entregas semanais iguais (volume do mês ÷ nº de semanas), cada uma pronta até o início da semana
   const mesesParaPlano = useMemo(() => {
@@ -4960,7 +4964,7 @@ function PlanejamentoProducao() {
       });
     });
     return out.sort((a, b) => a.prazo - b.prazo);
-  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, estilosOff, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
@@ -5001,7 +5005,7 @@ function PlanejamentoProducao() {
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5038,7 +5042,7 @@ function PlanejamentoProducao() {
     necPorMes.forEach(({ chave, nec }) => { resumo[chave] = Math.round(nec.reduce((s, n) => s + n.necessario, 0)); });
     const novo = {
       nome, salvoEm: new Date().toISOString(), resumo,
-      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, semVendaMeses, descontarEstoque },
+      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
     };
     const existe = cenariosSalvos.some(c => c.nome.toLowerCase() === nome.toLowerCase());
     const lista = existe ? cenariosSalvos.map(c => (c.nome.toLowerCase() === nome.toLowerCase() ? novo : c)) : [...cenariosSalvos, novo];
@@ -5049,7 +5053,7 @@ function PlanejamentoProducao() {
     const g = c.config || {};
     setCenario(g.cenario || "base"); setPcts(g.pcts || { min: 80, base: 100, max: 120 }); setPctMes(g.pctMes || {});
     setEstilosOff(g.estilosOff || {}); setOvBarril(g.ovBarril || {}); setOvPet(g.ovPet || {});
-    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque);
+    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque); setDiasEstilo(g.diasEstilo || {}); setDiasMes(g.diasMes || {});
     setCenarioCarregado(c.nome); setNomeNovoCenario(c.nome); setCenarioValidado(false);
     setMsgCenario(`Cenário “${c.nome}” carregado. Confira os números e valide para ver a programação.`);
   }
@@ -5276,6 +5280,11 @@ function PlanejamentoProducao() {
               <input type="checkbox" checked={!estilosOff[e.estilo]} onChange={() => setEstilosOff(p => ({ ...p, [e.estilo]: !p[e.estilo] }))} style={{ marginTop: 2 }} />
               <span>
                 <strong>{e.estilo}</strong> <span style={{ color: "#888" }}>· {L(e.vol)} L em {labelMes(alvo)}</span>
+                <div style={{ fontSize: 11, color: "#999", marginTop: 3 }} onClick={ev => ev.preventDefault()}>
+                  dias até pronto{" "}
+                  <input type="number" min="1" placeholder={String(e.dias || diasPadrao)} value={diasEstilo[e.estilo] ?? ""} onChange={ev => setDiasEstilo(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 54, padding: "2px 4px", borderColor: diasEstilo[e.estilo] ? "#C69700" : "#444" }} />
+                  {diasEstilo[e.estilo] ? <span style={{ color: "#C69700" }}> (receita: {e.dias || "—"})</span> : null}
+                </div>
                 {e.derivados.length > 0 && <div style={{ fontSize: 10, color: "#777" }}>inclui: {e.derivados.join(", ")}</div>}
               </span>
             </label>
@@ -5299,7 +5308,7 @@ function PlanejamentoProducao() {
 
       {/* cenário: um bloco por mês */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Cenário de vendas por mês (litros) — ajuste à vontade; derivadas somadas ao estilo base</h4>
-      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Os campos ✏️ sobrescrevem a projeção daquele mês e estilo (vazio = projeção). Os percentuais por mês ficam no cabeçalho de cada bloco.</div>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Os campos ✏️ sobrescrevem a projeção daquele mês e estilo (vazio = projeção). “Dias ✏️” muda o tempo até ficar pronto só para as entregas daquele mês (vazio = o do estilo, ajustável na lista de estilos acima; senão, o da receita). Reduzir a maturação é decisão do cervejeiro — o app só recalcula as datas. Os percentuais por mês ficam no cabeçalho de cada bloco.</div>
       {necPorMes.map(({ chave, nec }) => {
         const tBarril = nec.reduce((s, n) => s + n.barrilProd, 0), tPet = nec.reduce((s, n) => s + n.petProd, 0), tNec = nec.reduce((s, n) => s + n.necessario, 0);
         const nSem = (semanasPorMes[chave] || []).length || 1;
@@ -5320,7 +5329,7 @@ function PlanejamentoProducao() {
                   <th style={th}>Barril proj. (L)</th><th style={th}>Barril (L) ✏️</th>
                   <th style={th}>PET proj. (L)</th><th style={th}>PET (L) ✏️</th>
                   <th style={th}>Estoque (L)</th><th style={th}>A produzir (L)</th>
-                  <th style={th}>Dias</th><th style={th}>Envase PET (dias)</th><th style={th}>Origem</th>
+                  <th style={th}>Dias ✏️</th><th style={th}>Envase PET (dias)</th><th style={th}>Origem</th>
                 </tr></thead>
                 <tbody>
                   {nec.map(n => {
@@ -5335,7 +5344,7 @@ function PlanejamentoProducao() {
                           <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[kx] ?? ""} onChange={e => setOvPet(p => ({ ...p, [kx]: e.target.value }))} style={inputNum} /></td>
                           <td style={td}>{L(n.estoque)}</td>
                           <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
-                          <td style={{ ...td, color: n.dias ? "#ddd" : "#e57373" }}>{n.dias || "preencher"}</td>
+                          <td style={td}><input type="number" min="1" placeholder={n.diasEstiloBase ? String(n.diasEstiloBase) : "preencher"} value={diasMes[kx] ?? ""} onChange={e => setDiasMes(p => ({ ...p, [kx]: e.target.value }))} style={{ ...inputNum, width: 54, borderColor: (diasMes[kx] || diasEstilo[n.estilo]) ? "#C69700" : n.dias ? "#444" : "#e57373" }} title={n.diasReceita ? `receita: ${n.diasReceita} dias` : "sem prazo na receita"} /></td>
                           <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
                           <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [kx]: !p[kx] }))}>{expandidos[kx] ? "ocultar" : "por quê?"}</button></td>
                         </tr>
