@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.38";
+const APP_VERSION = "v10.41";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4750,6 +4750,15 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       sobraEstilo[item.n.estilo] = (sobraEstilo[item.n.estilo] || 0) + sobra;
       t.livre = somarDiasData(av.pronto, limpeza);
       item.restante -= atende;
+      // a sobra do tanque (cerveja pronta além da necessidade) abate as entregas futuras já criadas do mesmo estilo
+      // que ainda dá tempo de usá-la (prazo + tolerância >= data em que o lote fica pronto)
+      for (const it2 of itens) {
+        if (it2 === item || it2.n.estilo !== item.n.estilo || it2.restante === null || it2.restante <= 0.5) continue;
+        if ((sobraEstilo[item.n.estilo] || 0) <= 0.5) break;
+        if (somarDiasData(it2.mes.prazo, tol) < av.pronto) continue;
+        const usar = Math.min(sobraEstilo[item.n.estilo], it2.restante);
+        it2.restante -= usar; sobraEstilo[item.n.estilo] -= usar;
+      }
       lotes.push({
         estilo: item.n.estilo, tanque: t.nome, codigo: t.codigo, capacidade: t.capacidade, bateladas: b,
         volume: t.capacidade, atende, sobra, dias: dL, diasPreenchido: !!item.n.dias,
@@ -4761,9 +4770,9 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       if (t.livre > fimHorizonte) break;
       const candidatos = grande ? estilosRep.filter(ehHelles) : estilosRep.filter(e => !ehHelles(e));
       let e;
-      if (candidatos.length) e = candidatos.slice().sort((x, y) => ((extra[x] || 0) / peso[x]) - ((extra[y] || 0) / peso[y]))[0];
+      if (candidatos.length) e = candidatos.slice().sort((x, y) => (((extra[x] || 0) + (sobraEstilo[x] || 0)) / peso[x]) - (((extra[y] || 0) + (sobraEstilo[y] || 0)) / peso[y]))[0];
       else if (grande && hellesNome) e = hellesNome;
-      else if (estilosRep.length) e = estilosRep.slice().sort((x, y) => ((extra[x] || 0) / peso[x]) - ((extra[y] || 0) / peso[y]))[0];
+      else if (estilosRep.length) e = estilosRep.slice().sort((x, y) => (((extra[x] || 0) + (sobraEstilo[x] || 0)) / peso[x]) - (((extra[y] || 0) + (sobraEstilo[y] || 0)) / peso[y]))[0];
       else break;
       const dEstilo = diasDe(e);
       const av = colocar(t, hoje, b);
@@ -4921,8 +4930,6 @@ function PlanejamentoProducao() {
   const [pctMes, setPctMes] = useState(cfg0.pctMes || {});
   const [mostrarTodosAtrasos, setMostrarTodosAtrasos] = useState(false);
   const [toleranciaSemana, setToleranciaSemana] = useState(cfg0.toleranciaSemana ?? 4); // dias da semana de entrega em que o lote ainda pode ficar pronto
-  const [autoSalvar, setAutoSalvar] = useState(() => { try { return localStorage.getItem("hbier_auto_salvar") !== "0"; } catch (e) { return true; } });
-  const [alterado, setAlterado] = useState(false); // houve mudança do usuário ainda não salva
   const [diasLote, setDiasLote] = useState(cfg0.diasLote || {}); // maturação ajustada por lote: "TANQUE n|ordem" -> dias
   const [prioridade, setPrioridade] = useState(cfg0.prioridade || []); // estilos que não podem atrasar, em ordem
   const [mesesOff, setMesesOff] = useState(cfg0.mesesOff || {}); // meses que NÃO quero projetar
@@ -5151,7 +5158,6 @@ function PlanejamentoProducao() {
   const primeiraRef = useRef(true);
   useEffect(() => {
     if (primeiraRef.current) { primeiraRef.current = false; return; }
-    setAlterado(true);
     setPrevia(true);
     if (planoSalvo) setCenarioValidado(true); // havia plano salvo: mantém a programação e a recomendação 3/6 visíveis
   }, [estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario]);
@@ -5179,18 +5185,6 @@ function PlanejamentoProducao() {
     }
     setSalvando(false);
   }
-  // salvamento automático: depois de cada alteração (com pequena pausa) grava o plano na planilha
-  const salvarRef = useRef(null);
-  salvarRef.current = () => salvarPlano(planoCalc.lotes, ritmoUsado, feitos);
-  useEffect(() => {
-    if (!autoSalvar || !alterado || !cenarioValidado || !temConfig) return;
-    const h = setTimeout(async () => {
-      setAlterado(false);
-      await salvarRef.current();
-      setMsgSalvar(m => m.replace(/^/, "🔁 (automático) "));
-    }, 2500);
-    return () => clearTimeout(h);
-  }, [autoSalvar, alterado, cenarioValidado, temConfig, estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario, ritmo]);
   // cenários de vendas com nome (guardados na planilha, aba cenarios_salvos)
   async function persistirCenarios(lista, msgOk) {
     setCenariosSalvos(lista);
@@ -5401,9 +5395,6 @@ function PlanejamentoProducao() {
           {usarSalvo && <button style={btn("#C69700")} onClick={() => setPrevia(true)}>🔄 Replanejar com os dados atuais</button>}
           {!usarSalvo && <button disabled={salvando} style={btn("#4caf6b")} onClick={() => salvarPlano(planoCalc.lotes, ritmoUsado, feitos)}>{salvando ? "Salvando…" : "💾 Salvar este plano"}</button>}
           {!usarSalvo && planoSalvo && <button style={btn("#888")} onClick={() => setPrevia(false)}>↩ Voltar ao plano salvo</button>}
-          <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }} title="Cada alteração que você faz é gravada sozinha na planilha, 2 segundos depois da última mudança.">
-            <input type="checkbox" checked={autoSalvar} onChange={e => { setAutoSalvar(e.target.checked); try { localStorage.setItem("hbier_auto_salvar", e.target.checked ? "1" : "0"); } catch (er) { /* ignora */ } if (e.target.checked && !usarSalvo) setAlterado(true); }} /> Salvar automaticamente a cada alteração {salvando ? "· salvando…" : alterado && autoSalvar ? "· salvando em instantes…" : ""}
-          </label>
           <BotaoExcel nomeAba="PlanejamentoProducao" gerar={gerarExcel} />
         </div>
         {msgSalvar && <div style={{ marginTop: 6 }}>{msgSalvar}</div>}
@@ -5855,6 +5846,65 @@ function PlanejamentoProducao() {
           </div>
         ))}
       </div>
+
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "14px 0 6px" }}>⚖️ Produzido × vendido · saldo de cerveja por estilo</h4>
+      {(() => {
+        const meses = mesesPlano;
+        const mesDe = d => chaveDia(d).slice(0, 7);
+        const estilos = new Set();
+        necPorMes.forEach(({ nec }) => nec.forEach(n => estilos.add(n.estilo)));
+        lotesExibidos.forEach(l => estilos.add(l.estilo));
+        Object.keys(suprimentoInicial).forEach(e => estilos.add(e));
+        const lista = [...estilos].sort();
+        const linhas = lista.map(e => {
+          let saldo = suprimentoInicial[e] || 0;
+          const colunas = meses.map(c => {
+            const venda = ((necPorMes.find(x => x.chave === c) || { nec: [] }).nec.find(n => n.estilo === e) || { barril: 0, pet: 0 });
+            const vendido = (venda.barril || 0) + (venda.pet || 0);
+            const produzido = lotesExibidos.filter(l => l.estilo === e && mesDe(l.pronto) === c).reduce((a, l) => a + l.volume, 0);
+            saldo += produzido - vendido;
+            return { produzido, vendido, saldo };
+          });
+          return { e, inicial: suprimentoInicial[e] || 0, colunas };
+        }).filter(r => r.inicial > 0 || r.colunas.some(c => c.produzido > 0 || c.vendido > 0));
+        const th3 = { padding: "3px 6px", color: "#888", fontWeight: 600, whiteSpace: "nowrap", textAlign: "right" };
+        return (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Por mês (mês em que a cerveja fica <em>pronta</em>): quanto os lotes produzem × quanto a previsão vende, e o <strong style={{ color: "#bbb" }}>saldo acumulado</strong> (começa com a cerveja que já está nos tanques). Saldo alto = sobra de produto; saldo negativo = falta cerveja. Não conta o estoque de produto acabado da aba estoque.</div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", fontSize: 11, color: "#ddd" }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...th3, textAlign: "left" }} rowSpan={2}>Estilo</th>
+                    <th style={th3} rowSpan={2}>Nos tanques hoje</th>
+                    {meses.map(c => <th key={c} colSpan={3} style={{ ...th3, textAlign: "center", borderLeft: "1px solid #333" }}>{labelMes(c)}</th>)}
+                  </tr>
+                  <tr>{meses.map(c => <React.Fragment key={c}><th style={{ ...th3, borderLeft: "1px solid #333" }}>produz</th><th style={th3}>vende</th><th style={th3}>saldo</th></React.Fragment>)}</tr>
+                </thead>
+                <tbody>
+                  {linhas.map(r => (
+                    <tr key={r.e} style={{ borderTop: "1px solid #222" }}>
+                      <td style={{ padding: "3px 8px", whiteSpace: "nowrap", color: "#fff" }}>{r.e}</td>
+                      <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.inicial ? L(r.inicial) : "—"}</td>
+                      {r.colunas.map((c, i) => {
+                        const cor = c.saldo < -50 ? "#e57373" : c.vendido > 0 && c.saldo > c.vendido * 2 ? "#C69700" : "#4caf6b";
+                        return (
+                          <React.Fragment key={i}>
+                            <td style={{ padding: "3px 6px", textAlign: "right", borderLeft: "1px solid #333" }}>{c.produzido ? L(c.produzido) : "—"}</td>
+                            <td style={{ padding: "3px 6px", textAlign: "right", color: "#aaa" }}>{c.vendido ? L(c.vendido) : "—"}</td>
+                            <td style={{ padding: "3px 6px", textAlign: "right", color: cor, fontWeight: 700 }}>{L(c.saldo)}</td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: "#777", marginTop: 4 }}>Cores do saldo: verde = coberto; dourado = sobra acima de 2 meses de venda; vermelho = falta cerveja.</div>
+          </div>
+        );
+      })()}
 
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Semana a semana · programação de produção + previsão de vendas (mesmas semanas, uma abaixo da outra)</h4>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 8, lineHeight: 1.5 }}>
