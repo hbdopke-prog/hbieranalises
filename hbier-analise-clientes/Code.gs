@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v2.8
+ * Versão: v3.0
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -86,6 +86,8 @@ const SHEET_USUARIOS = "usuarios";
 const SHEET_PRODUTOS_FATURAMENTO = "produtos_faturamento";
 const SHEET_PRODUTOS_LITROS = "produtos_litros";
 const SHEET_ESTOQUE = "estoque";
+const SHEET_TANQUES = "tanques";
+const SHEET_RECEITAS = "receitas";
 
 function doGet(e) {
   try {
@@ -113,9 +115,16 @@ function doGet(e) {
       estoque = [];
     }
 
+    // planejamento de produção (tanques + receitas) também é opcional
+    let tanques = [], receitas = [];
+    try { tanques = lerTanques(ss); } catch (e1) { tanques = []; }
+    try { receitas = lerReceitas(ss); } catch (e2) { receitas = []; }
+
     return jsonResponse({
       ok: true,
       dados: combinado,
+      tanques: tanques,
+      receitas: receitas,
       produtosPorTipo: produtosPorTipo,
       estoque: estoque,
       atualizadoEm: new Date().toISOString(),
@@ -123,6 +132,52 @@ function doGet(e) {
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+function numeroBR(bruto) {
+  if (typeof bruto === "number") return bruto;
+  let t = String(bruto === null || bruto === undefined ? "" : bruto).trim().replace(/[R$\sLl]/g, "");
+  if (t === "" || t === "-") return null;
+  if (t.indexOf(",") !== -1) t = t.replace(/\./g, "").replace(",", ".");
+  else if ((t.match(/\./g) || []).length > 1) t = t.replace(/\./g, "");
+  else if (/^\d{1,3}\.\d{3}$/.test(t)) t = t.replace(".", "");
+  const n = parseFloat(t);
+  return isNaN(n) ? null : n;
+}
+
+// Aba "tanques": Nome | código | capacidade útil (L) | [opcional] bateladas para encher | [opcional] máx. bateladas por dia
+function lerTanques(ss) {
+  const sheet = ss.getSheetByName(SHEET_TANQUES);
+  if (!sheet) return [];
+  const v = sheet.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < v.length; i++) {
+    const nome = String(v[i][0] || "").trim();
+    const codigo = String(v[i][1] || "").trim();
+    const cap = numeroBR(v[i][2]);
+    if (!nome || !cap) continue;
+    out.push({ nome: nome, codigo: codigo, capacidade: cap, bateladas: numeroBR(v[i][3]), maxDia: numeroBR(v[i][4]) });
+  }
+  return out;
+}
+
+// Aba "receitas": Estilo | Dias até ficar pronto | Trecho do nome nos produtos | Derivada de (estilo base)
+function lerReceitas(ss) {
+  const sheet = ss.getSheetByName(SHEET_RECEITAS);
+  if (!sheet) return [];
+  const v = sheet.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < v.length; i++) {
+    const estilo = String(v[i][0] || "").trim();
+    if (!estilo) continue;
+    out.push({
+      estilo: estilo,
+      dias: numeroBR(v[i][1]),
+      trecho: String(v[i][2] || "").trim(),
+      derivadaDe: String(v[i][3] || "").trim(),
+    });
+  }
+  return out;
 }
 
 // Lê a aba "estoque" (uma linha por produto, foto do estoque atual - não é série mensal).
