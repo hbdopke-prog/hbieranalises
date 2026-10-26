@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.44";
+const APP_VERSION = "v10.46";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4604,7 +4604,7 @@ function diasEntre(a, b) { return Math.round((new Date(b.getFullYear(), b.getMon
 // Programa lotes tanque a tanque, em SEQUÊNCIA: a brassagem só começa o próximo tanque quando o
 // anterior estiver cheio (um tanque pode começar num dia e terminar no seguinte, ex.: 1+5 ou 5+4,
 // mas nenhum outro tanque entra no meio). Só seg-sex. Pronto até o dia 1º de cada mês.
-function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, suprimentoInicial, horizonteDias, hellesNome, hellesDias, prioridade, tolerancia, diasLote, repor }) {
+function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, suprimentoInicial, horizonteDias, hellesNome, hellesDias, prioridade, tolerancia, diasLote, repor, regras, loteMax }) {
   const contTanque = {}; // nº do lote dentro de cada tanque (para ajustes manuais de maturação por lote)
   const diasDoLote = (t, padrao) => { const i = contTanque[t.nome] || 0; contTanque[t.nome] = i + 1; const v = diasLote && diasLote[`${t.nome}|${i}`]; return v !== undefined && v !== "" && Number(v) > 0 ? Number(v) : padrao; };
   const tol = Math.max(0, Number(tolerancia) || 0); // dias, dentro da semana, em que a cerveja ainda pode ficar pronta sem contar atraso
@@ -4612,7 +4612,11 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
   const GRANDE = 8000;      // tanque grande: >= 8.000 L
   const usado = {};         // dia -> bateladas usadas
   const bigDia = {};        // dia -> já tem um tanque grande sendo enchido
-  const estado = tanques.map(t => ({ ...t, livre: t.livreDe && t.livreDe > hoje ? t.livreDe : hoje }));
+  const estado = tanques.filter(t => !(regras && regras[t.nome] && regras[t.nome].bloqueado)).map(t => ({ ...t, livre: t.livreDe && t.livreDe > hoje ? t.livreDe : hoje }));
+  // lote máximo por estilo (ex.: Helles sem álcool de 1.000 em 1.000 L) e estilos permitidos por tanque
+  const capEf = (t, e) => { const m = Number(loteMax && loteMax[e]); const nb = bateladasDoTanque(t); if (!(m > 0)) return t.capacidade; const porBat = t.capacidade / nb; return Math.max(1, Math.min(nb, Math.floor(m / porBat + 1e-6))) * porBat; };
+  const permitido = (t, e) => { const r = regras && regras[t.nome]; return !r || !r.estilos || !r.estilos.length || r.estilos.includes(e); };
+  const restrito = t => { const r = regras && regras[t.nome]; return !!(r && r.estilos && r.estilos.length); };
   const sobraEstilo = { ...(suprimentoInicial || {}) };
   const lotes = [];
   const fimHorizonte = somarDiasData(hoje, horizonteDias || 120);
@@ -4715,11 +4719,11 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
   };
   // escolha do tanque pequeno: o que desperdiça menos cerveja, desde que o outro ainda entregue no prazo
   const melhorPequeno = (it, t) => {
-    const waste = Math.max(0, t.capacidade - it.restante);
+    const waste = Math.max(0, capEf(t, it.n.estilo) - it.restante);
     const prazoEf = somarDiasData(it.mes.prazo, tol);
     return !pequenos.some(o => {
       if (o === t) return false;
-      const w = Math.max(0, o.capacidade - it.restante);
+      const w = Math.max(0, capEf(o, it.n.estilo) - it.restante);
       if (w >= waste - 0.5) return false;
       const prontoO = somarDiasData(o.livre > hoje ? o.livre : hoje, it.dias + 1);
       return o.livre <= somarDiasData(t.livre, 3) || prontoO <= prazoEf;
@@ -4738,15 +4742,19 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
         sobraEstilo[it.n.estilo] = Math.max(0, disp - it.n.necessario);
       }
       if (it.restante <= 0.5) continue;
+      if (!permitido(t, it.n.estilo)) continue;
+      if (restrito(t)) { item = it; break; } // instrução do usuário para este tanque: primeiro estilo permitido que precisa
       const hel = ehHelles(it.n.estilo);
       if (grande) { if (hel || (urgente(it) && it.restante >= t.capacidade * 0.6)) { item = it; break; } }
       else if (!hel && melhorPequeno(it, t)) { item = it; break; }
     }
     // tanque pequeno livre e nenhuma demanda de outro estilo pendente: ajuda a produzir Helles (demanda real, depois reposição)
-    if (!item && !grande && !itens.some(it => !ehHelles(it.n.estilo) && it.restante !== null && it.restante > 0.5)) {
+    if (!item && !grande && !restrito(t) && !itens.some(it => !ehHelles(it.n.estilo) && it.restante !== null && it.restante > 0.5)) {
       item = itens.find(it => ehHelles(it.n.estilo) && it.restante !== null && it.restante > 0.5) || null;
     }
-    const b = bateladasDoTanque(t);
+    const bTanque = bateladasDoTanque(t);
+    const capL = item ? capEf(t, item.n.estilo) : t.capacidade;
+    const b = item ? Math.max(1, Math.round(capL / (t.capacidade / bTanque))) : bTanque;
     if (item) {
       const av = colocar(t, hoje, b);
       if (!av) break;
@@ -4754,8 +4762,8 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       av.pronto = somarDiasData(av.fim, dL);
       const livreAntes = t.livre;
       confirmar(t, av);
-      const atende = Math.min(t.capacidade, item.restante);
-      const sobra = t.capacidade - atende;
+      const atende = Math.min(capL, item.restante);
+      const sobra = capL - atende;
       sobraEstilo[item.n.estilo] = (sobraEstilo[item.n.estilo] || 0) + sobra;
       t.livre = somarDiasData(av.pronto, limpeza);
       item.restante -= atende;
@@ -4769,8 +4777,8 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
         it2.restante -= usar; sobraEstilo[item.n.estilo] -= usar;
       }
       lotes.push({
-        estilo: item.n.estilo, tanque: t.nome, codigo: t.codigo, capacidade: t.capacidade, bateladas: b,
-        volume: t.capacidade, atende, sobra, dias: dL, diasPreenchido: !!item.n.dias,
+        estilo: item.n.estilo, tanque: t.nome, codigo: t.codigo, capacidade: capL, bateladas: b,
+        volume: capL, atende, sobra, dias: dL, diasPreenchido: !!item.n.dias,
         mes: item.mes.chave, prazo: item.mes.prazo, petPct: item.n.necessario > 0 ? item.n.petProd / item.n.necessario : 0,
         inicio: av.inicio, fim: av.fim, pronto: av.pronto, aloc: av.aloc, livreAte: t.livre,
         atrasado: av.pronto > somarDiasData(item.mes.prazo, tol), diag: diagnosticar(t, av, { ...item, dias: dL }, livreAntes),
@@ -4779,23 +4787,26 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       if (t.livre > fimHorizonte) break;
       // sem reposição: só produz o que a demanda pede; o tanque sem demanda fica livre (a sobra já vai para o estoque)
       if (!repor) { t.livre = somarDiasData(fimHorizonte, 1); continue; }
-      const candidatos = grande ? estilosRep.filter(ehHelles) : estilosRep.filter(e => !ehHelles(e));
+      if (restrito(t) && !estilosRep.some(x => permitido(t, x))) { t.livre = somarDiasData(fimHorizonte, 1); continue; }
+      const candidatos = restrito(t) ? estilosRep.filter(x => permitido(t, x)) : (grande ? estilosRep.filter(ehHelles) : estilosRep.filter(e => !ehHelles(e)));
       let e;
       if (candidatos.length) e = candidatos.slice().sort((x, y) => (((extra[x] || 0) + (sobraEstilo[x] || 0)) / peso[x]) - (((extra[y] || 0) + (sobraEstilo[y] || 0)) / peso[y]))[0];
       else if (grande && hellesNome) e = hellesNome;
       else if (estilosRep.length) e = estilosRep.slice().sort((x, y) => (((extra[x] || 0) + (sobraEstilo[x] || 0)) / peso[x]) - (((extra[y] || 0) + (sobraEstilo[y] || 0)) / peso[y]))[0];
       else break;
       const dEstilo = diasDe(e);
-      const av = colocar(t, hoje, b);
+      const capF = capEf(t, e);
+      const bF = Math.max(1, Math.round(capF / (t.capacidade / bTanque)));
+      const av = colocar(t, hoje, bF);
       if (!av || av.inicio > fimHorizonte) break;
       const dE = diasDoLote(t, dEstilo);
       av.pronto = somarDiasData(av.fim, dE);
       confirmar(t, av);
       t.livre = somarDiasData(av.pronto, limpeza);
-      extra[e] = (extra[e] || 0) + t.capacidade;
+      extra[e] = (extra[e] || 0) + capF;
       lotes.push({
-        estilo: e, tanque: t.nome, codigo: t.codigo, capacidade: t.capacidade, bateladas: b,
-        volume: t.capacidade, atende: 0, sobra: t.capacidade, dias: dE, diasPreenchido: true,
+        estilo: e, tanque: t.nome, codigo: t.codigo, capacidade: capF, bateladas: bF,
+        volume: capF, atende: 0, sobra: capF, dias: dE, diasPreenchido: true,
         mes: chaveDia(av.pronto).slice(0, 7), prazo: av.pronto, petPct: peso[e] > 0 ? petSum[e] / peso[e] : 0,
         inicio: av.inicio, fim: av.fim, pronto: av.pronto, aloc: av.aloc, livreAte: t.livre,
         atrasado: false, reposicao: true,
@@ -4845,20 +4856,20 @@ function formatoPet(nome) {
 function simularEnvase({ semanas, necPorMes, semanasPorMes, lotes, statusTanques, hojeReal }) {
   const estoque = [];
   statusTanques.forEach(t => {
-    if (t.base && t.litrosNoTanque > 0) estoque.push({ tanque: t.nome, estilo: t.base, rest: t.litrosNoTanque, pronto: t.pronto && t.pronto > hojeReal ? t.pronto : hojeReal });
+    if (t.base && t.litrosNoTanque > 0) estoque.push({ id: `${t.nome}|atual`, tanque: t.nome, estilo: t.base, rest: t.litrosNoTanque, pronto: t.pronto && t.pronto > hojeReal ? t.pronto : hojeReal });
   });
-  lotes.forEach(l => estoque.push({ tanque: l.tanque, estilo: l.estilo, rest: l.volume, pronto: l.pronto }));
+  lotes.forEach(l => estoque.push({ id: `${l.tanque}|L${chaveDia(l.inicio)}`, tanque: l.tanque, estilo: l.estilo, rest: l.volume, pronto: l.pronto }));
   const porMes = {}; necPorMes.forEach(({ chave, nec }) => { porMes[chave] = nec; });
   const retirar = (estilo, litros, dia) => {
     let falta = litros; const usos = [];
     estoque.filter(e => e.estilo === estilo && e.rest > 0.5 && e.pronto <= dia).sort((a, b) => a.pronto - b.pronto || a.rest - b.rest).forEach(e => {
       if (falta <= 0.5) return;
       const q = Math.min(e.rest, falta); e.rest -= q; falta -= q;
-      const u = usos.find(x => x.tanque === e.tanque); if (u) u.litros += q; else usos.push({ tanque: e.tanque, litros: q });
+      const u = usos.find(x => x.id === e.id); if (u) u.litros += q; else usos.push({ id: e.id, tanque: e.tanque, litros: q });
     });
     return { usos, falta: Math.max(0, falta) };
   };
-  const somarUsos = (alvo, usos) => usos.forEach(u => { const x = alvo.find(y => y.tanque === u.tanque); if (x) x.litros += u.litros; else alvo.push({ ...u }); });
+  const somarUsos = (alvo, usos) => usos.forEach(u => { const x = alvo.find(y => y.id === u.id); if (x) x.litros += u.litros; else alvo.push({ ...u }); });
   const out = {};
   semanas.forEach(seg => {
     const quarta = somarDiasData(seg, 2);
@@ -4941,6 +4952,8 @@ function PlanejamentoProducao() {
   const [pctMes, setPctMes] = useState(cfg0.pctMes || {});
   const [mostrarTodosAtrasos, setMostrarTodosAtrasos] = useState(false);
   const [toleranciaSemana, setToleranciaSemana] = useState(cfg0.toleranciaSemana ?? 4); // dias da semana de entrega em que o lote ainda pode ficar pronto
+  const [regrasTanque, setRegrasTanque] = useState(cfg0.regrasTanque || {}); // instruções por tanque: {TANQUE n: {bloqueado, estilos[]}}
+  const [loteMax, setLoteMax] = useState(cfg0.loteMax || {}); // lote máximo (L) por estilo
   const [reporTanques, setReporTanques] = useState(cfg0.reporTanques ?? false); // false = produz só quando a demanda/estoque pedir
   const [diasLote, setDiasLote] = useState(cfg0.diasLote || {}); // maturação ajustada por lote: "TANQUE n|ordem" -> dias
   const [prioridade, setPrioridade] = useState(cfg0.prioridade || []); // estilos que não podem atrasar, em ordem
@@ -5154,12 +5167,12 @@ function PlanejamentoProducao() {
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
-    const args = { meses: mesesParaPlano, tanques: tanquesPlano, hoje, folga, limpeza: limpezaDias, diasPadrao, suprimentoInicial: suprimentoPlano, horizonteDias: 120, hellesNome: (receitaPorEstilo["HELLES"] || {}).estilo, hellesDias: (receitaPorEstilo["HELLES"] || {}).dias, prioridade, tolerancia: toleranciaSemana, diasLote, repor: reporTanques };
+    const args = { meses: mesesParaPlano, tanques: tanquesPlano, hoje, folga, limpeza: limpezaDias, diasPadrao, suprimentoInicial: suprimentoPlano, horizonteDias: 120, hellesNome: (receitaPorEstilo["HELLES"] || {}).estilo, hellesDias: (receitaPorEstilo["HELLES"] || {}).dias, prioridade, tolerancia: toleranciaSemana, diasLote, repor: reporTanques, regras: regrasTanque, loteMax };
     return {
       p3: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 3 }),
       p6: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 6 }),
     };
-  }, [temConfig, mesesParaPlano, tanquesPlano, hoje, folga, limpezaDias, diasPadrao, suprimentoPlano, prioridade, receitaPorEstilo, toleranciaSemana, diasLote, reporTanques]);
+  }, [temConfig, mesesParaPlano, tanquesPlano, hoje, folga, limpezaDias, diasPadrao, suprimentoPlano, prioridade, receitaPorEstilo, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax]);
 
   if (!temConfig) {
     return (
@@ -5191,7 +5204,7 @@ function PlanejamentoProducao() {
     if (primeiraRef.current) { primeiraRef.current = false; return; }
     setPrevia(true);
     if (planoSalvo) setCenarioValidado(true); // havia plano salvo: mantém a programação e a recomendação 3/6 visíveis
-  }, [estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario]);
+  }, [estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario]);
 
   const usarSalvo = !!planoSalvo && !previa;
   const lotesExibidos = usarSalvo ? reviverLotes(planoSalvo.lotes) : planoCalc.lotes;
@@ -5199,7 +5212,7 @@ function PlanejamentoProducao() {
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ reporTanques, diasLote, toleranciaSemana, prioridade, mesesOff, ovProd, diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ regrasTanque, loteMax, reporTanques, diasLote, toleranciaSemana, prioridade, mesesOff, ovProd, diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5236,7 +5249,7 @@ function PlanejamentoProducao() {
     necPorMes.forEach(({ chave, nec }) => { resumo[chave] = Math.round(nec.reduce((s, n) => s + n.necessario, 0)); });
     const novo = {
       nome, salvoEm: new Date().toISOString(), resumo,
-      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, ovProd, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
+      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, ovProd, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
     };
     const existe = cenariosSalvos.some(c => c.nome.toLowerCase() === nome.toLowerCase());
     const lista = existe ? cenariosSalvos.map(c => (c.nome.toLowerCase() === nome.toLowerCase() ? novo : c)) : [...cenariosSalvos, novo];
@@ -5247,7 +5260,7 @@ function PlanejamentoProducao() {
     const g = c.config || {};
     setCenario(g.cenario || "base"); setPcts(g.pcts || { min: 80, base: 100, max: 120 }); setPctMes(g.pctMes || {});
     setEstilosOff(g.estilosOff || {}); setOvBarril(g.ovBarril || {}); setOvPet(g.ovPet || {});
-    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque); setDiasEstilo(g.diasEstilo || {}); setDiasMes(g.diasMes || {}); setOvProd(g.ovProd || {}); setMesesOff(g.mesesOff || {}); setPrioridade(g.prioridade || []); setToleranciaSemana(g.toleranciaSemana ?? 4); setDiasLote(g.diasLote || {}); setReporTanques(!!g.reporTanques);
+    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque); setDiasEstilo(g.diasEstilo || {}); setDiasMes(g.diasMes || {}); setOvProd(g.ovProd || {}); setMesesOff(g.mesesOff || {}); setPrioridade(g.prioridade || []); setToleranciaSemana(g.toleranciaSemana ?? 4); setDiasLote(g.diasLote || {}); setReporTanques(!!g.reporTanques); setRegrasTanque(g.regrasTanque || {}); setLoteMax(g.loteMax || {});
     setCenarioCarregado(c.nome); setNomeNovoCenario(c.nome); setCenarioValidado(false);
     setMsgCenario(`Cenário “${c.nome}” carregado. Confira os números e valide para ver a programação.`);
   }
@@ -5281,17 +5294,18 @@ function PlanejamentoProducao() {
     const evs = {}; // tanque -> [{data, tipo, litros}]
     Object.keys(envase).forEach(k => {
       const e = envase[k];
-      e.petDias.forEach(d => d.blocos.forEach(b => b.usos.forEach(u => { (evs[u.tanque] = evs[u.tanque] || []).push({ data: d.data, tipo: "pet", litros: u.litros }); })));
+      e.petDias.forEach(d => d.blocos.forEach(b => b.usos.forEach(u => { (evs[u.tanque] = evs[u.tanque] || []).push({ id: u.id, data: d.data, tipo: "pet", litros: u.litros }); })));
       e.barril.forEach(b => b.usos.forEach(u => {
         // barril: previsão da semana ÷ 5 dias úteis
-        for (let i = 0; i < 5; i++) (evs[u.tanque] = evs[u.tanque] || []).push({ data: somarDiasData(dataDeChave(k), i), tipo: "barril", litros: u.litros / 5 });
+        for (let i = 0; i < 5; i++) (evs[u.tanque] = evs[u.tanque] || []).push({ id: u.id, data: somarDiasData(dataDeChave(k), i), tipo: "barril", litros: u.litros / 5 });
       }));
     });
     return statusTanques.map(t => {
       const meus = lotesExibidos.filter(l => l.tanque === t.nome).sort((a, b) => a.inicio - b.inicio);
       const ev = (evs[t.nome] || []).slice().sort((a, b) => a.data - b.data);
-      const janela = (ini, fim, volume) => {
-        const dentro = ev.filter(x => x.data >= ini && (!fim || x.data < fim));
+      // saída de CADA lote (a cerveja do lote continua saindo mesmo depois que o tanque é reenchido: ela vai para o estoque)
+      const janela = (id, volume) => {
+        const dentro = ev.filter(x => x.id === id);
         const barril = dentro.filter(x => x.tipo === "barril").reduce((s2, x) => s2 + x.litros, 0);
         const pet = dentro.filter(x => x.tipo === "pet").reduce((s2, x) => s2 + x.litros, 0);
         let vazio = null, acum = 0;
@@ -5299,14 +5313,9 @@ function PlanejamentoProducao() {
         return { barril, pet, vazio, saiu: barril + pet };
       };
       const atual = (t.litrosNoTanque > 0) ? (() => {
-        const ini = t.pronto && t.pronto > hojeReal ? t.pronto : hojeReal;
-        const fim = meus.length ? meus[0].inicio : null;
-        return { cerveja: t.base || t.cerveja || "—", litros: t.litrosNoTanque, pronto: t.pronto, ...janela(ini, fim, t.litrosNoTanque) };
+        return { cerveja: t.base || t.cerveja || "—", litros: t.litrosNoTanque, pronto: t.pronto, ...janela(`${t.nome}|atual`, t.litrosNoTanque) };
       })() : null;
-      const passos = meus.map((l, i) => {
-        const fim = meus[i + 1] ? meus[i + 1].inicio : null;
-        return { l, ...janela(l.pronto, fim, l.volume) };
-      });
+      const passos = meus.map((l) => ({ l, ...janela(`${l.tanque}|L${chaveDia(l.inicio)}`, l.volume) }));
       return { t, atual, passos };
     });
   })();
@@ -5545,6 +5554,42 @@ function PlanejamentoProducao() {
           {listaEstilos.filter(e => !prioridade.includes(e.estilo) && !estilosOff[e.estilo]).map(e => <option key={e.estilo} value={e.estilo}>{e.estilo}</option>)}
         </select>
       </div>
+
+      <details style={{ marginBottom: 14, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 12px" }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, color: "#fff" }}><strong>🎛️ Instruções por tanque e por estilo</strong> <span style={{ color: "#888" }}>— diga quais estilos cada tanque pode produzir e o tamanho máximo do lote de cada estilo.</span></summary>
+        <div style={{ marginTop: 8, fontSize: 12, color: "#ccc" }}>
+          <div style={{ color: "#fff", fontWeight: 700, marginBottom: 4 }}>Por tanque</div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Sem estilo escolhido = regra automática (tanques grandes: Helles; pequenos: demais estilos). Com estilos escolhidos, o tanque só produz esses estilos (ex.: TANQUE 6 e 7 também com Helles, ou só Red Ale). “Não usar” tira o tanque do planejamento.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+            {statusTanques.map(t => {
+              const r = regrasTanque[t.nome] || {};
+              const sel = r.estilos || [];
+              const set = patch => setRegrasTanque(p => ({ ...p, [t.nome]: { ...(p[t.nome] || {}), ...patch } }));
+              return (
+                <div key={t.nome} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: r.bloqueado ? 0.5 : 1 }}>
+                  <strong style={{ width: 90, color: "#fff" }}>{t.nome}</strong><span style={{ width: 60, color: "#888" }}>{L(t.capacidade)} L</span>
+                  <label style={{ display: "flex", gap: 4, alignItems: "center" }}><input type="checkbox" checked={!!r.bloqueado} onChange={e => set({ bloqueado: e.target.checked })} /> não usar</label>
+                  {sel.map(e => <span key={e} style={{ background: "#2a2a2a", borderRadius: 10, padding: "1px 8px" }}>{e} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => set({ estilos: sel.filter(x => x !== e) })}>×</span></span>)}
+                  <select value="" onChange={ev => { const v = ev.target.value; if (v) set({ estilos: [...sel, v] }); }} style={{ ...inputNum, width: 170, textAlign: "left" }}>
+                    <option value="">{sel.length ? "+ outro estilo…" : "automático — + restringir a…"}</option>
+                    {listaEstilos.filter(e => !sel.includes(e.estilo)).map(e => <option key={e.estilo} value={e.estilo}>{e.estilo}</option>)}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ color: "#fff", fontWeight: 700, marginBottom: 4 }}>Lote máximo por estilo (litros)</div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Ex.: Helles sem álcool = 1.000 → sempre lotes de 1.000 L, mesmo em tanque maior (o tanque fica parcialmente cheio). Vazio = tanque cheio.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6 }}>
+            {listaEstilos.map(e => (
+              <label key={e.estilo} style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}>
+                <span>{e.estilo}</span>
+                <input type="number" min="0" step="500" placeholder="cheio" value={loteMax[e.estilo] ?? ""} onChange={ev => setLoteMax(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: (loteMax[e.estilo] ?? "") !== "" ? "#C69700" : "#444" }} />
+              </label>
+            ))}
+          </div>
+        </div>
+      </details>
 
       <details style={{ marginBottom: 14, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 12px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12, color: "#fff" }}><strong>🧴 Projeção por produto (PET e chope)</strong> <span style={{ color: "#888" }}>— histórico real de cada produto (últimos 3 meses fechados e mesmo mês do ano anterior) ao lado do campo para digitar os litros/mês. Em cinza no campo está a sugestão automática.</span></summary>
@@ -5854,7 +5899,7 @@ function PlanejamentoProducao() {
       </div>
 
       <h4 style={{ color: "#fff", fontSize: 13, margin: "14px 0 6px" }}>🏭 Visão de cada tanque · o que vai acontecer com ele</h4>
-      <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Uma linha por tanque: o que tem hoje, cada produção (datas e volume), quando fica pronto, quanto sai em 🛢️ barris de 50 L e 🧴 PET e quando esvazia. Saídas contam só dentro do período escolhido acima.</div>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Uma linha por tanque: o que tem hoje, cada produção (datas e volume), quando fica pronto, quanto desse lote já sai (total) em 🛢️ barris de 50 L e 🧴 PET e quando esvazia. As saídas são do lote inteiro (a cerveja segue saindo mesmo depois que o tanque é reenchido) e valem dentro de 120 dias; “vazio” é quando o lote acaba.</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {visaoTanques.map(({ t, atual, passos }) => (
           <div key={t.nome} style={{ display: "flex", gap: 10, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px" }}>
@@ -6087,7 +6132,7 @@ function PlanejamentoProducao() {
         const prodP = e.produtos.filter(p => p.emb === "pet").sort((a, b) => b.litros - a.litros);
         const faltas = [...e.barril.map(b => ({ estilo: b.estilo, falta: b.falta, tipo: "barril" })), ...e.petDias.flatMap(d => d.blocos.map(b => ({ estilo: b.estilo, falta: b.falta, tipo: "PET" })))].filter(x => x.falta > 50);
         const faltaPorEstilo = {}; faltas.forEach(x => { faltaPorEstilo[x.estilo] = (faltaPorEstilo[x.estilo] || 0) + x.falta; });
-        const origemTxt = usos => usos.length ? usos.map(u => `${u.tanque} (${L(u.litros)} L)`).join(" + ") : "—";
+        const origemTxt = usos => { const m = {}; usos.forEach(u => { m[u.tanque] = (m[u.tanque] || 0) + u.litros; }); const ks = Object.keys(m); return ks.length ? ks.map(k => `${k} (${L(m[k])} L)`).join(" + ") : "—"; };
         return (
           <details key={seg.getTime() + "v"} open style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
             <summary style={{ cursor: "pointer", color: "#fff", fontSize: 13 }}>
