@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.30";
+const APP_VERSION = "v10.32";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -5233,6 +5233,12 @@ function PlanejamentoProducao() {
       l.aloc.forEach(a => { if (chaveDia(a.data) === k) brass.push({ l, n: a.n }); });
       if (chaveDia(proximoUtil(l.pronto)) === k) prontos.push(l);
     });
+    // cerveja que já está nos tanques hoje e fica pronta (ou já está pronta) entra como "pronto" no dia certo
+    statusTanques.forEach(t => {
+      if (!(t.litrosNoTanque > 0) || !t.pronto) return;
+      const quando = t.pronto > hoje ? t.pronto : hoje;
+      if (chaveDia(proximoUtil(quando)) === k) prontos.push({ tanque: t.nome, estilo: t.base || t.cerveja || "—", atende: t.litrosNoTanque, volume: t.litrosNoTanque, petPct: 0, reposicao: false, pronto: quando, existente: true, aloc: [], capacidade: t.capacidade, bateladas: 1 });
+    });
     return { brass, prontos };
   };
 
@@ -5723,13 +5729,72 @@ function PlanejamentoProducao() {
         </table>
       </div>
 
-      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Previsão de vendas da semana · envase · tanque de origem</h4>
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Semana a semana · programação de produção + previsão de vendas (mesmas semanas, uma abaixo da outra)</h4>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 8, lineHeight: 1.5 }}>
         <strong style={{ color: "#bbb" }}>Como lemos:</strong> a previsão de vendas da semana é a projeção do mês (cenário acima) dividida igualmente pelas semanas do mês. Ela separa 🛢️ barril (chope) e 🧴 PET, produto a produto.
         O envase PET é montado para a semana toda “na mesma tocada”: cada produto é envasado uma vez, em bloco, agrupado por formato (1L, 2L, 500ml…), até {L(CAPACIDADE_ENVASE_PET_DIA)} L/dia, sem voltar ao formato anterior. Cada 1.000 L = 1 pallet.
         A cerveja sai primeiro dos tanques que ficaram prontos antes. Barril: previsão da semana ÷ 5 dias úteis.
       </div>
       {semanas.map((seg, idx) => {
+        const progJSX = (() => {
+        const dias = diasDaSemana(seg).filter(d => d >= wIni && d <= wFim);
+        if (!dias.length) return null;
+        const evs = dias.map(d => ({ d, ...eventosDia(d) }));
+        const totBat = evs.reduce((s, e) => s + e.brass.reduce((x, b) => x + b.n, 0), 0);
+        const totLitrosSem = evs.reduce((s, e) => s + e.brass.reduce((x, b) => x + b.n * (b.l.capacidade / b.l.bateladas), 0), 0);
+        const prontosSem = evs.flatMap(e => e.prontos);
+        const petSem = prontosSem.reduce((s, l) => s + l.atende * l.petPct, 0);
+        return (
+          <div key={seg.getTime()} style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, marginBottom: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+              <strong style={{ color: "#fff", fontSize: 13 }}>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
+              <span style={{ color: "#C69700", fontSize: 12 }}>
+                {totBat} bateladas ({L(totLitrosSem)} L) · {prontosSem.length} lote(s) pronto(s)
+                {petSem > 0 ? ` · envase PET ≈ ${L(petSem)} L (${(petSem / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dia)` : ""}
+              </span>
+            </div>
+            {granular === "semana" ? (
+              <div style={{ fontSize: 12, color: "#ddd" }}>
+                {(() => {
+                  const mapa = {};
+                  evs.forEach(e => e.brass.forEach(({ l, n }) => {
+                    const k = l.tanque + "|" + l.estilo + "|" + l.mes;
+                    (mapa[k] = mapa[k] || { l, n: 0, dias: [] });
+                    mapa[k].n += n; mapa[k].dias.push(DIAS_SEM[e.d.getDay()]);
+                  }));
+                  const itens = Object.values(mapa);
+                  return itens.length === 0 ? <span style={{ color: "#666" }}>Sem brassagem nesta semana</span> :
+                    itens.map((x, i) => <div key={i} style={{ color: x.l.atrasado ? "#e57373" : "#ddd" }}>⚙️ {x.l.tanque}: {x.l.estilo} · {x.n} bat. ({x.dias.join("/")}) · pronto {fmtDataCurta(x.l.pronto)}</div>);
+                })()}
+                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
+              </div>
+            ) : (
+              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                <tbody>
+                  {evs.map(({ d, brass, prontos }) => {
+                    const bat = brass.reduce((s, b) => s + b.n, 0);
+                    return (
+                      <tr key={d.getTime()}>
+                        <td style={{ ...td, textAlign: "left", whiteSpace: "nowrap", color: "#fff", width: 90, verticalAlign: "top" }}>{fmtDataSem(d)}</td>
+                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/6 bat.</td>
+                        <td style={{ ...td, textAlign: "left" }}>
+                          {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
+                          {brass.map(({ l, n }, i) => {
+                            const ini = chaveDia(l.inicio) === chaveDia(d), fimL = chaveDia(l.fim) === chaveDia(d);
+                            return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>⚙️ {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
+                          })}
+                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} {l.existente ? "pronto (já no tanque)" : "pronto"} · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+        })();
+        const vendaJSX = (() => {
         const e = envase[chaveDia(seg)];
         if (!e) return null;
         const prodB = e.produtos.filter(p => p.emb === "barril").sort((a, b) => b.litros - a.litros);
@@ -5738,7 +5803,7 @@ function PlanejamentoProducao() {
         const faltaPorEstilo = {}; faltas.forEach(x => { faltaPorEstilo[x.estilo] = (faltaPorEstilo[x.estilo] || 0) + x.falta; });
         const origemTxt = usos => usos.length ? usos.map(u => `${u.tanque} (${L(u.litros)} L)`).join(" + ") : "—";
         return (
-          <details key={seg.getTime()} open={idx === 0} style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+          <details key={seg.getTime() + "v"} open style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
             <summary style={{ cursor: "pointer", color: "#fff", fontSize: 13 }}>
               <strong>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
               <span style={{ color: "#C69700", fontSize: 12 }}> · previsão de vendas {L(e.totalBarril + e.totalPet)} L · 🛢️ {L(e.totalBarril)} L barril (≈{Math.round(e.totalBarril / 50).toLocaleString("pt-BR")} barris de 50 L) · 🧴 {L(e.totalPet)} L PET ({(e.totalPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias de envase · {(e.totalPet / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} pallets)</span>
@@ -5808,64 +5873,12 @@ function PlanejamentoProducao() {
             </div>
           </details>
         );
-      })}
-
-      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Programação para a equipe</h4>
-      {semanas.map(seg => {
-        const dias = diasDaSemana(seg).filter(d => d >= wIni && d <= wFim);
-        if (!dias.length) return null;
-        const evs = dias.map(d => ({ d, ...eventosDia(d) }));
-        const totBat = evs.reduce((s, e) => s + e.brass.reduce((x, b) => x + b.n, 0), 0);
-        const totLitrosSem = evs.reduce((s, e) => s + e.brass.reduce((x, b) => x + b.n * (b.l.capacidade / b.l.bateladas), 0), 0);
-        const prontosSem = evs.flatMap(e => e.prontos);
-        const petSem = prontosSem.reduce((s, l) => s + l.atende * l.petPct, 0);
+        })();
+        if (!progJSX && !vendaJSX) return null;
         return (
-          <div key={seg.getTime()} style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, marginBottom: 10 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
-              <strong style={{ color: "#fff", fontSize: 13 }}>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
-              <span style={{ color: "#C69700", fontSize: 12 }}>
-                {totBat} bateladas ({L(totLitrosSem)} L) · {prontosSem.length} lote(s) pronto(s)
-                {petSem > 0 ? ` · envase PET ≈ ${L(petSem)} L (${(petSem / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dia)` : ""}
-              </span>
-            </div>
-            {granular === "semana" ? (
-              <div style={{ fontSize: 12, color: "#ddd" }}>
-                {(() => {
-                  const mapa = {};
-                  evs.forEach(e => e.brass.forEach(({ l, n }) => {
-                    const k = l.tanque + "|" + l.estilo + "|" + l.mes;
-                    (mapa[k] = mapa[k] || { l, n: 0, dias: [] });
-                    mapa[k].n += n; mapa[k].dias.push(DIAS_SEM[e.d.getDay()]);
-                  }));
-                  const itens = Object.values(mapa);
-                  return itens.length === 0 ? <span style={{ color: "#666" }}>Sem brassagem nesta semana</span> :
-                    itens.map((x, i) => <div key={i} style={{ color: x.l.atrasado ? "#e57373" : "#ddd" }}>⚙️ {x.l.tanque}: {x.l.estilo} · {x.n} bat. ({x.dias.join("/")}) · pronto {fmtDataCurta(x.l.pronto)}</div>);
-                })()}
-                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
-              </div>
-            ) : (
-              <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                <tbody>
-                  {evs.map(({ d, brass, prontos }) => {
-                    const bat = brass.reduce((s, b) => s + b.n, 0);
-                    return (
-                      <tr key={d.getTime()}>
-                        <td style={{ ...td, textAlign: "left", whiteSpace: "nowrap", color: "#fff", width: 90, verticalAlign: "top" }}>{fmtDataSem(d)}</td>
-                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/6 bat.</td>
-                        <td style={{ ...td, textAlign: "left" }}>
-                          {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
-                          {brass.map(({ l, n }, i) => {
-                            const ini = chaveDia(l.inicio) === chaveDia(d), fimL = chaveDia(l.fim) === chaveDia(d);
-                            return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>⚙️ {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
-                          })}
-                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} pronto · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+          <div key={seg.getTime()} style={{ marginBottom: 14, borderLeft: "3px solid #C69700", paddingLeft: 8 }}>
+            {progJSX}
+            {vendaJSX}
           </div>
         );
       })}
