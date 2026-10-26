@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.17";
+const APP_VERSION = "v10.18";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4808,6 +4808,7 @@ function PlanejamentoProducao() {
   const [granular, setGranular] = useState("dia");
   const [feitos, setFeitos] = useState(cfg0.feitos || {});
   const [expandidos, setExpandidos] = useState({});
+  const [cenarioValidado, setCenarioValidado] = useState(cfg0.cenarioValidado ?? !!salvoInicial);
   const [planoSalvo, setPlanoSalvo] = useState(salvoInicial);
   const [previa, setPrevia] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -4919,11 +4920,11 @@ function PlanejamentoProducao() {
     return resultado;
   }, [temConfig, mesesPlano, cenario, pcts, pctMes, produtosNomes, produtosDados, produtosPeriodos, estoquePorProduto, mesAtual, semVendaMeses, matchers]);
 
-  const montarNecessidades = (proj, usarOverrides, descontar) => {
+  const montarNecessidades = (proj, chaveMes, usarOverrides, descontar) => {
     if (!proj) return [];
     return Object.entries(proj.porEstilo).filter(([estilo]) => !estilosOff[estilo]).map(([estilo, o]) => {
       const barrilProj = o.barril;
-      const ovB = usarOverrides ? ovBarril[estilo] : undefined, ovP = usarOverrides ? ovPet[estilo] : undefined;
+      const ovB = usarOverrides ? ovBarril[`${chaveMes}|${estilo}`] : undefined, ovP = usarOverrides ? ovPet[`${chaveMes}|${estilo}`] : undefined;
       const barril = ovB !== undefined && ovB !== "" ? Number(ovB) : barrilProj;
       const pet = ovP !== undefined && ovP !== "" ? Number(ovP) : o.pet;
       const bruto = barril + pet;
@@ -4936,7 +4937,10 @@ function PlanejamentoProducao() {
     }).filter(n => n.necessario > 0 || n.barril > 0 || n.pet > 0 || n.estoque > 0).sort((a, b) => b.necessario - a.necessario);
   };
 
-  const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], true, descontarEstoque),
+  const descontaMes = (chave) => descontarEstoque && chave === mesesPlano[0];
+  const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
+    [mesesPlano, projecoes, ovBarril, ovPet, estilosOff, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
     [projecoes, alvo, ovBarril, ovPet, estilosOff, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   // cada mês vira N entregas semanais iguais (volume do mês ÷ nº de semanas), cada uma pronta até o início da semana
@@ -4946,7 +4950,7 @@ function PlanejamentoProducao() {
     mesesPlano.forEach((chave, idx) => {
       const semanas = semanasPorMes[chave] || [];
       const W = semanas.length || 1;
-      const necs = montarNecessidades(projecoes[chave], chave === alvo, descontarEstoque && idx === 0).filter(n => n.necessario > 0);
+      const necs = montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)).filter(n => n.necessario > 0);
       semanas.filter(sm => sm > hoje && (sm <= limite || chave === alvo)).forEach(sm => {
         out.push({ chave, prazo: sm, necessidades: necs.map(n => ({ ...n, necessario: n.necessario / W, petProd: n.petProd / W, barrilProd: n.barrilProd / W })) });
       });
@@ -4993,7 +4997,7 @@ function PlanejamentoProducao() {
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5098,9 +5102,9 @@ function PlanejamentoProducao() {
         ["Tanque", "Capacidade (L)", "Cerveja", "Produzida em", "Dias no tanque", "Dias p/ liberar", "Litros no tanque", "Situação"],
         ...statusTanques.map(t => [t.nome, t.capacidade, t.cerveja || "", t.dataProducao || "", t.diasProd ?? "", t.diasLiberar ?? "", t.litrosNoTanque ?? "", t.situacao]),
       ] },
-      { nome: "Necessidades", linhas: [
-        ["Estilo base", "Barril (L)", "PET (L)", "Estoque (L)", "A produzir (L)", "Dias até pronto"],
-        ...necessidades.map(n => [n.estilo, nx(n.barril), nx(n.pet), nx(n.estoque), nx(n.necessario), n.dias || ""]),
+      { nome: "Cenário por mês", linhas: [
+        ["Mês", "Estilo base", "Barril (L)", "PET (L)", "Estoque (L)", "A produzir (L)", "Dias até pronto"],
+        ...necPorMes.flatMap(({ chave, nec }) => nec.map(n => [chave, n.estilo, nx(n.barril), nx(n.pet), nx(n.estoque), nx(n.necessario), n.dias || ""])),
       ] },
       { nome: "Brassagem dia a dia", linhas: [
         ["Data", "Dia", "Tanque", "Estilo", "Bateladas", "Litros brassados", "Mês-alvo"],
@@ -5111,9 +5115,8 @@ function PlanejamentoProducao() {
         ...lotesExibidos.map(l => [l.tanque, l.estilo, l.mes, nx(l.volume), nx(l.atende), nx(l.sobra), l.bateladas, chaveDia(l.inicio), chaveDia(l.fim), chaveDia(l.pronto), chaveDia(l.prazo), l.atrasado ? "SIM" : "", feitos[chaveLote(l)] ? "SIM" : "", l.reposicao ? "reposição" : "demanda"]),
       ] },
       { nome: "Envase", linhas: [
-        ["Estilo base", "Barril (L)", "PET (L)", "Dias de envase PET"],
-        ...necessidades.map(n => [n.estilo, nx(n.barrilProd), nx(n.petProd), nx(n.petProd / CAPACIDADE_ENVASE_PET_DIA)]),
-        ["TOTAL", nx(totBarril), nx(totPet), nx(diasEnvasePet)],
+        ["Mês", "Estilo base", "Barril (L)", "PET (L)", "Dias de envase PET"],
+        ...necPorMes.flatMap(({ chave, nec }) => nec.map(n => [chave, n.estilo, nx(n.barrilProd), nx(n.petProd), nx(n.petProd / CAPACIDADE_ENVASE_PET_DIA)])),
       ] },
     ];
   }
@@ -5187,7 +5190,7 @@ function PlanejamentoProducao() {
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 14 }}>
-        <label style={{ fontSize: 12, color: "#aaa" }}>Mês a atender (ajuste manual na tabela)<br />
+        <label style={{ fontSize: 12, color: "#aaa" }}>Mês em destaque (avisos e lista de estilos)<br />
           <select value={alvo} onChange={e => setAlvo(e.target.value)} style={{ ...inputNum, width: 110, textAlign: "left" }}>
             {mesesAlvo.map(m => <option key={m} value={m}>{labelMes(m)}</option>)}
           </select>
@@ -5237,17 +5240,6 @@ function PlanejamentoProducao() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Expectativa por mês — % sobre a venda do mesmo mês do ano passado (vazio = usa o cenário, {pcts[cenario]}%)</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-          {mesesPlano.map(c => (
-            <label key={c} style={{ fontSize: 12, color: "#ddd" }}>{labelMes(c)} <span style={{ color: "#777" }}>({(semanasPorMes[c] || []).length} sem.)</span><br />
-              <input type="number" placeholder={String(pcts[cenario])} value={pctMes[c] ?? ""} onChange={e => setPctMes(p => ({ ...p, [c]: e.target.value }))} style={inputNum} />
-            </label>
-          ))}
-        </div>
-      </div>
-
       {planoCalc.naoAgendado && planoCalc.naoAgendado.length > 0 && (
         <div style={{ background: "#2a1212", border: "1px solid #6b1f1f", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#e8a0a0" }}>
           ⚠️ Não coube no horizonte de 120 dias (falta tanque livre): {planoCalc.naoAgendado.join("; ")}.
@@ -5262,56 +5254,79 @@ function PlanejamentoProducao() {
         </div>
       )}
 
-      {/* necessidades */}
-      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Necessidade e envase · {labelMes(alvo)} (derivadas somadas ao estilo base)</h4>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-        {card("Necessidade (L)", L(totNec), `${L(totBarril)} barril · ${L(totPet)} PET`)}
-        {card("Envase PET", `${diasEnvasePet.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias`, `${L(totPet)} L a ${L(CAPACIDADE_ENVASE_PET_DIA)} L/dia`)}
-        {card("Lotes do mês", plano.lotes.filter(l => l.mes === alvo).length, `${L(plano.lotes.filter(l => l.mes === alvo).reduce((s, l) => s + l.sobra, 0))} L de sobra p/ estoque`)}
-      </div>
-      <div style={{ overflowX: "auto", marginBottom: 20 }}>
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
-          <thead><tr>
-            <th style={{ ...th, textAlign: "left" }}>Estilo base</th>
-            <th style={th}>Barril proj. (L)</th><th style={th}>Barril (L) ✏️</th>
-            <th style={th}>PET proj. (L)</th><th style={th}>PET (L) ✏️</th>
-            <th style={th}>Estoque (L)</th><th style={th}>A produzir (L)</th>
-            <th style={th}>Dias</th><th style={th}>Lotes</th><th style={th}>Envase PET (dias)</th><th style={th}>Origem</th>
-          </tr></thead>
-          <tbody>
-            {necessidades.map(n => (
-              <React.Fragment key={n.estilo}>
-                <tr>
-                  <td style={{ ...td, textAlign: "left", color: "#fff", fontWeight: 600 }}>{n.estilo}</td>
-                  <td style={td}>{L(n.barrilProj)}</td>
-                  <td style={td}><input type="number" placeholder={String(Math.round(n.barrilProj))} value={ovBarril[n.estilo] ?? ""} onChange={e => setOvBarril(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
-                  <td style={td}>{L(n.petProj)}</td>
-                  <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[n.estilo] ?? ""} onChange={e => setOvPet(p => ({ ...p, [n.estilo]: e.target.value }))} style={inputNum} /></td>
-                  <td style={td}>{L(n.estoque)}</td>
-                  <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
-                  <td style={{ ...td, color: n.dias ? "#ddd" : "#e57373" }}>{n.dias || "preencher"}</td>
-                  <td style={td}>{plano.lotes.filter(l => l.mes === alvo && l.estilo === n.estilo).length}</td>
-                  <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
-                  <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [n.estilo]: !p[n.estilo] }))}>{expandidos[n.estilo] ? "ocultar" : "por quê?"}</button></td>
-                </tr>
-                {expandidos[n.estilo] && (
-                  <tr><td colSpan={11} style={{ ...td, textAlign: "left", background: "#101010" }}>
-                    {n.det.length === 0 && <span style={{ color: "#777" }}>Sem produtos.</span>}
-                    {n.det.sort((a, b) => b.lit - a.lit).map((d, i) => (
-                      <div key={i} style={{ fontSize: 11, color: "#aaa" }}>
-                        • <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb}) → {L(d.lit)} L — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}
-                      </div>
-                    ))}
-                  </td></tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+      {/* cenário: um bloco por mês */}
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Cenário de vendas por mês (litros) — ajuste à vontade; derivadas somadas ao estilo base</h4>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Os campos ✏️ sobrescrevem a projeção daquele mês e estilo (vazio = projeção). Os percentuais por mês ficam no cabeçalho de cada bloco.</div>
+      {necPorMes.map(({ chave, nec }) => {
+        const tBarril = nec.reduce((s, n) => s + n.barrilProd, 0), tPet = nec.reduce((s, n) => s + n.petProd, 0), tNec = nec.reduce((s, n) => s + n.necessario, 0);
+        const nSem = (semanasPorMes[chave] || []).length || 1;
+        return (
+          <div key={chave} style={{ background: "#141414", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", marginBottom: 8 }}>
+              <strong style={{ color: "#fff", fontSize: 14, minWidth: 70 }}>{labelMes(chave)}</strong>
+              <label style={{ fontSize: 12, color: "#aaa" }}>% sobre o ano passado{" "}
+                <input type="number" placeholder={String(pcts[cenario])} value={pctMes[chave] ?? ""} onChange={e => setPctMes(p => ({ ...p, [chave]: e.target.value }))} style={{ ...inputNum, width: 64 }} />
+              </label>
+              <span style={{ fontSize: 12, color: "#C69700" }}>A produzir: <strong>{L(tNec)} L</strong> ({L(tBarril)} barril · {L(tPet)} PET) · {nSem} semanas ≈ {L(tNec / nSem)} L/semana</span>
+              <span style={{ fontSize: 12, color: "#888" }}>Envase PET: {(tPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                <thead><tr>
+                  <th style={{ ...th, textAlign: "left" }}>Estilo base</th>
+                  <th style={th}>Barril proj. (L)</th><th style={th}>Barril (L) ✏️</th>
+                  <th style={th}>PET proj. (L)</th><th style={th}>PET (L) ✏️</th>
+                  <th style={th}>Estoque (L)</th><th style={th}>A produzir (L)</th>
+                  <th style={th}>Dias</th><th style={th}>Envase PET (dias)</th><th style={th}>Origem</th>
+                </tr></thead>
+                <tbody>
+                  {nec.map(n => {
+                    const kx = `${chave}|${n.estilo}`;
+                    return (
+                      <React.Fragment key={kx}>
+                        <tr>
+                          <td style={{ ...td, textAlign: "left", color: "#fff", fontWeight: 600 }}>{n.estilo}</td>
+                          <td style={td}>{L(n.barrilProj)}</td>
+                          <td style={td}><input type="number" placeholder={String(Math.round(n.barrilProj))} value={ovBarril[kx] ?? ""} onChange={e => setOvBarril(p => ({ ...p, [kx]: e.target.value }))} style={inputNum} /></td>
+                          <td style={td}>{L(n.petProj)}</td>
+                          <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[kx] ?? ""} onChange={e => setOvPet(p => ({ ...p, [kx]: e.target.value }))} style={inputNum} /></td>
+                          <td style={td}>{L(n.estoque)}</td>
+                          <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
+                          <td style={{ ...td, color: n.dias ? "#ddd" : "#e57373" }}>{n.dias || "preencher"}</td>
+                          <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
+                          <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [kx]: !p[kx] }))}>{expandidos[kx] ? "ocultar" : "por quê?"}</button></td>
+                        </tr>
+                        {expandidos[kx] && (
+                          <tr><td colSpan={10} style={{ ...td, textAlign: "left", background: "#101010" }}>
+                            {n.det.length === 0 && <span style={{ color: "#777" }}>Sem produtos.</span>}
+                            {n.det.slice().sort((x, y) => y.lit - x.lit).map((d, i) => (
+                              <div key={i} style={{ fontSize: 11, color: "#aaa" }}>
+                                • <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb}) → {L(d.lit)} L — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}
+                              </div>
+                            ))}
+                          </td></tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                  {nec.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "left", color: "#666" }}>Nenhum estilo marcado com demanda neste mês.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ background: cenarioValidado ? "#12261a" : "#2a2112", border: `1px solid ${cenarioValidado ? "#1f5c35" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#bfe6cc" : "#e8c766" }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="checkbox" checked={cenarioValidado} onChange={e => setCenarioValidado(e.target.checked)} />
+          <strong>Cenário futuro validado</strong> — {cenarioValidado ? "a programação de produção está liberada abaixo." : "marque quando os números acima estiverem ok para montar a programação dos tanques."}
+        </label>
       </div>
 
+      {(cenarioValidado || usarSalvo) ? (<>
       {/* brassagem */}
-      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia ({LITROS_BATELADA} L cada; um tanque por vez, só termina um para começar o outro)</h4>
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia (tanque grande enche em dias de 3 ou 6 bateladas, um por dia; os de 1.000 L entram junto no dia)</h4>
       <div style={{ background: "#12261a", border: "1px solid #1f5c35", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#bfe6cc" }}>
         <strong>Recomendação (com os dados atuais): {recomendado} bateladas/dia.</strong> {motivo}
         <div style={{ marginTop: 6, color: "#8fbf9f" }}>
@@ -5461,6 +5476,9 @@ function PlanejamentoProducao() {
         </table>
       </div>
       <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>* estilo sem prazo cadastrado (usei {diasPadrao} dias). Vermelho = lote que não fica pronto até o início da semana de entrega.</div>
+      </>) : (
+        <div style={{ color: "#777", fontSize: 12 }}>Valide o cenário acima para ver a programação dos tanques e da brassagem.</div>
+      )}
     </div>
   );
 }
