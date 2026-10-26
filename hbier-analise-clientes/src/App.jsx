@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.29";
+const APP_VERSION = "v10.30";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4729,6 +4729,10 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       const hel = ehHelles(it.n.estilo);
       if (grande) { if (hel || (urgente(it) && it.restante >= t.capacidade * 0.6)) { item = it; break; } }
       else if (!hel && melhorPequeno(it, t)) { item = it; break; }
+    }
+    // tanque pequeno livre e nenhuma demanda de outro estilo pendente: ajuda a produzir Helles (demanda real, depois reposição)
+    if (!item && !grande && !itens.some(it => !ehHelles(it.n.estilo) && it.restante !== null && it.restante > 0.5)) {
+      item = itens.find(it => ehHelles(it.n.estilo) && it.restante !== null && it.restante > 0.5) || null;
     }
     const b = bateladasDoTanque(t);
     if (item) {
