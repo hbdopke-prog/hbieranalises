@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.47";
+const APP_VERSION = "v10.49";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4680,14 +4680,8 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
   const estilosRep = Object.keys(peso).filter(e => peso[e] > 0);
   // cerveja pronta dentro do tanque conta como oferta (cobertura) e o tanque só libera quando a demanda a consumir
   Object.keys(suprimentoInicial || {}).forEach(e => { extra[e] = (extra[e] || 0) + suprimentoInicial[e]; });
-  estado.forEach(t => {
-    if (t.base && t.litrosNoTanque > 0) {
-      const porDia = (peso[t.base] || 0) / (horizonteDias || 120);
-      const nd = porDia > 0 ? Math.ceil(t.litrosNoTanque / porDia) : (horizonteDias || 120) + 1;
-      const quando = somarDiasData(hoje, nd);
-      if (quando > t.livre) t.livre = quando;
-    }
-  });
+  // REGRA: ao ficar pronta, a cerveja vai para barril ou PET (vira estoque de produto acabado) e o tanque libera na hora.
+  // Por isso o tanque nunca fica esperando venda: ele só fica ocupado até o "pronto" (já calculado em livreDe).
 
   // diagnóstico de lote atrasado: o que está acontecendo e o que dá para ajustar
   const diagnosticar = (t, av, item, livreAntes) => {
@@ -4739,7 +4733,7 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
     const ini = dataDeChave(m.inicio); if (!ini || isNaN(ini.getTime())) return;
     const capM = capEf(t, m.estilo), nb = bateladasDoTanque(t);
     const bM = Math.max(1, Math.round(capM / (t.capacidade / nb)));
-    t.livre = t.livre > ini ? t.livre : ini;
+    t.livre = ini; // a data que você escolheu manda (mesmo que o planejador achasse o tanque ocupado pela cerveja que está nele)
     const av = colocar(t, ini, bM); if (!av) return;
     const dM = diasDoLote(t, diasDe(m.estilo));
     av.pronto = somarDiasData(av.fim, dM);
@@ -5335,6 +5329,8 @@ function PlanejamentoProducao() {
   const envase = simularEnvase({ semanas: semanasSim, necPorMes, semanasPorMes, lotes: lotesExibidos, statusTanques, hojeReal, semanasPet500 });
 
   // visão tanque a tanque: o que acontece com cada tanque (produção, pronto, saídas de barril/PET, esvaziamento)
+  // fatia PET de cada estilo (para dividir o que vai para barril e o que vai para PET ao ficar pronto)
+  const petShareEstilo = (e) => { let pet = 0, tot = 0; necPorMes.forEach(({ nec }) => nec.forEach(n => { if (n.estilo === e) { pet += n.pet || 0; tot += (n.pet || 0) + (n.barril || 0); } })); return tot > 0 ? pet / tot : 0; };
   const visaoTanques = (() => {
     const evs = {}; // tanque -> [{data, tipo, litros}]
     Object.keys(envase).forEach(k => {
@@ -5624,7 +5620,7 @@ function PlanejamentoProducao() {
             })}
           </div>
           <div style={{ color: "#fff", fontWeight: 700, marginBottom: 4 }}>➕ Incluir produção (brassagem) à mão</div>
-          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Use para encher um tanque parado (ex.: TANQUE 6 ou 7 com Helles). A produção entra a partir do dia escolhido, respeitando as regras de brassagem, e a cerveja vira estoque para a demanda. Sem demanda pendente, com “Repor tanques” ligado o planejador também enche tanques parados sozinho.</div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Use para encher um tanque parado (ex.: TANQUE 6 ou 7 com Helles). A produção entra a partir do dia escolhido, respeitando as regras de brassagem, e a cerveja vira estoque para a demanda. Atenção: se o tanque ainda tem cerveja, ela precisa estar esvaziada até essa data. Sem demanda pendente, com “Repor tanques” ligado o planejador também enche tanques parados sozinho.</div>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
             <select value={novoManual.tanque} onChange={e => setNovoManual(p => ({ ...p, tanque: e.target.value }))} style={{ ...inputNum, width: 130, textAlign: "left" }}><option value="">tanque…</option>{statusTanques.map(t => <option key={t.nome} value={t.nome}>{t.nome}</option>)}</select>
             <select value={novoManual.estilo} onChange={e => setNovoManual(p => ({ ...p, estilo: e.target.value }))} style={{ ...inputNum, width: 150, textAlign: "left" }}><option value="">estilo…</option>{listaEstilos.map(e => <option key={e.estilo} value={e.estilo}>{e.estilo}</option>)}</select>
@@ -5956,7 +5952,7 @@ function PlanejamentoProducao() {
       </div>
 
       <h4 style={{ color: "#fff", fontSize: 13, margin: "14px 0 6px" }}>🏭 Visão de cada tanque · o que vai acontecer com ele</h4>
-      <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Uma linha por tanque: o que tem hoje, cada produção (datas e volume), quando fica pronto, quanto desse lote já sai (total) em 🛢️ barris de 50 L e 🧴 PET e quando esvazia. As saídas são do lote inteiro (a cerveja segue saindo mesmo depois que o tanque é reenchido) e valem dentro de 120 dias; “vazio” é quando o lote acaba.</div>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Uma linha por tanque: o que tem hoje, cada produção (datas e volume), quando fica pronto, o que vira estoque ao ficar pronto, em 🛢️ barris de 50 L e 🧴 PET e quando esvazia. Regra: ao ficar pronta, a cerveja vai para barril ou PET (estoque de produto acabado) e o tanque libera na hora; a venda sai do estoque. A divisão barril/PET segue a previsão de vendas do estilo.</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {visaoTanques.map(({ t, atual, passos }) => (
           <div key={t.nome} style={{ display: "flex", gap: 10, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px" }}>
@@ -5966,15 +5962,14 @@ function PlanejamentoProducao() {
                 <div>
                   <span style={{ color: "#C69700" }}>AGORA</span> · {atual.cerveja} {L(atual.litros)} L · {atual.pronto && atual.pronto > hojeReal ? `⏳ pronta em ${fmtDataCurta(atual.pronto)}` : "🟢 pronta"}
                   {" · "}maturação <input type="number" min="1" placeholder={String(t.diasUsados)} value={diasLote[`${t.nome}|atual`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|atual`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|atual`] ?? "") !== "" ? "#C69700" : "#444" }} /> dias
-                  {" · "}saída: 🛢️ {Math.round(atual.barril / 50).toLocaleString("pt-BR")} barris ({L(atual.barril)} L) + 🧴 {L(atual.pet)} L PET
-                  {" · "}{atual.vazio ? `tanque vazio ~${fmtDataCurta(atual.vazio)}` : "ainda com cerveja ao fim do período"}
+                  {(() => { const sh = petShareEstilo(atual.cerveja); const b = atual.litros * (1 - sh), pt = atual.litros * sh; return <> · ao ficar pronta vira estoque: 🛢️ {Math.round(b / 50).toLocaleString("pt-BR")} barris ({L(b)} L) + 🧴 {L(pt)} L PET · tanque livre {atual.pronto && atual.pronto > hojeReal ? `em ${fmtDataCurta(atual.pronto)}` : "agora"}</>; })()}
                 </div>
               ) : <div style={{ color: "#4caf6b" }}>AGORA · vazio / livre</div>}
               {passos.map(({ l, barril, pet, vazio }, i) => (
                 <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>
                   ⚙️ <strong>Produção {fmtDataCurta(l.inicio)}{chaveDia(l.inicio) !== chaveDia(l.fim) ? `–${fmtDataCurta(l.fim)}` : ""}</strong> · {l.estilo}{l.reposicao ? " (reposição)" : ""} {L(l.volume)} L ({l.bateladas} bat.) · ⏳ pronto {fmtDataCurta(l.pronto)} · maturação <input type="number" min="1" placeholder={String(l.dias)} value={diasLote[`${t.nome}|${i}`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|${i}`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|${i}`] ?? "") !== "" ? "#C69700" : "#444" }} /> dias
-                  {" · "}saída: 🛢️ {Math.round(barril / 50).toLocaleString("pt-BR")} barris ({L(barril)} L) + 🧴 {L(pet)} L PET
-                  {" · "}{vazio ? `vazio ~${fmtDataCurta(vazio)}` : "sem esvaziar no período"}
+                  {" · "}ao ficar pronto vira estoque: 🛢️ {Math.round(l.volume * (1 - (l.petPct || 0)) / 50).toLocaleString("pt-BR")} barris ({L(l.volume * (1 - (l.petPct || 0)))} L) + 🧴 {L(l.volume * (l.petPct || 0))} L PET
+                  {" · "}tanque livre em {fmtDataCurta(l.pronto)}
                   {l.atrasado ? " · ⚠️ atrasado" : ""}
                 </div>
               ))}
