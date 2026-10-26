@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.18";
+const APP_VERSION = "v10.19";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -345,7 +345,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto) {
+function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto, cenariosSalvosTexto) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -420,7 +420,7 @@ function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receita
     labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
     produtosDados: porProduto, produtosNomes, produtosPeriodos,
     estoquePorProduto,
-    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "",
+    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "", cenariosSalvosTexto: cenariosSalvosTexto || "",
   };
 }
 
@@ -4769,7 +4769,7 @@ function reviverLotes(arr) {
 }
 
 function PlanejamentoProducao() {
-  const { produtosDados, produtosNomes, produtosPeriodos, tanques, receitas, estoquePorProduto, planoSalvoTexto } = useData();
+  const { produtosDados, produtosNomes, produtosPeriodos, tanques, receitas, estoquePorProduto, planoSalvoTexto, cenariosSalvosTexto } = useData();
   const mesAtual = chaveMesAtualReal();
   const hoje = useMemo(() => proximoUtil(new Date()), []);
   const hojeReal = useMemo(() => { const x = new Date(); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); }, []);
@@ -4808,6 +4808,10 @@ function PlanejamentoProducao() {
   const [granular, setGranular] = useState("dia");
   const [feitos, setFeitos] = useState(cfg0.feitos || {});
   const [expandidos, setExpandidos] = useState({});
+  const [cenariosSalvos, setCenariosSalvos] = useState(() => { try { const a = cenariosSalvosTexto ? JSON.parse(cenariosSalvosTexto) : []; return Array.isArray(a) ? a : []; } catch (e) { return []; } });
+  const [nomeNovoCenario, setNomeNovoCenario] = useState("");
+  const [cenarioCarregado, setCenarioCarregado] = useState("");
+  const [msgCenario, setMsgCenario] = useState("");
   const [cenarioValidado, setCenarioValidado] = useState(cfg0.cenarioValidado ?? !!salvoInicial);
   const [planoSalvo, setPlanoSalvo] = useState(salvoInicial);
   const [previa, setPrevia] = useState(false);
@@ -5013,6 +5017,45 @@ function PlanejamentoProducao() {
       setPlanoSalvo(payload); setPrevia(false);
     }
     setSalvando(false);
+  }
+  // cenários de vendas com nome (guardados na planilha, aba cenarios_salvos)
+  async function persistirCenarios(lista, msgOk) {
+    setCenariosSalvos(lista);
+    try { localStorage.setItem("hbier_cenarios_salvos", JSON.stringify(lista)); } catch (e) { /* ignora */ }
+    try {
+      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarCenarios", cenarios: JSON.stringify(lista) }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.erro || "falha ao salvar");
+      setMsgCenario(msgOk);
+    } catch (e) {
+      setMsgCenario("⚠️ Não consegui gravar na planilha (" + (e.message || e) + "). Atualize o Code.gs para v3.3 e reimplante; por ora ficou só neste navegador.");
+    }
+  }
+  function salvarCenarioComNome() {
+    const nome = nomeNovoCenario.trim();
+    if (!nome) { setMsgCenario("Digite um nome para o cenário."); return; }
+    const resumo = {};
+    necPorMes.forEach(({ chave, nec }) => { resumo[chave] = Math.round(nec.reduce((s, n) => s + n.necessario, 0)); });
+    const novo = {
+      nome, salvoEm: new Date().toISOString(), resumo,
+      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, semVendaMeses, descontarEstoque },
+    };
+    const existe = cenariosSalvos.some(c => c.nome.toLowerCase() === nome.toLowerCase());
+    const lista = existe ? cenariosSalvos.map(c => (c.nome.toLowerCase() === nome.toLowerCase() ? novo : c)) : [...cenariosSalvos, novo];
+    setCenarioCarregado(nome);
+    persistirCenarios(lista, existe ? `✅ Cenário “${nome}” atualizado.` : `✅ Cenário “${nome}” salvo.`);
+  }
+  function carregarCenario(c) {
+    const g = c.config || {};
+    setCenario(g.cenario || "base"); setPcts(g.pcts || { min: 80, base: 100, max: 120 }); setPctMes(g.pctMes || {});
+    setEstilosOff(g.estilosOff || {}); setOvBarril(g.ovBarril || {}); setOvPet(g.ovPet || {});
+    setSemVendaMeses(g.semVendaMeses ?? 3); setDescontarEstoque(!!g.descontarEstoque);
+    setCenarioCarregado(c.nome); setNomeNovoCenario(c.nome); setCenarioValidado(false);
+    setMsgCenario(`Cenário “${c.nome}” carregado. Confira os números e valide para ver a programação.`);
+  }
+  function excluirCenario(c) {
+    if (!window.confirm(`Excluir o cenário “${c.nome}”?`)) return;
+    persistirCenarios(cenariosSalvos.filter(x => x.nome !== c.nome), `Cenário “${c.nome}” excluído.`);
   }
   function alternarFeito(l) {
     const k = chaveLote(l);
@@ -5316,6 +5359,28 @@ function PlanejamentoProducao() {
           </div>
         );
       })}
+
+      <div style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, marginBottom: 6 }}>Cenários salvos {cenarioCarregado && <span style={{ color: "#C69700", fontWeight: 400 }}>· em uso: {cenarioCarregado}</span>}</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input type="text" placeholder="Nome do cenário (ex.: Natal forte)" value={nomeNovoCenario} onChange={e => setNomeNovoCenario(e.target.value)} style={{ ...inputNum, width: 240, textAlign: "left" }} />
+          <button style={btn("#4caf6b")} onClick={salvarCenarioComNome}>💾 Salvar cenário futuro</button>
+        </div>
+        {msgCenario && <div style={{ fontSize: 12, color: "#bbb", marginBottom: 8 }}>{msgCenario}</div>}
+        {cenariosSalvos.length === 0 ? <div style={{ fontSize: 12, color: "#666" }}>Nenhum cenário salvo ainda. Ajuste os números acima, dê um nome e salve — dá para guardar quantos quiser e alternar entre eles.</div> : (
+          <div style={{ display: "grid", gap: 6 }}>
+            {cenariosSalvos.map(c => (
+              <div key={c.nome} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", background: "#101010", border: `1px solid ${c.nome === cenarioCarregado ? "#C69700" : "#242424"}`, borderRadius: 6, padding: "6px 8px" }}>
+                <strong style={{ color: "#fff", fontSize: 13, minWidth: 140 }}>{c.nome}</strong>
+                <span style={{ fontSize: 11, color: "#888" }}>salvo em {new Date(c.salvoEm).toLocaleString("pt-BR")}</span>
+                <span style={{ fontSize: 11, color: "#aaa", flex: "1 1 220px" }}>{Object.entries(c.resumo || {}).sort().map(([k, v]) => `${labelMes(k)}: ${L(v)} L`).join(" · ")}</span>
+                <button style={{ ...btn("#4a90d9"), padding: "3px 10px" }} onClick={() => carregarCenario(c)}>Carregar</button>
+                <button style={{ ...btn("#e57373"), padding: "3px 10px" }} onClick={() => excluirCenario(c)}>Excluir</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div style={{ background: cenarioValidado ? "#12261a" : "#2a2112", border: `1px solid ${cenarioValidado ? "#1f5c35" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#bfe6cc" : "#e8c766" }}>
         <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
@@ -6228,7 +6293,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || ""));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || ""));
         setStatus("ready");
       })
       .catch(err => {

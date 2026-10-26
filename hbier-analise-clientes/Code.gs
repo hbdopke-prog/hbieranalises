@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v3.2
+ * Versão: v3.3
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -89,6 +89,7 @@ const SHEET_ESTOQUE = "estoque";
 const SHEET_TANQUES = "tanques";
 const SHEET_RECEITAS = "receitas";
 const SHEET_PLANO = "plano_salvo";
+const SHEET_CENARIOS = "cenarios_salvos";
 
 function doGet(e) {
   try {
@@ -124,9 +125,13 @@ function doGet(e) {
     let planoSalvo = "";
     try { planoSalvo = lerPlanoSalvo(ss); } catch (e3) { planoSalvo = ""; }
 
+    let cenariosSalvos = "";
+    try { cenariosSalvos = lerCenariosSalvos(ss); } catch (e4) { cenariosSalvos = ""; }
+
     return jsonResponse({
       ok: true,
       dados: combinado,
+      cenariosSalvos: cenariosSalvos,
       planoSalvo: planoSalvo,
       tanques: tanques,
       receitas: receitas,
@@ -206,6 +211,28 @@ function lerPlanoSalvo(ss) {
   const sheet = ss.getSheetByName(SHEET_PLANO);
   if (!sheet) return "";
   return String(sheet.getRange(1, 1).getValue() || "");
+}
+// Cenários de vendas salvos com nome: lista em JSON, guardada em pedaços (uma célula por linha) na aba "cenarios_salvos"
+function lerCenariosSalvos(ss) {
+  const sheet = ss.getSheetByName(SHEET_CENARIOS);
+  if (!sheet) return "";
+  const ultima = sheet.getLastRow();
+  if (ultima < 1) return "";
+  return sheet.getRange(1, 1, ultima, 1).getValues().map(function (l) { return String(l[0] || ""); }).join("");
+}
+function salvarCenariosSalvos(texto) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_CENARIOS);
+  if (!sheet) sheet = ss.insertSheet(SHEET_CENARIOS);
+  texto = String(texto || "");
+  const TAM = 40000;
+  const pedacos = [];
+  for (let i = 0; i < texto.length; i += TAM) pedacos.push([texto.substring(i, i + TAM)]);
+  if (!pedacos.length) pedacos.push([""]);
+  sheet.clearContents();
+  sheet.getRange(1, 1, pedacos.length, 1).setValues(pedacos);
+  sheet.getRange(1, 2).setValue(new Date());
+  return { ok: true };
 }
 function salvarPlanoSalvo(plano) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -426,6 +453,9 @@ function doPost(e) {
     const corpo = JSON.parse(e.postData.contents);
     if (corpo.action === "login") {
       return jsonResponse(autenticar(corpo.usuario, corpo.senha));
+    }
+    if (corpo.action === "salvarCenarios") {
+      return jsonResponse(salvarCenariosSalvos(corpo.cenarios));
     }
     if (corpo.action === "salvarPlano") {
       return jsonResponse(salvarPlanoSalvo(corpo.plano));
