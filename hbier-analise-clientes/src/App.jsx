@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.20";
+const APP_VERSION = "v10.22";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4667,6 +4667,36 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
     petSum[n.estilo] = (petSum[n.estilo] || 0) + n.petProd;
   });
   const estilosRep = Object.keys(peso).filter(e => peso[e] > 0);
+  // cerveja pronta dentro do tanque conta como oferta (cobertura) e o tanque só libera quando a demanda a consumir
+  Object.keys(suprimentoInicial || {}).forEach(e => { extra[e] = (extra[e] || 0) + suprimentoInicial[e]; });
+  estado.forEach(t => {
+    if (t.base && t.litrosNoTanque > 0) {
+      const porDia = (peso[t.base] || 0) / (horizonteDias || 120);
+      const nd = porDia > 0 ? Math.ceil(t.litrosNoTanque / porDia) : (horizonteDias || 120) + 1;
+      const quando = somarDiasData(hoje, nd);
+      if (quando > t.livre) t.livre = quando;
+    }
+  });
+
+  // diagnóstico de lote atrasado: o que está acontecendo e o que dá para ajustar
+  const diagnosticar = (t, av, item, livreAntes) => {
+    const P = item.mes.prazo, D = item.dias;
+    const atraso = diasEntre(P, av.pronto);
+    if (atraso <= 0) return null;
+    const latestFim = somarDiasData(P, -D);
+    const maisCedo = somarDiasData(hoje, D);
+    const diasNec = Math.max(1, diasEntre(av.fim, P));
+    const f = fmtDataCurta;
+    if (maisCedo >= P || av.inicio.getTime() <= proximoUtil(hoje).getTime()) return { causa: "maturacao", atrasoDias: atraso, diasNecessarios: Math.max(1, D - atraso),
+      texto: `Mesmo começando agora, ${item.n.estilo} só fica pronto em ${f(av.pronto)} (brassagem + ${D} dias de maturação) e a entrega é ${f(P)}.`,
+      ajuste: `Reduzir os dias de ${item.n.estilo} para ${Math.max(1, D - atraso)} (hoje ${D}) entregaria no prazo; ou cobrir essa semana com estoque de produto acabado; ou aceitar o atraso.` };
+    if (livreAntes > latestFim) return { causa: "tanque", atrasoDias: atraso, diasNecessarios: diasNec,
+      texto: `${t.nome} só libera em ${f(livreAntes)} (a cerveja que está/ficará nele ainda não saiu) e a brassagem precisaria ser até ${f(latestFim)}.`,
+      ajuste: `Reduzir os dias de maturação do lote anterior desse tanque, usar um tanque que libere antes, ou reduzir os dias de ${item.n.estilo} para ${diasNec}.` };
+    return { causa: "brassagem", atrasoDias: atraso, diasNecessarios: diasNec,
+      texto: `O tanque estaria livre, mas a brassagem só coube em ${f(av.inicio)} (regras: 1 tanque grande por dia, 3 ou 6 bateladas, lote na mesma semana).`,
+      ajuste: `Usar 6 bateladas/dia, adiantar a brassagem, ou reduzir os dias de ${item.n.estilo} para ${diasNec}.` };
+  };
 
   // Tanque grande sempre com Helles; pequenos rodam os outros estilos. Outro estilo só entra em tanque grande
   // se, com os pequenos, ficaria atrasado. TANQUE SEMPRE CHEIO: o tanque que libera primeiro recebe lote novo na hora
@@ -4704,6 +4734,7 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       const av = colocar(t, hoje, b);
       if (!av) break;
       av.pronto = somarDiasData(av.fim, item.dias);
+      const livreAntes = t.livre;
       confirmar(t, av);
       const atende = Math.min(t.capacidade, item.restante);
       const sobra = t.capacidade - atende;
@@ -4715,7 +4746,7 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
         volume: t.capacidade, atende, sobra, dias: item.dias, diasPreenchido: !!item.n.dias,
         mes: item.mes.chave, prazo: item.mes.prazo, petPct: item.n.necessario > 0 ? item.n.petProd / item.n.necessario : 0,
         inicio: av.inicio, fim: av.fim, pronto: av.pronto, aloc: av.aloc, livreAte: t.livre,
-        atrasado: av.pronto > item.mes.prazo,
+        atrasado: av.pronto > item.mes.prazo, diag: diagnosticar(t, av, item, livreAntes),
       });
     } else {
       if (t.livre > fimHorizonte) break;
@@ -4757,7 +4788,7 @@ function serializarLotes(lotes) {
     volume: l.volume, atende: Math.round(l.atende), sobra: Math.round(l.sobra), dias: l.dias, diasPreenchido: l.diasPreenchido,
     mes: l.mes, prazo: chaveDia(l.prazo), petPct: Number(l.petPct.toFixed(4)),
     inicio: chaveDia(l.inicio), fim: chaveDia(l.fim), pronto: chaveDia(l.pronto), livreAte: chaveDia(l.livreAte),
-    aloc: l.aloc.map(a => [chaveDia(a.data), a.n]), atrasado: l.atrasado, reposicao: !!l.reposicao,
+    aloc: l.aloc.map(a => [chaveDia(a.data), a.n]), atrasado: l.atrasado, reposicao: !!l.reposicao, diag: l.diag || null,
   }));
 }
 function reviverLotes(arr) {
@@ -4766,6 +4797,85 @@ function reviverLotes(arr) {
     pronto: dataDeChave(l.pronto), livreAte: dataDeChave(l.livreAte),
     aloc: (l.aloc || []).map(a => ({ data: dataDeChave(a[0]), n: a[1] })),
   }));
+}
+
+// Formato da embalagem PET a partir do nome (PET 1L, PET 2L, PET 500ML...)
+function formatoPet(nome) {
+  const n = normalizarPlano(nome);
+  const m = n.match(/(\d+(?:[.,]\d+)?)\s*(ML|LITROS?|LT|L)\b/);
+  if (!m) return { rotulo: "PET", litros: 0 };
+  const v = parseFloat(m[1].replace(",", "."));
+  const litros = m[2] === "ML" ? v / 1000 : v;
+  return { rotulo: litros < 1 ? `${Math.round(litros * 1000)}ml` : `${litros}L`, litros };
+}
+
+// Previsão de vendas da semana -> envase dia a dia -> de qual tanque sai cada litro.
+// PET: cada produto é envasado UMA vez na semana, em bloco (agrupado por formato), até 8.000 L/dia, sem voltar.
+// Barril: previsão da semana dividida pelos 5 dias úteis. A cerveja sai primeiro dos tanques que ficaram prontos antes.
+function simularEnvase({ semanas, necPorMes, semanasPorMes, lotes, statusTanques, hojeReal }) {
+  const estoque = [];
+  statusTanques.forEach(t => {
+    if (t.base && t.litrosNoTanque > 0) estoque.push({ tanque: t.nome, estilo: t.base, rest: t.litrosNoTanque, pronto: t.pronto && t.pronto > hojeReal ? t.pronto : hojeReal });
+  });
+  lotes.forEach(l => estoque.push({ tanque: l.tanque, estilo: l.estilo, rest: l.volume, pronto: l.pronto }));
+  const porMes = {}; necPorMes.forEach(({ chave, nec }) => { porMes[chave] = nec; });
+  const retirar = (estilo, litros, dia) => {
+    let falta = litros; const usos = [];
+    estoque.filter(e => e.estilo === estilo && e.rest > 0.5 && e.pronto <= dia).sort((a, b) => a.pronto - b.pronto || a.rest - b.rest).forEach(e => {
+      if (falta <= 0.5) return;
+      const q = Math.min(e.rest, falta); e.rest -= q; falta -= q;
+      const u = usos.find(x => x.tanque === e.tanque); if (u) u.litros += q; else usos.push({ tanque: e.tanque, litros: q });
+    });
+    return { usos, falta: Math.max(0, falta) };
+  };
+  const somarUsos = (alvo, usos) => usos.forEach(u => { const x = alvo.find(y => y.tanque === u.tanque); if (x) x.litros += u.litros; else alvo.push({ ...u }); });
+  const out = {};
+  semanas.forEach(seg => {
+    const quarta = somarDiasData(seg, 2);
+    const chave = `${quarta.getFullYear()}-${String(quarta.getMonth() + 1).padStart(2, "0")}`;
+    const nec = porMes[chave] || [];
+    const W = (semanasPorMes[chave] || []).length || 1;
+    const produtos = [];
+    nec.forEach(n => {
+      const fb = n.barrilProj > 0 ? n.barril / n.barrilProj : 1, fp = n.petProj > 0 ? n.pet / n.petProj : 1;
+      let temB = false, temP = false;
+      n.det.forEach(d => {
+        if (d.lit <= 0) return;
+        if (d.emb === "chope") { produtos.push({ produto: d.produto, estilo: n.estilo, emb: "barril", litros: d.lit * fb / W }); temB = true; }
+        else if (d.emb === "pet") { produtos.push({ produto: d.produto, estilo: n.estilo, emb: "pet", litros: d.lit * fp / W }); temP = true; }
+      });
+      if (!temB && n.barril > 0) produtos.push({ produto: `${n.estilo} (barril · ajuste manual)`, estilo: n.estilo, emb: "barril", litros: n.barril / W });
+      if (!temP && n.pet > 0) produtos.push({ produto: `${n.estilo} (PET · ajuste manual)`, estilo: n.estilo, emb: "pet", litros: n.pet / W });
+    });
+    const dias = [0, 1, 2, 3, 4].map(i => somarDiasData(seg, i));
+    // PET em blocos por formato, 8.000 L/dia
+    const pet = produtos.filter(p => p.emb === "pet").map(p => ({ ...p, fmt: formatoPet(p.produto) }));
+    const volFmt = {}; pet.forEach(p => { volFmt[p.fmt.rotulo] = (volFmt[p.fmt.rotulo] || 0) + p.litros; });
+    pet.sort((a, b) => (volFmt[b.fmt.rotulo] - volFmt[a.fmt.rotulo]) || a.fmt.rotulo.localeCompare(b.fmt.rotulo) || b.litros - a.litros);
+    const blocosPorDia = [[], [], [], [], []]; let di = 0, uso = 0, overflow = 0;
+    pet.forEach(p => {
+      let rest = p.litros;
+      while (rest > 0.5) {
+        if (di > 4) { overflow += rest; break; }
+        const q = Math.min(rest, CAPACIDADE_ENVASE_PET_DIA - uso);
+        blocosPorDia[di].push({ produto: p.produto, estilo: p.estilo, fmt: p.fmt.rotulo, litros: q });
+        rest -= q; uso += q;
+        if (uso >= CAPACIDADE_ENVASE_PET_DIA - 0.5) { di++; uso = 0; }
+      }
+    });
+    const barril = {}; produtos.filter(p => p.emb === "barril").forEach(p => { barril[p.estilo] = (barril[p.estilo] || 0) + p.litros; });
+    const barrilRes = Object.entries(barril).map(([estilo, litros]) => ({ estilo, litros, usos: [], falta: 0 }));
+    const petDias = dias.map((d, i) => ({ data: d, blocos: blocosPorDia[i].map(b => ({ ...b, usos: [], falta: 0 })), litros: 0 }));
+    dias.forEach((d, i) => {
+      petDias[i].blocos.forEach(b => { const r = retirar(b.estilo, b.litros, d); b.usos = r.usos; b.falta = r.falta; petDias[i].litros += b.litros; });
+      barrilRes.forEach(b => { const r = retirar(b.estilo, b.litros / 5, d); somarUsos(b.usos, r.usos); b.falta += r.falta; });
+    });
+    out[chaveDia(seg)] = {
+      chave, W, produtos, petDias, barril: barrilRes, overflow,
+      totalPet: pet.reduce((s, p) => s + p.litros, 0), totalBarril: Object.values(barril).reduce((s, v) => s + v, 0),
+    };
+  });
+  return out;
 }
 
 function PlanejamentoProducao() {
@@ -4886,8 +4996,9 @@ function PlanejamentoProducao() {
     const limite = somarDiasData(hoje, 120);
     const set = new Set(mesesAlvo.filter(c => semanasPorMes[c].some(s => s > hoje && s <= limite)));
     set.add(alvo);
+    set.add(mesAtual); // o mês corrente entra sempre: a previsão dele também é dividida igualmente pelas semanas
     return [...set].sort();
-  }, [mesesAlvo, semanasPorMes, hoje, alvo]);
+  }, [mesesAlvo, semanasPorMes, hoje, alvo, mesAtual]);
 
   // projeção por estilo base para cada mês planejado (com a origem de cada número)
   const projecoes = useMemo(() => {
@@ -4945,7 +5056,8 @@ function PlanejamentoProducao() {
     }).filter(n => n.necessario > 0 || n.barril > 0 || n.pet > 0 || n.estoque > 0).sort((a, b) => b.necessario - a.necessario);
   };
 
-  const descontaMes = (chave) => descontarEstoque && chave === mesesPlano[0];
+  const primeiroMesProducao = mesesPlano.find(c => (semanasPorMes[c] || []).some(sm => sm > hoje));
+  const descontaMes = (chave) => descontarEstoque && chave === primeiroMesProducao;
   const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
     [mesesPlano, projecoes, ovBarril, ovPet, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
@@ -5077,6 +5189,9 @@ function PlanejamentoProducao() {
 
   const semanas = [];
   for (let s = segundaDaSemana(wIni); s <= wFim; s = somarDiasData(s, 7)) semanas.push(s);
+  const semanasSim = [];
+  for (let sm = segundaDaSemana(hojeReal); sm <= wFim; sm = somarDiasData(sm, 7)) semanasSim.push(sm);
+  const envase = simularEnvase({ semanas: semanasSim, necPorMes, semanasPorMes, lotes: lotesExibidos, statusTanques, hojeReal });
   const diasDaSemana = (seg) => [0, 1, 2, 3, 4].map(i => somarDiasData(seg, i));
   const eventosDia = (d) => {
     const k = chaveDia(d);
@@ -5127,13 +5242,13 @@ function PlanejamentoProducao() {
     const st = statusTanques.find(x => x.nome === t.nome);
     if (st && st.situacao !== "vazio" && seg <= (st.pronto || hoje) ) {
       const ate = st.pronto || hoje;
-      if (ate >= seg) itens.push({ txt: `${st.cerveja || "cerveja"} · ${st.situacao === "pronta" ? "✅ pronta no tanque" : "⏳ maturando (pronta " + fmtDataCurta(ate) + ")"}` });
+      if (ate >= seg) itens.push({ txt: `${st.cerveja || "cerveja"} · ${st.situacao === "pronta" ? "🟢 pronta no tanque" : "⏳ maturando (pronta " + fmtDataCurta(ate) + ")"}` });
     }
     lotesExibidos.filter(l => l.tanque === t.nome).forEach(l => {
       if (l.inicio > fim || l.livreAte < seg) return;
       let fase;
-      if (l.fim >= seg && l.inicio <= fim) fase = `🍺 brassagem (${l.aloc.filter(a => a.data >= seg && a.data <= fim).reduce((s, a) => s + a.n, 0)} bat.)`;
-      else if (l.pronto >= seg && l.pronto <= fim) fase = "✅ pronto";
+      if (l.fim >= seg && l.inicio <= fim) fase = `⚙️ brassagem (${l.aloc.filter(a => a.data >= seg && a.data <= fim).reduce((s, a) => s + a.n, 0)} bat.)`;
+      else if (l.pronto >= seg && l.pronto <= fim) fase = "🟢 pronto";
       else if (l.pronto > fim) fase = "⏳ maturando";
       else fase = "🧽 limpeza";
       itens.push({ txt: `${l.estilo}${l.reposicao ? " (reposição)" : ""} · ${fase}`, atrasado: l.atrasado });
@@ -5214,7 +5329,7 @@ function PlanejamentoProducao() {
                 <td style={{ ...td, textAlign: "left" }}>
                   {t.situacao === "vazio" && <span style={{ color: "#4caf6b" }}>🟢 livre</span>}
                   {t.situacao === "maturando" && <span style={{ color: "#C69700" }}>⏳ maturando — libera {fmtDataCurta(t.pronto)}</span>}
-                  {t.situacao === "pronta" && <span style={{ color: "#4caf6b" }}>✅ cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
+                  {t.situacao === "pronta" && <span style={{ color: "#4caf6b" }}>🟢 cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
                   {t.situacao === "sem data" && <span style={{ color: "#e57373" }}>informe os dias no tanque</span>}
                 </td>
               </tr>
@@ -5439,6 +5554,52 @@ function PlanejamentoProducao() {
         Mostrando {fmtDataSem(wIni)} até {fmtDataSem(wFim)} · {capDia} bateladas/dia por tanque grande · {plano.atrasados > 0 ? `⚠️ ${plano.atrasados} lote(s) atrasado(s) (em vermelho)` : "todos os lotes no prazo"}.
       </div>
 
+      {plano.atrasados > 0 && (() => {
+        const atrasados = lotesExibidos.filter(l => l.atrasado);
+        const comDiag = atrasados.filter(l => l.diag);
+        const grupos = { maturacao: [], tanque: [], brassagem: [] };
+        comDiag.forEach(l => grupos[l.diag.causa].push(l));
+        const rotulo = { maturacao: "Maturação não cabe no prazo", tanque: "Tanque ocupado", brassagem: "Fila da brassagem" };
+        const explica = {
+          maturacao: "Mesmo começando hoje, o tempo de maturação passa da data de entrega — é o início do cenário (nada está pronto ainda). Ajuste: reduzir os dias do estilo (coluna Dias ✏️), cobrir essas semanas com estoque de produto acabado ou aceitar o atraso.",
+          tanque: "O tanque ainda está ocupado quando o lote precisaria começar. Ajuste: reduzir os dias do lote anterior, usar outro tanque que libere antes, reduzir a demanda do mês ou liberar um tanque (envasar a cerveja que já está pronta).",
+          brassagem: "O tanque estava livre, mas as regras da brassagem empurraram o início (1 tanque grande por dia, 3 ou 6 bateladas, lote na mesma semana). Ajuste: usar 6 bateladas/dia ou reduzir os dias do estilo.",
+        };
+        return (
+          <div style={{ background: "#2a1212", border: "1px solid #6b1f1f", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#e8a0a0" }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠️ {atrasados.length} lote(s) em vermelho — o que está acontecendo e o que dá para ajustar</div>
+            {comDiag.length === 0 && <div>Este plano foi salvo antes do diagnóstico existir. Clique em “Replanejar com os dados atuais” para ver as causas.</div>}
+            {Object.entries(grupos).filter(([, v]) => v.length).map(([k, v]) => (
+              <div key={k} style={{ marginBottom: 6 }}>
+                <strong>{rotulo[k]} ({v.length})</strong> — {explica[k]}
+              </div>
+            ))}
+            {comDiag.length > 0 && (
+              <div style={{ overflowX: "auto", marginTop: 8 }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead><tr>
+                    <th style={{ ...th, textAlign: "left" }}>Lote</th><th style={th}>Entrega</th><th style={th}>Pronto</th><th style={th}>Atraso</th><th style={{ ...th, textAlign: "left" }}>O que acontece</th><th style={{ ...th, textAlign: "left" }}>O que ajustar</th>
+                  </tr></thead>
+                  <tbody>
+                    {comDiag.slice().sort((a, b) => b.diag.atrasoDias - a.diag.atrasoDias).slice(0, 25).map((l, i) => (
+                      <tr key={i}>
+                        <td style={{ ...td, textAlign: "left", color: "#fff", whiteSpace: "nowrap" }}>{l.tanque} · {l.estilo}</td>
+                        <td style={td}>{fmtDataCurta(l.prazo)}</td><td style={td}>{fmtDataCurta(l.pronto)}</td>
+                        <td style={{ ...td, color: "#e57373", fontWeight: 700 }}>{l.diag.atrasoDias} d</td>
+                        <td style={{ ...td, textAlign: "left", color: "#ddd" }}>{l.diag.texto}</td>
+                        <td style={{ ...td, textAlign: "left", color: "#e8c766" }}>{l.diag.ajuste}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {comDiag.length > 25 && <div style={{ marginTop: 4, color: "#a77" }}>… e mais {comDiag.length - 25} lote(s) (os de maior atraso estão acima).</div>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Tanque a tanque, semana a semana</h4>
       <div style={{ overflowX: "auto", marginBottom: 18 }}>
         <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
@@ -5465,6 +5626,92 @@ function PlanejamentoProducao() {
           </tbody>
         </table>
       </div>
+
+      <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Previsão de vendas da semana · envase · tanque de origem</h4>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8, lineHeight: 1.5 }}>
+        <strong style={{ color: "#bbb" }}>Como lemos:</strong> a previsão de vendas da semana é a projeção do mês (cenário acima) dividida igualmente pelas semanas do mês. Ela separa 🛢️ barril (chope) e 🧴 PET, produto a produto.
+        O envase PET é montado para a semana toda “na mesma tocada”: cada produto é envasado uma vez, em bloco, agrupado por formato (1L, 2L, 500ml…), até {L(CAPACIDADE_ENVASE_PET_DIA)} L/dia, sem voltar ao formato anterior. Cada 1.000 L = 1 pallet.
+        A cerveja sai primeiro dos tanques que ficaram prontos antes. Barril: previsão da semana ÷ 5 dias úteis.
+      </div>
+      {semanas.map((seg, idx) => {
+        const e = envase[chaveDia(seg)];
+        if (!e) return null;
+        const prodB = e.produtos.filter(p => p.emb === "barril").sort((a, b) => b.litros - a.litros);
+        const prodP = e.produtos.filter(p => p.emb === "pet").sort((a, b) => b.litros - a.litros);
+        const faltas = [...e.barril.map(b => ({ estilo: b.estilo, falta: b.falta, tipo: "barril" })), ...e.petDias.flatMap(d => d.blocos.map(b => ({ estilo: b.estilo, falta: b.falta, tipo: "PET" })))].filter(x => x.falta > 50);
+        const faltaPorEstilo = {}; faltas.forEach(x => { faltaPorEstilo[x.estilo] = (faltaPorEstilo[x.estilo] || 0) + x.falta; });
+        const origemTxt = usos => usos.length ? usos.map(u => `${u.tanque} (${L(u.litros)} L)`).join(" + ") : "—";
+        return (
+          <details key={seg.getTime()} open={idx === 0} style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+            <summary style={{ cursor: "pointer", color: "#fff", fontSize: 13 }}>
+              <strong>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
+              <span style={{ color: "#C69700", fontSize: 12 }}> · previsão de vendas {L(e.totalBarril + e.totalPet)} L · 🛢️ {L(e.totalBarril)} L barril · 🧴 {L(e.totalPet)} L PET ({(e.totalPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias de envase · {(e.totalPet / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} pallets)</span>
+            </summary>
+            <div style={{ marginTop: 8 }}>
+              {Object.keys(faltaPorEstilo).length > 0 && (
+                <div style={{ background: "#2a1212", border: "1px solid #6b1f1f", borderRadius: 6, padding: "6px 8px", marginBottom: 8, fontSize: 11, color: "#e8a0a0" }}>
+                  ⚠️ Sem cerveja pronta nos tanques para parte da semana: {Object.entries(faltaPorEstilo).map(([k, v]) => `${k} (falta ${L(v)} L)`).join("; ")}. Isso sai do estoque de produto acabado ou fica em falta — veja o diagnóstico dos lotes em vermelho.
+                </div>
+              )}
+              {e.overflow > 50 && <div style={{ fontSize: 11, color: "#e8a0a0", marginBottom: 6 }}>⚠️ {L(e.overflow)} L de PET não cabem nos 5 dias de envase desta semana ({L(CAPACIDADE_ENVASE_PET_DIA)} L/dia).</div>}
+
+              <div style={{ fontSize: 12, color: "#fff", fontWeight: 700, margin: "4px 0" }}>Previsão de vendas da semana, por produto</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead><tr><th style={{ ...th, textAlign: "left" }}>Produto</th><th style={{ ...th, textAlign: "left" }}>Estilo base</th><th style={{ ...th, textAlign: "left" }}>Tipo</th><th style={th}>Previsão (L)</th><th style={th}>Pallets</th></tr></thead>
+                  <tbody>
+                    {[...prodB, ...prodP].map((p, i) => (
+                      <tr key={i}>
+                        <td style={{ ...td, textAlign: "left", color: "#fff" }}>{p.produto}</td>
+                        <td style={{ ...td, textAlign: "left" }}>{p.estilo}</td>
+                        <td style={{ ...td, textAlign: "left" }}>{p.emb === "barril" ? "🛢️ barril" : "🧴 PET"}</td>
+                        <td style={td}>{L(p.litros)}</td><td style={td}>{(p.litros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
+                      </tr>
+                    ))}
+                    {prodB.length + prodP.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: "left", color: "#666" }}>Sem previsão de vendas nesta semana.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ fontSize: 12, color: "#fff", fontWeight: 700, margin: "10px 0 4px" }}>🧴 Envase PET dia a dia (pallets = litros ÷ 1.000) e de qual tanque sai</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead><tr><th style={{ ...th, textAlign: "left" }}>Dia</th><th style={{ ...th, textAlign: "left" }}>O que envasar</th><th style={th}>Litros</th><th style={th}>Pallets</th><th style={{ ...th, textAlign: "left" }}>Sai do tanque</th></tr></thead>
+                  <tbody>
+                    {e.petDias.map((d, i) => (
+                      <tr key={i}>
+                        <td style={{ ...td, textAlign: "left", color: "#fff", whiteSpace: "nowrap", verticalAlign: "top" }}>{fmtDataSem(d.data)}</td>
+                        <td style={{ ...td, textAlign: "left", verticalAlign: "top" }}>{d.blocos.length === 0 ? <span style={{ color: "#555" }}>sem envase</span> : d.blocos.map((b, j) => <div key={j}>🧴 {b.produto} · {L(b.litros)} L</div>)}</td>
+                        <td style={{ ...td, verticalAlign: "top" }}>{d.litros > 0 ? L(d.litros) : "—"}</td>
+                        <td style={{ ...td, verticalAlign: "top", color: "#C69700", fontWeight: 700 }}>{d.litros > 0 ? (d.litros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—"}</td>
+                        <td style={{ ...td, textAlign: "left", verticalAlign: "top" }}>{d.blocos.map((b, j) => <div key={j} style={{ color: b.falta > 50 ? "#e57373" : "#ddd" }}>{origemTxt(b.usos)}{b.falta > 50 ? ` · falta ${L(b.falta)} L` : ""}</div>)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ fontSize: 12, color: "#fff", fontWeight: 700, margin: "10px 0 4px" }}>🛢️ Barril (semana) e de qual tanque sai</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead><tr><th style={{ ...th, textAlign: "left" }}>Estilo</th><th style={th}>Litros na semana</th><th style={th}>Por dia útil</th><th style={th}>Pallets</th><th style={{ ...th, textAlign: "left" }}>Sai do tanque</th></tr></thead>
+                  <tbody>
+                    {e.barril.sort((a, b) => b.litros - a.litros).map((b, i) => (
+                      <tr key={i}>
+                        <td style={{ ...td, textAlign: "left", color: "#fff" }}>🛢️ {b.estilo}</td>
+                        <td style={td}>{L(b.litros)}</td><td style={td}>{L(b.litros / 5)}</td>
+                        <td style={td}>{(b.litros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
+                        <td style={{ ...td, textAlign: "left", color: b.falta > 50 ? "#e57373" : "#ddd" }}>{origemTxt(b.usos)}{b.falta > 50 ? ` · falta ${L(b.falta)} L` : ""}</td>
+                      </tr>
+                    ))}
+                    {e.barril.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: "left", color: "#666" }}>Sem barril previsto.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        );
+      })}
 
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Programação para a equipe</h4>
       {semanas.map(seg => {
@@ -5495,9 +5742,9 @@ function PlanejamentoProducao() {
                   }));
                   const itens = Object.values(mapa);
                   return itens.length === 0 ? <span style={{ color: "#666" }}>Sem brassagem nesta semana</span> :
-                    itens.map((x, i) => <div key={i} style={{ color: x.l.atrasado ? "#e57373" : "#ddd" }}>🍺 {x.l.tanque}: {x.l.estilo} · {x.n} bat. ({x.dias.join("/")}) · pronto {fmtDataCurta(x.l.pronto)}</div>);
+                    itens.map((x, i) => <div key={i} style={{ color: x.l.atrasado ? "#e57373" : "#ddd" }}>⚙️ {x.l.tanque}: {x.l.estilo} · {x.n} bat. ({x.dias.join("/")}) · pronto {fmtDataCurta(x.l.pronto)}</div>);
                 })()}
-                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>✅ {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
+                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
               </div>
             ) : (
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -5512,9 +5759,9 @@ function PlanejamentoProducao() {
                           {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
                           {brass.map(({ l, n }, i) => {
                             const ini = chaveDia(l.inicio) === chaveDia(d), fimL = chaveDia(l.fim) === chaveDia(d);
-                            return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>🍺 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
+                            return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>⚙️ {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
                           })}
-                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>✅ {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} pronto · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
+                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} pronto · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
                         </td>
                       </tr>
                     );
