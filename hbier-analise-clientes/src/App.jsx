@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.43";
+const APP_VERSION = "v10.44";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -5964,26 +5964,28 @@ function PlanejamentoProducao() {
         Object.keys(suprimentoInicial).forEach(e => estilos.add(e));
         const lista = [...estilos].sort();
         const linhas = lista.map(e => {
-          let saldo = suprimentoInicial[e] || 0;
+          let saldo = (suprimentoInicial[e] || 0) + (descontarEstoque ? (estoqueAcabado[e] || 0) : 0);
           const colunas = meses.map(c => {
             const venda = ((necPorMes.find(x => x.chave === c) || { nec: [] }).nec.find(n => n.estilo === e) || { barril: 0, pet: 0 });
-            const vendido = (venda.barril || 0) + (venda.pet || 0);
+            // mês corrente: só conta o que falta vender (semanas de hoje em diante)
+            const sems = semanasPorMes[c] || []; const restantes = c === mesAtual ? sems.filter(sm => somarDiasData(sm, 6) >= hojeReal).length : sems.length;
+            const vendido = ((venda.barril || 0) + (venda.pet || 0)) * (sems.length ? restantes / sems.length : 1);
             const produzido = lotesExibidos.filter(l => l.estilo === e && mesDe(l.pronto) === c).reduce((a, l) => a + l.volume, 0);
             saldo += produzido - vendido;
             return { produzido, vendido, saldo };
           });
-          return { e, inicial: suprimentoInicial[e] || 0, colunas };
+          return { e, inicial: (suprimentoInicial[e] || 0) + (descontarEstoque ? (estoqueAcabado[e] || 0) : 0), colunas };
         }).filter(r => r.inicial > 0 || r.colunas.some(c => c.produzido > 0 || c.vendido > 0));
         const th3 = { padding: "3px 6px", color: "#888", fontWeight: 600, whiteSpace: "nowrap", textAlign: "right" };
         return (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Por mês (mês em que a cerveja fica <em>pronta</em>): quanto os lotes produzem × quanto a previsão vende, e o <strong style={{ color: "#bbb" }}>saldo acumulado</strong> (começa com a cerveja que já está nos tanques). Saldo alto = sobra de produto; saldo negativo = falta cerveja. Não conta o estoque de produto acabado da aba estoque.</div>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Por mês (mês em que a cerveja fica <em>pronta</em>): quanto os lotes produzem × quanto a previsão vende, e o <strong style={{ color: "#bbb" }}>saldo acumulado</strong> (começa com a cerveja dos tanques e, se ligado, o produto acabado). Saldo alto = sobra de produto; saldo negativo = falta cerveja. O mês corrente conta só as semanas que faltam. “Produz” = lotes que ficam prontos no mês: cerveja que já está nos tanques entra no estoque de hoje, não em “produz”.</div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 11, color: "#ddd" }}>
                 <thead>
                   <tr>
                     <th style={{ ...th3, textAlign: "left" }} rowSpan={2}>Estilo</th>
-                    <th style={th3} rowSpan={2}>Nos tanques hoje</th>
+                    <th style={th3} rowSpan={2}>Estoque hoje (tanques{descontarEstoque ? " + acabado" : ""})</th>
                     {meses.map(c => <th key={c} colSpan={3} style={{ ...th3, textAlign: "center", borderLeft: "1px solid #333" }}>{labelMes(c)}</th>)}
                   </tr>
                   <tr>{meses.map(c => <React.Fragment key={c}><th style={{ ...th3, borderLeft: "1px solid #333" }}>produz</th><th style={th3}>vende</th><th style={th3}>saldo</th></React.Fragment>)}</tr>
