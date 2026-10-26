@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.42";
+const APP_VERSION = "v10.43";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4713,10 +4713,19 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
     const melhor = Math.min(...pequenos.map(o => somarDiasData(o.livre > hoje ? o.livre : hoje, it.dias).getTime()));
     return melhor > somarDiasData(it.mes.prazo, tol).getTime();
   };
+  // escolha do tanque pequeno: o que desperdiça menos cerveja, desde que o outro ainda entregue no prazo
   const melhorPequeno = (it, t) => {
     const waste = Math.max(0, t.capacidade - it.restante);
-    return !pequenos.some(o => o !== t && o.livre <= somarDiasData(t.livre, 3) && Math.max(0, o.capacidade - it.restante) < waste);
+    const prazoEf = somarDiasData(it.mes.prazo, tol);
+    return !pequenos.some(o => {
+      if (o === t) return false;
+      const w = Math.max(0, o.capacidade - it.restante);
+      if (w >= waste - 0.5) return false;
+      const prontoO = somarDiasData(o.livre > hoje ? o.livre : hoje, it.dias + 1);
+      return o.livre <= somarDiasData(t.livre, 3) || prontoO <= prazoEf;
+    });
   };
+
   let guarda = 0;
   while (guarda++ < 2000) {
     const t = estado.slice().sort((a, b) => a.livre - b.livre || b.capacidade - a.capacidade)[0];
@@ -4924,7 +4933,7 @@ function PlanejamentoProducao() {
   const [cenario, setCenario] = useState(cfg0.cenario || "base");
   const [pcts, setPcts] = useState(cfg0.pcts || { min: 80, base: 100, max: 120 });
   const [incluirOutros, setIncluirOutros] = useState(cfg0.incluirOutros ?? true);
-  const [descontarEstoque, setDescontarEstoque] = useState(cfg0.descontarEstoque ?? false);
+  const [descontarEstoque, setDescontarEstoque] = useState(cfg0.descontarEstoque ?? true);
   const [folga, setFolga] = useState(cfg0.folga ?? 3);
   const [limpezaDias, setLimpezaDias] = useState(cfg0.limpezaDias ?? 1);
   const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
@@ -5018,6 +5027,25 @@ function PlanejamentoProducao() {
     });
     return m;
   }, [statusTanques]);
+  // estoque de produto acabado (aba estoque: chope/barril e PET), somado por estilo base
+  const estoqueAcabado = useMemo(() => {
+    const m = {};
+    (produtosNomes || []).forEach(nome => {
+      if (classificarEmbalagem(nome) === "outros") return;
+      const lit = (estoquePorProduto[nome] && estoquePorProduto[nome].litros) || 0;
+      if (lit <= 0) return;
+      const est = estiloDeTexto(nome); if (!est) return;
+      const base = resolverBase(est);
+      m[base] = (m[base] || 0) + lit;
+    });
+    return m;
+  }, [produtosNomes, estoquePorProduto, matchers]);
+  // o que o planejador pode usar já: cerveja nos tanques + (se ligado) produto acabado
+  const suprimentoPlano = useMemo(() => {
+    const m = { ...suprimentoInicial };
+    if (descontarEstoque) Object.keys(estoqueAcabado).forEach(e => { m[e] = (m[e] || 0) + estoqueAcabado[e]; });
+    return m;
+  }, [suprimentoInicial, estoqueAcabado, descontarEstoque]);
 
   // semanas de cada mês e meses planejados (qualquer mês com semana de entrega nos próximos 120 dias + mês-alvo)
   const semanasPorMes = useMemo(() => { const m = {}; mesesAlvo.forEach(c => { m[c] = semanasDoMes(c); }); return m; }, [mesesAlvo]);
@@ -5103,7 +5131,7 @@ function PlanejamentoProducao() {
   };
 
   const primeiroMesProducao = mesesPlano.find(c => (semanasPorMes[c] || []).some(sm => sm > hoje));
-  const descontaMes = (chave) => descontarEstoque && chave === primeiroMesProducao;
+  const descontaMes = () => false; // o estoque de produto acabado agora entra como suprimento (consumido semana a semana), não como desconto do 1º mês
   const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
     [mesesPlano, projecoes, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
@@ -5126,12 +5154,12 @@ function PlanejamentoProducao() {
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
-    const args = { meses: mesesParaPlano, tanques: tanquesPlano, hoje, folga, limpeza: limpezaDias, diasPadrao, suprimentoInicial, horizonteDias: 120, hellesNome: (receitaPorEstilo["HELLES"] || {}).estilo, hellesDias: (receitaPorEstilo["HELLES"] || {}).dias, prioridade, tolerancia: toleranciaSemana, diasLote, repor: reporTanques };
+    const args = { meses: mesesParaPlano, tanques: tanquesPlano, hoje, folga, limpeza: limpezaDias, diasPadrao, suprimentoInicial: suprimentoPlano, horizonteDias: 120, hellesNome: (receitaPorEstilo["HELLES"] || {}).estilo, hellesDias: (receitaPorEstilo["HELLES"] || {}).dias, prioridade, tolerancia: toleranciaSemana, diasLote, repor: reporTanques };
     return {
       p3: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 3 }),
       p6: planejarBrassagem({ ...args, tanques: tanquesPlano.map(t => ({ ...t })), capDia: 6 }),
     };
-  }, [temConfig, mesesParaPlano, tanquesPlano, hoje, folga, limpezaDias, diasPadrao, suprimentoInicial, prioridade, receitaPorEstilo, toleranciaSemana, diasLote, reporTanques]);
+  }, [temConfig, mesesParaPlano, tanquesPlano, hoje, folga, limpezaDias, diasPadrao, suprimentoPlano, prioridade, receitaPorEstilo, toleranciaSemana, diasLote, reporTanques]);
 
   if (!temConfig) {
     return (
@@ -5244,7 +5272,8 @@ function PlanejamentoProducao() {
   const semanas = [];
   for (let s = segundaDaSemana(wIni); s <= wFim; s = somarDiasData(s, 7)) semanas.push(s);
   const semanasSim = [];
-  for (let sm = segundaDaSemana(hojeReal); sm <= wFim; sm = somarDiasData(sm, 7)) semanasSim.push(sm);
+  const fimSim = wFim > somarDiasData(hojeReal, 120) ? wFim : somarDiasData(hojeReal, 120);
+  for (let sm = segundaDaSemana(hojeReal); sm <= fimSim; sm = somarDiasData(sm, 7)) semanasSim.push(sm);
   const envase = simularEnvase({ semanas: semanasSim, necPorMes, semanasPorMes, lotes: lotesExibidos, statusTanques, hojeReal });
 
   // visão tanque a tanque: o que acontece com cada tanque (produção, pronto, saídas de barril/PET, esvaziamento)
@@ -5442,7 +5471,7 @@ function PlanejamentoProducao() {
         <div><strong style={{ color: "#fff" }}>Divisão do mês:</strong> o volume de cada mês é dividido igualmente entre as suas 4 ou 5 semanas; cada fatia precisa estar pronta no início da sua semana (não tudo no dia 1º). Hoje {labelMes(alvo)} tem {(semanasPorMes[alvo] || []).length} semanas ≈ {L(totNec / Math.max(1, (semanasPorMes[alvo] || []).length))} L por semana.</div>
         <div><strong style={{ color: "#fff" }}>Regras dos tanques:</strong> tanques grandes (8.000 L ou mais) ficam sempre com Helles; os pequenos (1.000, 2.000 e 3.000 L) rodam os outros estilos, sempre cheios (6.000 L de Oktoberfest = 2 lotes de 3.000 L, não 8.000 L). Outro estilo só entra em tanque grande se, com os pequenos, ficaria atrasado.</div>
         <div><strong style={{ color: "#fff" }}>Tanque sempre cheio:</strong> cada lote começa assim que o tanque libera (e a brassagem pode); a cerveja pode ficar mais tempo no tanque. Quando a demanda dos próximos 120 dias já está coberta, o tanque que libera é enchido de novo com <em>reposição de estoque</em>, repartida entre os estilos conforme o peso da demanda.</div>
-        <div><strong style={{ color: "#fff" }}>Estoque considerado:</strong> aba <em>estoque</em> da planilha (litros por produto, somados ao estilo). Hoje está <strong>{descontarEstoque ? `LIGADO (desconta ${L(estoqueTotalConsiderado)} L só do 1º mês)` : "DESLIGADO — a necessidade ignora o estoque de produtos acabados"}</strong>. A cerveja que já está nos tanques sempre é considerada.</div>
+        <div><strong style={{ color: "#fff" }}>Estoque considerado:</strong> aba <em>estoque</em> da planilha (litros por produto, somados ao estilo). Hoje está <strong>{descontarEstoque ? `LIGADO (${L(Object.values(estoqueAcabado).reduce((a, v) => a + v, 0))} L de produto acabado abatem o consumo das primeiras semanas)` : "DESLIGADO — o planejamento ignora o estoque de produtos acabados"}</strong>. A cerveja que já está nos tanques sempre é considerada.</div>
         <div><strong style={{ color: "#fff" }}>Sem venda recente:</strong> produtos sem nenhuma venda nos últimos {semVendaMeses || "—"} meses fechados são ignorados (0 = não ignorar).</div>
       </div>
 
@@ -5490,7 +5519,7 @@ function PlanejamentoProducao() {
           <input type="checkbox" checked={reporTanques} onChange={e => setReporTanques(e.target.checked)} /> Repor tanques sem demanda (tanque sempre cheio)
         </label>
         <label style={{ fontSize: 12, color: "#ddd", display: "flex", gap: 6, alignItems: "center" }}>
-          <input type="checkbox" checked={descontarEstoque} onChange={e => setDescontarEstoque(e.target.checked)} /> Descontar estoque atual (aba estoque)
+          <input type="checkbox" checked={descontarEstoque} onChange={e => setDescontarEstoque(e.target.checked)} /> Considerar estoque de produto acabado (aba estoque)
         </label>
       </div>
 
@@ -5856,26 +5885,22 @@ function PlanejamentoProducao() {
       <h4 style={{ color: "#fff", fontSize: 13, margin: "14px 0 6px" }}>📦 Estoque e reposição por estilo · precisa produzir? com quantos dias de antecedência?</h4>
       {(() => {
         const fim = somarDiasData(hojeReal, 120);
-        // consumo diário previsto por estilo (previsão do mês ÷ semanas ÷ 5 dias úteis)
+        // consumo diário por estilo = o mesmo da simulação de envase: barril (semana ÷ 5 dias úteis) + PET nos dias de envase
         const consumo = {}; // estilo -> {chaveDia: litros}
         const diasRec = {};
-        necPorMes.forEach(({ chave, nec }) => {
-          const sems = semanasPorMes[chave] || []; const W = sems.length || 1;
-          nec.forEach(n => {
-            diasRec[n.estilo] = n.diasUsados || n.dias || diasPadrao;
-            const porSemana = ((n.barril || 0) + (n.pet || 0)) / W;
-            sems.forEach(sm => {
-              const ds = []; for (let i = 0; i < 7 && ds.length < 5; i++) { const d = somarDiasData(sm, i); if (diaUtil(d)) ds.push(d); }
-              ds.forEach(d => { (consumo[n.estilo] = consumo[n.estilo] || {}); consumo[n.estilo][chaveDia(d)] = (consumo[n.estilo][chaveDia(d)] || 0) + porSemana / ds.length; });
-            });
-          });
+        const soma = (e, d, v) => { (consumo[e] = consumo[e] || {}); consumo[e][chaveDia(d)] = (consumo[e][chaveDia(d)] || 0) + v; };
+        necPorMes.forEach(({ nec }) => nec.forEach(n => { diasRec[n.estilo] = n.diasUsados || n.dias || diasPadrao; }));
+        Object.keys(envase).forEach(k => {
+          const e = envase[k]; const seg = dataDeChave(k);
+          e.barril.forEach(b => { for (let i = 0; i < 5; i++) soma(b.estilo, somarDiasData(seg, i), b.litros / 5); });
+          e.petDias.forEach(d => d.blocos.forEach(b => soma(b.estilo, d.data, b.litros)));
         });
-        const estilos = new Set([...Object.keys(consumo), ...Object.keys(suprimentoInicial)]);
+        const estilos = new Set([...Object.keys(consumo), ...Object.keys(suprimentoInicial), ...Object.keys(estoqueAcabado)]);
         const simular = (e, comLotes) => {
           const chegadas = {};
           statusTanques.forEach(t => { if (t.base === e && t.litrosNoTanque > 0) { const q = chaveDia(t.pronto && t.pronto > hojeReal ? t.pronto : hojeReal); chegadas[q] = (chegadas[q] || 0) + t.litrosNoTanque; } });
           if (comLotes) lotesExibidos.filter(l => l.estilo === e).forEach(l => { const q = chaveDia(l.pronto); chegadas[q] = (chegadas[q] || 0) + l.volume; });
-          let est = 0, ruptura = null, falta = 0;
+          let est = descontarEstoque ? (estoqueAcabado[e] || 0) : 0, ruptura = null, falta = 0;
           for (let d = hojeReal; d <= fim; d = somarDiasData(d, 1)) {
             const k = chaveDia(d);
             est += chegadas[k] || 0;
@@ -5892,16 +5917,16 @@ function PlanejamentoProducao() {
           const proximo = meus[0] || null;
           const iniciarAte = semLote.ruptura ? somarDiasData(semLote.ruptura, -(dias + 1)) : null; // + 1 dia de brassagem
           const folga = iniciarAte && proximo ? diasEntre(proximo.inicio, iniciarAte) : null;
-          return { e, estoque: suprimentoInicial[e] || 0, semana: total / (120 / 7), semLote, comLote, dias, iniciarAte, proximo, folga, precisa: !!semLote.ruptura };
+          return { e, estoque: suprimentoInicial[e] || 0, acabado: descontarEstoque ? (estoqueAcabado[e] || 0) : 0, semana: total / (120 / 7), semLote, comLote, dias, iniciarAte, proximo, folga, precisa: !!semLote.ruptura };
         });
         const th4 = { padding: "3px 6px", color: "#888", fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" };
         return (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Lógica: o lote produz o tanque cheio e a sobra vai para o estoque (ex.: lote de 1.000 L com 400 L de consumo → 600 L ficam). O consumo previsto dos meses seguintes sai do estoque primeiro; só se produz quando o estoque não cobre. “Iniciar até” = dia da ruptura − dias de maturação − 1 dia de brassagem, para não faltar cerveja. Consumo de dias úteis, próximos 120 dias; não conta o estoque de produto acabado.</div>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Lógica: o lote produz o tanque cheio e a sobra vai para o estoque (ex.: lote de 1.000 L com 400 L de consumo → 600 L ficam). O consumo previsto dos meses seguintes sai do estoque primeiro; só se produz quando o estoque não cobre. “Iniciar até” = dia da ruptura − dias de maturação − 1 dia de brassagem, para não faltar cerveja. O consumo é o mesmo da simulação de envase (barril ÷ 5 dias úteis + PET nos dias de envase), próximos 120 dias; o estoque de produto acabado (aba estoque) entra se a opção estiver ligada.</div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 11, color: "#ddd", width: "100%" }}>
                 <thead><tr>
-                  <th style={{ ...th4, textAlign: "left" }}>Estilo</th><th style={th4}>Estoque nos tanques</th><th style={th4}>Consumo/semana</th>
+                  <th style={{ ...th4, textAlign: "left" }}>Estilo</th><th style={th4}>Nos tanques</th><th style={th4}>Produto acabado</th><th style={th4}>Consumo/semana</th>
                   <th style={th4}>Sem produzir, acaba em</th><th style={th4}>Maturação (dias)</th><th style={th4}>Iniciar brassagem até</th>
                   <th style={{ ...th4, textAlign: "left" }}>Próxima produção do plano</th><th style={{ ...th4, textAlign: "left" }}>Situação</th><th style={th4}>Estoque ao fim de 120 d</th>
                 </tr></thead>
@@ -5910,6 +5935,7 @@ function PlanejamentoProducao() {
                     <tr key={r.e} style={{ borderTop: "1px solid #222" }}>
                       <td style={{ padding: "3px 8px", color: "#fff", whiteSpace: "nowrap" }}>{r.e}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.estoque ? L(r.estoque) + " L" : "—"}</td>
+                      <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.acabado ? L(r.acabado) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.semana ? L(r.semana) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right", color: r.precisa ? "#C69700" : "#4caf6b" }}>{r.precisa ? fmtDataCurta(r.semLote.ruptura) : "cobre os 120 dias"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.dias}</td>
