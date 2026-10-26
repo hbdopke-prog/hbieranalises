@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.14";
+const APP_VERSION = "v10.16";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -4612,17 +4612,26 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
   const lotes = [];
   const fimHorizonte = somarDiasData(hoje, horizonteDias || 120);
 
+  // um lote tem que começar e ENCHER o tanque na mesma semana (seg-sex): se atravessaria o fim de semana,
+  // o lote inteiro começa na segunda-feira seguinte.
   const colocar = (t, release, b, capT) => {
-    let d = proximoUtil(release > t.livre ? release : t.livre);
-    let uso = 0;
-    if (d <= ptrDia) { d = ptrDia; uso = ptrUso; }
-    let rest = b, guard = 0; const aloc = [];
-    while (rest > 0 && guard++ < 800) {
-      const q = Math.min(capDia - uso, rest, capT);
-      if (q > 0) { aloc.push({ data: new Date(d), n: q }); rest -= q; uso += q; }
-      if (rest > 0) { d = proximoUtil(somarDiasData(d, 1)); uso = 0; }
+    let rel = release, res = null;
+    for (let tent = 0; tent < 60; tent++) {
+      let d = proximoUtil(rel > t.livre ? rel : t.livre);
+      let uso = 0;
+      if (d <= ptrDia) { d = ptrDia; uso = ptrUso; }
+      let rest = b, guard = 0; const aloc = [];
+      while (rest > 0 && guard++ < 800) {
+        const q = Math.min(capDia - uso, rest, capT);
+        if (q > 0) { aloc.push({ data: new Date(d), n: q }); rest -= q; uso += q; }
+        if (rest > 0) { d = proximoUtil(somarDiasData(d, 1)); uso = 0; }
+      }
+      res = { inicio: aloc[0].data, fim: aloc[aloc.length - 1].data, aloc, uso };
+      const segIni = segundaDaSemana(res.inicio), segFim = segundaDaSemana(res.fim);
+      if (segIni.getTime() === segFim.getTime()) return res;
+      rel = segFim; // recomeça na segunda-feira da semana seguinte
     }
-    return { inicio: aloc[0].data, fim: aloc[aloc.length - 1].data, aloc, uso };
+    return res;
   };
 
   // demanda: entregas semanais em ordem de prazo (e, no mesmo prazo, as de maturação mais longa primeiro)
@@ -4719,7 +4728,9 @@ function planejarBrassagem({ meses, tanques, capDia, hoje, limpeza, diasPadrao, 
       extra[e] = extra[e] || 0;
     }
   }
-  const naoAgendado = itens.filter(it => it.restante !== null && it.restante > 0.5).map(it => `${it.n.estilo} (${Math.round(it.restante)} L)`);
+  const pend = {};
+  itens.forEach(it => { if (it.restante !== null && it.restante > 0.5) pend[it.n.estilo] = (pend[it.n.estilo] || 0) + it.restante; });
+  const naoAgendado = Object.entries(pend).map(([e, v]) => `${e} (${Math.round(v).toLocaleString("pt-BR")} L)`);
   const diasBrassagem = Object.keys(usado).length;
   const atrasados = lotes.filter(l => l.atrasado).length;
   const ultimoPronto = lotes.reduce((m, l) => (l.pronto > m ? l.pronto : m), hoje);
@@ -4775,6 +4786,7 @@ function PlanejamentoProducao() {
   const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
   const [semVendaMeses, setSemVendaMeses] = useState(cfg0.semVendaMeses ?? 3);
   const [pctMes, setPctMes] = useState(cfg0.pctMes || {});
+  const [estilosOff, setEstilosOff] = useState(cfg0.estilosOff || {}); // estilos desmarcados (não entram no plano)
   const [ovBarril, setOvBarril] = useState(cfg0.ovBarril || {});
   const [ovPet, setOvPet] = useState(cfg0.ovPet || {});
   const [ritmo, setRitmo] = useState(cfg0.ritmo || "auto"); // 'auto' | '3' | '6'
@@ -4896,7 +4908,7 @@ function PlanejamentoProducao() {
 
   const montarNecessidades = (proj, usarOverrides, descontar) => {
     if (!proj) return [];
-    return Object.entries(proj.porEstilo).map(([estilo, o]) => {
+    return Object.entries(proj.porEstilo).filter(([estilo]) => !estilosOff[estilo]).map(([estilo, o]) => {
       const barrilProj = o.barril;
       const ovB = usarOverrides ? ovBarril[estilo] : undefined, ovP = usarOverrides ? ovPet[estilo] : undefined;
       const barril = ovB !== undefined && ovB !== "" ? Number(ovB) : barrilProj;
@@ -4912,7 +4924,7 @@ function PlanejamentoProducao() {
   };
 
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], true, descontarEstoque),
-    [projecoes, alvo, ovBarril, ovPet, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
+    [projecoes, alvo, ovBarril, ovPet, estilosOff, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   // cada mês vira N entregas semanais iguais (volume do mês ÷ nº de semanas), cada uma pronta até o início da semana
   const mesesParaPlano = useMemo(() => {
@@ -4927,7 +4939,7 @@ function PlanejamentoProducao() {
       });
     });
     return out.sort((a, b) => a.prazo - b.prazo);
-  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, estilosOff, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
@@ -4968,7 +4980,7 @@ function PlanejamentoProducao() {
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ alvo, cenario, pcts, pctMes, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5012,6 +5024,14 @@ function PlanejamentoProducao() {
     return { brass, prontos };
   };
 
+  const projAlvoBruto = projecoes[alvo] || { porEstilo: {} };
+  // lista de todos os estilos base (com os derivados) e o volume projetado do mês-alvo, para marcar o que entra no plano
+  const listaEstilos = (receitas || []).filter(r => resolverBase(r.estilo) === r.estilo).map(r => {
+    const o = (projAlvoBruto.porEstilo || {})[r.estilo];
+    const vol = o ? o.barril + o.pet : 0;
+    const derivados = (receitas || []).filter(x => x.estilo !== r.estilo && resolverBase(x.estilo) === r.estilo).map(x => x.estilo);
+    return { estilo: r.estilo, vol, derivados, dias: r.dias };
+  }).sort((a, b) => b.vol - a.vol || a.estilo.localeCompare(b.estilo));
   const totBarril = necessidades.reduce((s, n) => s + n.barrilProd, 0);
   const totPet = necessidades.reduce((s, n) => s + n.petProd, 0);
   const totNec = necessidades.reduce((s, n) => s + n.necessario, 0);
@@ -5183,6 +5203,25 @@ function PlanejamentoProducao() {
         <label style={{ fontSize: 12, color: "#ddd", display: "flex", gap: 6, alignItems: "center" }}>
           <input type="checkbox" checked={descontarEstoque} onChange={e => setDescontarEstoque(e.target.checked)} /> Descontar estoque atual (aba estoque)
         </label>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#aaa", marginBottom: 6, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span>Estilos que entram no plano ({listaEstilos.filter(e => !estilosOff[e.estilo]).length} de {listaEstilos.length} marcados) — desmarque os que não quer mais produzir</span>
+          <button style={{ ...btn("#4caf6b"), padding: "2px 8px" }} onClick={() => setEstilosOff({})}>marcar todos</button>
+          <button style={{ ...btn("#888"), padding: "2px 8px" }} onClick={() => { const o = {}; listaEstilos.forEach(e => { o[e.estilo] = true; }); setEstilosOff(o); }}>desmarcar todos</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 6 }}>
+          {listaEstilos.map(e => (
+            <label key={e.estilo} style={{ fontSize: 12, color: estilosOff[e.estilo] ? "#666" : "#ddd", display: "flex", gap: 6, alignItems: "flex-start", background: "#161616", border: "1px solid #2a2a2a", borderRadius: 6, padding: "6px 8px" }}>
+              <input type="checkbox" checked={!estilosOff[e.estilo]} onChange={() => setEstilosOff(p => ({ ...p, [e.estilo]: !p[e.estilo] }))} style={{ marginTop: 2 }} />
+              <span>
+                <strong>{e.estilo}</strong> <span style={{ color: "#888" }}>· {L(e.vol)} L em {labelMes(alvo)}</span>
+                {e.derivados.length > 0 && <div style={{ fontSize: 10, color: "#777" }}>inclui: {e.derivados.join(", ")}</div>}
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
 
       <div style={{ marginBottom: 14 }}>
