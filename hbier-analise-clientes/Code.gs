@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v3.3
+ * Versão: v3.4
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -90,6 +90,7 @@ const SHEET_TANQUES = "tanques";
 const SHEET_RECEITAS = "receitas";
 const SHEET_PLANO = "plano_salvo";
 const SHEET_CENARIOS = "cenarios_salvos";
+const SHEET_UNIOES = "uniao_clientes"; // uniões de clientes (ex.: todas as lojas Miller), JSON em pedaços
 
 function doGet(e) {
   try {
@@ -127,11 +128,14 @@ function doGet(e) {
 
     let cenariosSalvos = "";
     try { cenariosSalvos = lerCenariosSalvos(ss); } catch (e4) { cenariosSalvos = ""; }
+    let unioesClientes = "";
+    try { unioesClientes = lerUnioesClientes(ss); } catch (e5) { unioesClientes = ""; }
 
     return jsonResponse({
       ok: true,
       dados: combinado,
       cenariosSalvos: cenariosSalvos,
+      unioesClientes: unioesClientes,
       planoSalvo: planoSalvo,
       tanques: tanques,
       receitas: receitas,
@@ -224,6 +228,28 @@ function salvarCenariosSalvos(texto) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_CENARIOS);
   if (!sheet) sheet = ss.insertSheet(SHEET_CENARIOS);
+  texto = String(texto || "");
+  const TAM = 40000;
+  const pedacos = [];
+  for (let i = 0; i < texto.length; i += TAM) pedacos.push([texto.substring(i, i + TAM)]);
+  if (!pedacos.length) pedacos.push([""]);
+  sheet.clearContents();
+  sheet.getRange(1, 1, pedacos.length, 1).setValues(pedacos);
+  sheet.getRange(1, 2).setValue(new Date());
+  return { ok: true };
+}
+// Uniões de clientes (compartilhadas entre aparelhos): lista JSON em pedaços na aba "uniao_clientes"
+function lerUnioesClientes(ss) {
+  const sheet = ss.getSheetByName(SHEET_UNIOES);
+  if (!sheet) return "";
+  const ultima = sheet.getLastRow();
+  if (ultima < 1) return "";
+  return sheet.getRange(1, 1, ultima, 1).getValues().map(function (l) { return String(l[0] || ""); }).join("");
+}
+function salvarUnioesClientes(texto) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_UNIOES);
+  if (!sheet) sheet = ss.insertSheet(SHEET_UNIOES);
   texto = String(texto || "");
   const TAM = 40000;
   const pedacos = [];
@@ -456,6 +482,9 @@ function doPost(e) {
     }
     if (corpo.action === "salvarCenarios") {
       return jsonResponse(salvarCenariosSalvos(corpo.cenarios));
+    }
+    if (corpo.action === "salvarUnioes") {
+      return jsonResponse(salvarUnioesClientes(corpo.unioes));
     }
     if (corpo.action === "salvarPlano") {
       return jsonResponse(salvarPlanoSalvo(corpo.plano));

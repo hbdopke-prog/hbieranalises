@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.49";
+const APP_VERSION = "v10.50";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -153,6 +153,7 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 }
 
 // Paleta de cores pra distinguir anos sobrepostos no mesmo gráfico (12 meses no eixo X)
+const PALETA_PIZZA10 = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c", "#f1c40f", "#e84393"];
 const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
 // Grupos/canais que pesam muito nos filtros "Todos" (consumo interno, eventos, venda online -
 // muitos clientes/pedidos de baixo valor unitário) e por isso ficam DE FORA da seleção padrão.
@@ -345,7 +346,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto, cenariosSalvosTexto) {
+function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto, cenariosSalvosTexto, unioesTexto) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -420,7 +421,7 @@ function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receita
     labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
     produtosDados: porProduto, produtosNomes, produtosPeriodos,
     estoquePorProduto,
-    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "", cenariosSalvosTexto: cenariosSalvosTexto || "",
+    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "", cenariosSalvosTexto: cenariosSalvosTexto || "", unioesTexto: unioesTexto || "",
   };
 }
 
@@ -3574,13 +3575,52 @@ function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRem
   );
 }
 
+// ---- União de clientes (ex.: todas as lojas Miller viram um cliente só no Top Clientes) ----
+const PALAVRAS_GENERICAS = new Set(["bar", "restaurante", "mercado", "supermercado", "supermercados", "casa", "emporio", "pizzaria", "distribuidora", "comercio", "comercial", "loja", "lojas", "cervejaria", "adega", "hotel", "pousada", "padaria", "lanchonete", "boteco", "pub", "churrascaria", "cafe", "hamburgueria", "empresa", "grupo", "clube", "sociedade", "associacao", "cooperativa", "posto", "armazem", "minimercado", "mini", "super", "hiper", "hipermercado", "distribuicao", "bebidas", "eventos", "ltda", "me", "epp", "eireli", "sa", "cia", "de", "da", "do", "das", "dos", "e", "em", "o", "a", "the", "filial", "matriz", "unidade", "restaurantes", "bares", "mercearia", "conveniencia", "tabacaria", "choperia", "chopp", "chope", "cerveja", "cervejas", "boteco", "balneario", "quiosque", "espaco", "centro", "santa", "sao", "nova", "novo"]);
+function normalizarNomeCliente(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function tokensSignificativos(s) {
+  return normalizarNomeCliente(s).split(" ").filter(t => t.length >= 3 && !/^\d+$/.test(t) && !PALAVRAS_GENERICAS.has(t));
+}
+// redes que o usuário já pediu para unir (apelidos do mesmo grupo)
+const REDES_CONHECIDAS = [
+  { nome: "Zaffari + Stok Center", tokens: ["zaffari", "stok"] },
+  { nome: "Miller", tokens: ["miller"] },
+  { nome: "Terra Nostra", tokens: ["terra nostra"] },
+];
+
 function MesTab() {
-  const { dados, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, labelDoCliente } = useData();
+  const { dados, nomes, nomesVisiveis, grupos, clientesPorGrupo, periodos, labelDoCliente, razaoSocialDoCliente, unioesTexto } = useData();
   const [gruposSel, setGruposSel] = useState(() => gruposPadrao(grupos));
   const [buscaCliente, setBuscaCliente] = useState("");
   const [ordenacao, setOrdenacao] = useState("litros"); // 'litros' | 'faturamento' | 'precoLitro'
   const [expandido, setExpandido] = useState(false);
   const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
+
+  // uniões de clientes: [{ id, nome, codigos: [] }] — guardadas na planilha (aba uniao_clientes) e neste navegador
+  const [unioes, setUnioes] = useState(() => {
+    try { const a = unioesTexto ? JSON.parse(unioesTexto) : null; if (Array.isArray(a)) return a; } catch (e) { /* ignora */ }
+    try { const b = JSON.parse(localStorage.getItem("hbier_unioes_clientes") || "[]"); return Array.isArray(b) ? b : []; } catch (e) { return []; }
+  });
+  const [msgUniao, setMsgUniao] = useState("");
+  const [painelUniao, setPainelUniao] = useState(false);
+  const [novaUniao, setNovaUniao] = useState({ nome: "", codigos: [] });
+  const [buscaUniao, setBuscaUniao] = useState("");
+  const [metricaPizza, setMetricaPizza] = useState("litros"); // 'litros' | 'faturamento'
+  async function persistirUnioes(lista, msgOk) {
+    setUnioes(lista);
+    try { localStorage.setItem("hbier_unioes_clientes", JSON.stringify(lista)); } catch (e) { /* ignora */ }
+    try {
+      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarUnioes", unioes: JSON.stringify(lista) }) });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.erro || "falha ao salvar");
+      setMsgUniao(msgOk);
+    } catch (e) {
+      setMsgUniao("⚠️ Não consegui gravar na planilha (" + (e.message || e) + "). Atualize o Code.gs para v3.4 e reimplante; por ora ficou só neste navegador.");
+    }
+  }
+  const unioesPorCodigo = useMemo(() => { const m = {}; unioes.forEach(u => u.codigos.forEach(c => { m[c] = u; })); return m; }, [unioes]);
 
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
@@ -3625,32 +3665,92 @@ function MesTab() {
     if (!chavesConsideradas.length) return [];
     const chaves = new Set(chavesConsideradas);
     const chavesAnt = new Set(chavesAnoAnterior);
-    return clientesFiltrados
+    const brutos = clientesFiltrados
       .map(codigo => {
         let fat = 0, lit = 0, fatAnt = 0, litAnt = 0;
         (dados[codigo] || []).forEach(r => {
           if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; }
           if (chavesAnt.has(r.chave)) { fatAnt += r.faturamento; litAnt += r.litros; }
         });
-        if (fat <= 0 && lit <= 0) return null;
-        const teveAnoAnterior = chavesAnt.size > 0 && (fatAnt > 0 || litAnt > 0);
-        return {
-          codigo, fat, lit, precoLitro: precoMedioLitro(fat, lit),
-          varFat: teveAnoAnterior ? calcularVariacao(fat, fatAnt) : null,
-          varLit: teveAnoAnterior ? calcularVariacao(lit, litAnt) : null,
-        };
+        if (fat <= 0 && lit <= 0 && fatAnt <= 0 && litAnt <= 0) return null;
+        return { codigo, fat, lit, fatAnt, litAnt };
       })
       .filter(Boolean);
-  }, [clientesFiltrados, dados, chavesConsideradas, chavesAnoAnterior]);
+    // funde os clientes de cada união numa linha só
+    const porChave = new Map();
+    brutos.forEach(c => {
+      const u = unioesPorCodigo[c.codigo];
+      const k = u ? `u:${u.id}` : c.codigo;
+      const x = porChave.get(k) || { codigo: k, rotulo: u ? `🔗 ${u.nome}` : null, qtd: 0, fat: 0, lit: 0, fatAnt: 0, litAnt: 0 };
+      x.fat += c.fat; x.lit += c.lit; x.fatAnt += c.fatAnt; x.litAnt += c.litAnt; x.qtd += 1;
+      porChave.set(k, x);
+    });
+    return [...porChave.values()].filter(x => x.fat > 0 || x.lit > 0).map(x => {
+      const teveAnoAnterior = chavesAnt.size > 0 && (x.fatAnt > 0 || x.litAnt > 0);
+      return {
+        ...x, precoLitro: precoMedioLitro(x.fat, x.lit),
+        varFat: teveAnoAnterior ? calcularVariacao(x.fat, x.fatAnt) : null,
+        varLit: teveAnoAnterior ? calcularVariacao(x.lit, x.litAnt) : null,
+      };
+    });
+  }, [clientesFiltrados, dados, chavesConsideradas, chavesAnoAnterior, unioesPorCodigo]);
 
   const clientesOrdenados = useMemo(() => {
     const campo = ordenacao === "litros" ? "lit" : ordenacao === "faturamento" ? "fat" : "precoLitro";
     return [...clientesMes].sort((a, b) => (b[campo] || 0) - (a[campo] || 0));
   }, [clientesMes, ordenacao]);
 
+  const rotuloDe = c => c.rotulo || labelDoCliente[c.codigo];
   const clientesExibidos = buscaCliente.trim()
-    ? clientesOrdenados.filter(c => (labelDoCliente[c.codigo] || "").toLowerCase().includes(buscaCliente.toLowerCase()))
+    ? clientesOrdenados.filter(c => (rotuloDe(c) || "").toLowerCase().includes(buscaCliente.toLowerCase()))
     : clientesOrdenados;
+
+  // sugestões de agrupamento: mesma razão social, nome que começa igual, ou rede conhecida
+  const sugestoes = useMemo(() => {
+    if (!painelUniao) return [];
+    const base = nomesVisiveis.filter(c => !unioesPorCodigo[c]);
+    const chaves = new Set(chavesConsideradas);
+    const volume = c => (dados[c] || []).reduce((a, r) => a + (chaves.has(r.chave) ? r.litros : 0), 0);
+    const grupos = new Map();
+    const add = (k, motivo, c) => { const g = grupos.get(k) || { motivo, codigos: new Set() }; g.codigos.add(c); grupos.set(k, g); };
+    base.forEach(c => {
+      const rs = normalizarNomeCliente(razaoSocialDoCliente[c]);
+      if (rs && rs.length > 4) add("rs:" + rs, `mesma razão social (${razaoSocialDoCliente[c]})`, c);
+      const t = tokensSignificativos(labelDoCliente[c]);
+      if (t.length) add("tk:" + t[0], `nome começa com “${t[0]}”`, c);
+    });
+    REDES_CONHECIDAS.forEach(r => {
+      base.forEach(c => {
+        const nm = normalizarNomeCliente(labelDoCliente[c] + " " + (razaoSocialDoCliente[c] || ""));
+        if (r.tokens.some(t => nm.includes(t))) add("rede:" + r.nome, `rede conhecida: ${r.nome}`, c);
+      });
+    });
+    const lista = [];
+    const usados = new Set();
+    // redes conhecidas primeiro, depois razão social, depois nome
+    ["rede:", "rs:", "tk:"].forEach(pref => {
+      [...grupos.entries()].filter(([k]) => k.startsWith(pref)).forEach(([k, g]) => {
+        const cods = [...g.codigos].filter(c => pref === "rede:" || !usados.has(c));
+        if (cods.length < 2) return;
+        const vol = cods.reduce((a, c) => a + volume(c), 0);
+        const nome = pref === "rede:" ? k.slice(5) : pref === "tk:" ? k.slice(3).replace(/^./, ch => ch.toUpperCase()) : (labelDoCliente[cods[0]] || "Grupo");
+        cods.forEach(c => usados.add(c));
+        lista.push({ chave: k, nome, motivo: g.motivo, codigos: cods, vol });
+      });
+    });
+    return lista.sort((a, b) => b.vol - a.vol).slice(0, 40);
+  }, [painelUniao, nomesVisiveis, unioesPorCodigo, dados, chavesConsideradas, labelDoCliente, razaoSocialDoCliente]);
+
+  // pizza: 10 maiores (já com as uniões) + Outros
+  const dadosPizzaClientes = useMemo(() => {
+    const campo = metricaPizza === "faturamento" ? "fat" : "lit";
+    const ord = [...clientesMes].sort((a, b) => b[campo] - a[campo]);
+    const top = ord.slice(0, 10).map(c => ({ nome: c.rotulo || labelDoCliente[c.codigo], valor: c[campo] }));
+    const resto = ord.slice(10).reduce((a, c) => a + c[campo], 0);
+    if (resto > 0) top.push({ nome: `Outros (${Math.max(0, ord.length - 10)} clientes)`, valor: resto, outros: true });
+    return top.filter(d => d.valor > 0);
+  }, [clientesMes, metricaPizza, labelDoCliente]);
+  const totalPizzaClientes = dadosPizzaClientes.reduce((a, d) => a + d.valor, 0);
 
   const LIMITE_PADRAO = 30;
   const clientesVisiveisNaLista = expandido ? clientesExibidos : clientesExibidos.slice(0, LIMITE_PADRAO);
@@ -3670,7 +3770,7 @@ function MesTab() {
           const resumo = [["Período", rotuloPeriodo], ["Litros total", nx(totalLit)], ["Faturamento total (R$)", nx(totalFat)],
             ["Preço médio geral (R$/L)", nx(precoLitroGeral)], ["Clientes com venda no período", clientesMes.length]];
           const ranking = [["#", "Cliente", "Litros", "Litros - Var. vs ano ant. (%)", "Faturamento (R$)", "Faturamento - Var. vs ano ant. (%)", "Preço médio (R$/L)"],
-            ...clientesExibidos.map((c, i) => [i + 1, labelDoCliente[c.codigo], nx(c.lit), pctX(c.varLit), nx(c.fat), pctX(c.varFat), nx(c.precoLitro)])];
+            ...clientesExibidos.map((c, i) => [i + 1, rotuloDe(c), nx(c.lit), pctX(c.varLit), nx(c.fat), pctX(c.varFat), nx(c.precoLitro)])];
           return [{ nome: "Resumo", linhas: resumo }, { nome: "Ranking de clientes", linhas: ranking }];
         }} />
         <BotaoImprimir label="Imprimir Top Clientes" />
@@ -3725,6 +3825,64 @@ function MesTab() {
         </div>
       </div>
 
+      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <strong style={{ color: "#fff", fontSize: 13 }}>🔗 Unir clientes</strong>
+          <span style={{ color: "#888", fontSize: 12 }}>junte lojas da mesma rede (ex.: todos os Miller) para ver como um cliente só.</span>
+          <button style={chipBtnStyle} onClick={() => setPainelUniao(v => !v)}>{painelUniao ? "Fechar" : `Abrir (${unioes.length} união(ões))`}</button>
+        </div>
+        {msgUniao && <div style={{ color: "#bfe6cc", fontSize: 12, marginTop: 6 }}>{msgUniao}</div>}
+        {painelUniao && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Uniões criadas</div>
+            {unioes.length === 0 && <div style={{ color: "#666", fontSize: 12, marginBottom: 8 }}>Nenhuma ainda. Use as sugestões abaixo ou crie a sua.</div>}
+            {unioes.map(u => (
+              <div key={u.id} style={{ border: "1px solid #333", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <input value={u.nome} onChange={e => setUnioes(l => l.map(x => x.id === u.id ? { ...x, nome: e.target.value } : x))} onBlur={() => persistirUnioes(unioes, "União renomeada.")}
+                    style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "3px 8px", fontSize: 13, fontWeight: 700 }} />
+                  <span style={{ color: "#888", fontSize: 12 }}>{u.codigos.length} cliente(s)</span>
+                  <button style={{ ...chipBtnStyle, color: "#e57373", padding: "2px 8px" }} onClick={() => persistirUnioes(unioes.filter(x => x.id !== u.id), `União “${u.nome}” desfeita.`)}>desfazer união</button>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {u.codigos.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c] || c} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, codigos: x.codigos.filter(y => y !== c) } : x).filter(x => x.codigos.length > 1), "Cliente retirado da união.")}>×</span></span>)}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>💡 Sugestões de agrupamento <span style={{ color: "#888", fontWeight: 400 }}>— por razão social, começo do nome e redes conhecidas; ordenadas pelo volume do período</span></div>
+            {sugestoes.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Sem sugestões (ou todos os candidatos já estão unidos).</div>}
+            {sugestoes.map(sg => (
+              <div key={sg.chave} style={{ border: "1px solid #2a2a2a", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <strong style={{ color: "#fff", fontSize: 13 }}>{sg.nome}</strong>
+                  <span style={{ color: "#888", fontSize: 12 }}>{sg.codigos.length} clientes · {fmtLitros(sg.vol)} no período · {sg.motivo}</span>
+                  <button style={{ ...chipBtnStyle, color: "#4caf6b", padding: "2px 8px" }} onClick={() => persistirUnioes([...unioes, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, nome: sg.nome, codigos: sg.codigos }], `União “${sg.nome}” criada.`)}>unir</button>
+                </div>
+                <div style={{ color: "#999", fontSize: 11, marginTop: 4 }}>{sg.codigos.map(c => labelDoCliente[c]).join(" · ")}</div>
+              </div>
+            ))}
+
+            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>➕ Criar união à mão</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+              <input placeholder="Nome da união (ex.: Miller)" value={novaUniao.nome} onChange={e => setNovaUniao(p => ({ ...p, nome: e.target.value }))} style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 220 }} />
+              <input placeholder="Buscar cliente para adicionar…" value={buscaUniao} onChange={e => setBuscaUniao(e.target.value)} style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 240 }} />
+              <button style={chipBtnStyle} disabled={!novaUniao.nome.trim() || novaUniao.codigos.length < 2} onClick={() => { persistirUnioes([...unioes, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, nome: novaUniao.nome.trim(), codigos: novaUniao.codigos }], `União “${novaUniao.nome.trim()}” criada.`); setNovaUniao({ nome: "", codigos: [] }); setBuscaUniao(""); }}>criar união ({novaUniao.codigos.length} selecionados)</button>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+              {novaUniao.codigos.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c]} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setNovaUniao(p => ({ ...p, codigos: p.codigos.filter(x => x !== c) }))}>×</span></span>)}
+            </div>
+            {buscaUniao.trim().length >= 2 && (
+              <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #333", borderRadius: 6 }}>
+                {nomesVisiveis.filter(c => !unioesPorCodigo[c] && !novaUniao.codigos.includes(c) && normalizarNomeCliente(labelDoCliente[c]).includes(normalizarNomeCliente(buscaUniao))).slice(0, 40).map(c => (
+                  <div key={c} onClick={() => setNovaUniao(p => ({ ...p, codigos: [...p.codigos, c] }))} style={{ padding: "4px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #262624" }}>+ {labelDoCliente[c]}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label={`Litros (${rotuloPeriodo})`} value={fmtLitros(totalLit)} icon={<Droplets size={14} />} />
         <StatCard label={`Faturamento (${rotuloPeriodo})`} value={fmtMoeda(totalFat)} icon={<TrendingUp size={14} />} />
@@ -3771,7 +3929,7 @@ function MesTab() {
                   {clientesVisiveisNaLista.map((c, idx) => (
                     <tr key={c.codigo}>
                       <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
-                      <td style={{ ...tdStyle, color: "#fff", fontWeight: 600 }}>{labelDoCliente[c.codigo]}</td>
+                      <td style={{ ...tdStyle, color: "#fff", fontWeight: 600 }}>{rotuloDe(c)}{c.rotulo && <span style={{ color: "#888", fontWeight: 400 }}> · {c.qtd} cliente(s) unidos</span>}</td>
                       <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C69700" : "#ddd" }}>
                         {fmtLitros(c.lit)}<PctInline variacao={c.varLit} />
                       </td>
@@ -3792,6 +3950,24 @@ function MesTab() {
                 </button>
               </div>
             )}
+
+            <div style={{ marginTop: 24 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+                <strong style={{ color: "#fff", fontSize: 13 }}>🥧 Participação dos 10 maiores clientes · {rotuloPeriodo}</strong>
+                <button onClick={() => setMetricaPizza("litros")} style={modoBtnStyle(metricaPizza === "litros", "#C69700")}>Litros</button>
+                <button onClick={() => setMetricaPizza("faturamento")} style={modoBtnStyle(metricaPizza === "faturamento", "#02601D")}>Faturamento</button>
+              </div>
+              <ResponsiveContainer width="100%" height={340}>
+                <PieChart>
+                  <Pie data={dadosPizzaClientes} dataKey="valor" nameKey="nome" cx="36%" cy="50%" outerRadius={115}>
+                    {dadosPizzaClientes.map((d, idx) => <Cell key={d.nome} fill={d.outros ? "#555" : PALETA_PIZZA10[idx % PALETA_PIZZA10.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={v => (metricaPizza === "faturamento" ? fmtMoeda(v) : fmtLitros(v))} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalPizzaClientes} campo="valor" formatador={metricaPizza === "faturamento" ? fmtMoeda : fmtLitros} />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ color: "#666", fontSize: 11 }}>Considera as uniões criadas e o filtro de categoria acima. “Outros” soma todos os demais clientes.</div>
+            </div>
           </>
         )}
       </Section>
@@ -7044,7 +7220,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || ""));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || "", json.unioesClientes || ""));
         setStatus("ready");
       })
       .catch(err => {
