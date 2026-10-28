@@ -19,7 +19,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.50";
+const APP_VERSION = "v10.51";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3599,20 +3599,21 @@ function MesTab() {
   const [modo, setModo] = useState("mes"); // 'mes' | 'periodo'
 
   // uniões de clientes: [{ id, nome, codigos: [] }] — guardadas na planilha (aba uniao_clientes) e neste navegador
-  const [unioes, setUnioes] = useState(() => {
-    try { const a = unioesTexto ? JSON.parse(unioesTexto) : null; if (Array.isArray(a)) return a; } catch (e) { /* ignora */ }
-    try { const b = JSON.parse(localStorage.getItem("hbier_unioes_clientes") || "[]"); return Array.isArray(b) ? b : []; } catch (e) { return []; }
-  });
+  const lerUnioes = (texto) => { try { const a = JSON.parse(texto); if (Array.isArray(a)) return { ligadas: true, lista: a }; if (a && Array.isArray(a.lista)) return { ligadas: a.ligadas !== false, lista: a.lista }; } catch (e) { /* ignora */ } return null; };
+  const unioesIniciais = useMemo(() => (unioesTexto && lerUnioes(unioesTexto)) || lerUnioes(localStorage.getItem("hbier_unioes_clientes") || "") || { ligadas: true, lista: [] }, []);
+  const [unioes, setUnioes] = useState(unioesIniciais.lista);
+  const [unioesLigadas, setUnioesLigadas] = useState(unioesIniciais.ligadas); // chave geral: liga/desliga todas as uniões
   const [msgUniao, setMsgUniao] = useState("");
   const [painelUniao, setPainelUniao] = useState(false);
   const [novaUniao, setNovaUniao] = useState({ nome: "", codigos: [] });
   const [buscaUniao, setBuscaUniao] = useState("");
   const [metricaPizza, setMetricaPizza] = useState("litros"); // 'litros' | 'faturamento'
-  async function persistirUnioes(lista, msgOk) {
-    setUnioes(lista);
-    try { localStorage.setItem("hbier_unioes_clientes", JSON.stringify(lista)); } catch (e) { /* ignora */ }
+  async function persistirUnioes(lista, msgOk, ligadas = unioesLigadas) {
+    setUnioes(lista); setUnioesLigadas(ligadas);
+    const texto = JSON.stringify({ ligadas, lista });
+    try { localStorage.setItem("hbier_unioes_clientes", texto); } catch (e) { /* ignora */ }
     try {
-      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarUnioes", unioes: JSON.stringify(lista) }) });
+      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarUnioes", unioes: texto }) });
       const j = await r.json();
       if (!j.ok) throw new Error(j.erro || "falha ao salvar");
       setMsgUniao(msgOk);
@@ -3620,7 +3621,9 @@ function MesTab() {
       setMsgUniao("⚠️ Não consegui gravar na planilha (" + (e.message || e) + "). Atualize o Code.gs para v3.4 e reimplante; por ora ficou só neste navegador.");
     }
   }
-  const unioesPorCodigo = useMemo(() => { const m = {}; unioes.forEach(u => u.codigos.forEach(c => { m[c] = u; })); return m; }, [unioes]);
+  // só as uniões ativas (e com a chave geral ligada) fundem clientes; todas (ativas ou não) saem das sugestões
+  const unioesPorCodigo = useMemo(() => { const m = {}; if (unioesLigadas) unioes.filter(u => u.ativa !== false).forEach(u => u.codigos.forEach(c => { m[c] = u; })); return m; }, [unioes, unioesLigadas]);
+  const codigosEmAlgumaUniao = useMemo(() => { const m = {}; unioes.forEach(u => u.codigos.forEach(c => { m[c] = true; })); return m; }, [unioes]);
 
   const mesAtualReal = chaveMesAtualReal();
   const [mesSelecionado, setMesSelecionado] = useState(() =>
@@ -3708,7 +3711,7 @@ function MesTab() {
   // sugestões de agrupamento: mesma razão social, nome que começa igual, ou rede conhecida
   const sugestoes = useMemo(() => {
     if (!painelUniao) return [];
-    const base = nomesVisiveis.filter(c => !unioesPorCodigo[c]);
+    const base = nomesVisiveis.filter(c => !codigosEmAlgumaUniao[c]);
     const chaves = new Set(chavesConsideradas);
     const volume = c => (dados[c] || []).reduce((a, r) => a + (chaves.has(r.chave) ? r.litros : 0), 0);
     const grupos = new Map();
@@ -3739,7 +3742,7 @@ function MesTab() {
       });
     });
     return lista.sort((a, b) => b.vol - a.vol).slice(0, 40);
-  }, [painelUniao, nomesVisiveis, unioesPorCodigo, dados, chavesConsideradas, labelDoCliente, razaoSocialDoCliente]);
+  }, [painelUniao, nomesVisiveis, codigosEmAlgumaUniao, dados, chavesConsideradas, labelDoCliente, razaoSocialDoCliente]);
 
   // pizza: 10 maiores (já com as uniões) + Outros
   const dadosPizzaClientes = useMemo(() => {
@@ -3829,6 +3832,9 @@ function MesTab() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <strong style={{ color: "#fff", fontSize: 13 }}>🔗 Unir clientes</strong>
           <span style={{ color: "#888", fontSize: 12 }}>junte lojas da mesma rede (ex.: todos os Miller) para ver como um cliente só.</span>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: unioesLigadas ? "#4caf6b" : "#888", fontWeight: 700, cursor: "pointer" }} title="Liga ou desliga todas as uniões de uma vez; elas continuam salvas.">
+            <input type="checkbox" checked={unioesLigadas} onChange={e => persistirUnioes(unioes, e.target.checked ? "Uniões ativadas." : "Uniões desativadas (continuam salvas).", e.target.checked)} /> Usar uniões
+          </label>
           <button style={chipBtnStyle} onClick={() => setPainelUniao(v => !v)}>{painelUniao ? "Fechar" : `Abrir (${unioes.length} união(ões))`}</button>
         </div>
         {msgUniao && <div style={{ color: "#bfe6cc", fontSize: 12, marginTop: 6 }}>{msgUniao}</div>}
@@ -3838,7 +3844,10 @@ function MesTab() {
             {unioes.length === 0 && <div style={{ color: "#666", fontSize: 12, marginBottom: 8 }}>Nenhuma ainda. Use as sugestões abaixo ou crie a sua.</div>}
             {unioes.map(u => (
               <div key={u.id} style={{ border: "1px solid #333", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: u.ativa === false ? 0.55 : 1 }}>
+                  <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: u.ativa === false ? "#888" : "#4caf6b", cursor: "pointer" }}>
+                    <input type="checkbox" checked={u.ativa !== false} onChange={e => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, ativa: e.target.checked } : x), e.target.checked ? `“${u.nome}” ativada.` : `“${u.nome}” desativada (continua salva).`)} /> ativa
+                  </label>
                   <input value={u.nome} onChange={e => setUnioes(l => l.map(x => x.id === u.id ? { ...x, nome: e.target.value } : x))} onBlur={() => persistirUnioes(unioes, "União renomeada.")}
                     style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "3px 8px", fontSize: 13, fontWeight: 700 }} />
                   <span style={{ color: "#888", fontSize: 12 }}>{u.codigos.length} cliente(s)</span>
@@ -3874,7 +3883,7 @@ function MesTab() {
             </div>
             {buscaUniao.trim().length >= 2 && (
               <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #333", borderRadius: 6 }}>
-                {nomesVisiveis.filter(c => !unioesPorCodigo[c] && !novaUniao.codigos.includes(c) && normalizarNomeCliente(labelDoCliente[c]).includes(normalizarNomeCliente(buscaUniao))).slice(0, 40).map(c => (
+                {nomesVisiveis.filter(c => !codigosEmAlgumaUniao[c] && !novaUniao.codigos.includes(c) && normalizarNomeCliente(labelDoCliente[c]).includes(normalizarNomeCliente(buscaUniao))).slice(0, 40).map(c => (
                   <div key={c} onClick={() => setNovaUniao(p => ({ ...p, codigos: [...p.codigos, c] }))} style={{ padding: "4px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #262624" }}>+ {labelDoCliente[c]}</div>
                 ))}
               </div>
