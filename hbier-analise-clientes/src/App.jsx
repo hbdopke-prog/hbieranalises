@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
+import { INSUMOS } from "./insumosData";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
@@ -19,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.51";
+const APP_VERSION = "v10.52";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -5140,6 +5141,168 @@ function simularEnvase({ semanas, necPorMes, semanasPorMes, lotes, statusTanques
   return out;
 }
 
+// ───────────────────────── Compra de insumos (a partir do plano de brassagem/envase) ─────────────────────────
+function codInsumoEstilo(estilo, resolverBase) {
+  const cands = [estilo, resolverBase ? resolverBase(estilo) : estilo].map(normalizarPlano);
+  for (const n of cands) {
+    if (/SEM ALCOOL/.test(n)) return "1021S";
+    if (/OKTOBERFEST/.test(n)) return "1161";
+    if (/SAAZ/.test(n)) return "1171";
+    if (/HELLES|REDEFORT/.test(n)) return "1021";
+    if (/RED ALE|(^|[^A-Z])RED([^A-Z]|$)/.test(n)) return "1121";
+    if (/IPA/.test(n)) return "1131";
+    if (/(^|[^A-Z])APA([^A-Z]|$)/.test(n)) return "1111";
+    if (/STOUT/.test(n)) return "1081";
+    if (/TRIPEL/.test(n)) return "1051";
+    if (/CROCOL/.test(n)) return "1041";
+  }
+  return null;
+}
+function codEmbalagemPet(produto, estilo, rotulo) {
+  const n = normalizarPlano(`${produto} ${estilo}`);
+  if (rotulo === "500ml") {
+    if (/SEM ALCOOL/.test(n)) return "1021P09";
+    if (/IPA/.test(n)) return "1021P08";
+    if (/RED/.test(n) && !/REDEFORT/.test(n)) return "1021P06";
+    return "1021P05";
+  }
+  if (rotulo === "2L") return "1021P";
+  if (/REDEFORT/.test(n)) return "1021R";
+  if (/OKTOBERFEST/.test(n)) return "1161P";
+  if (/SAAZ/.test(n)) return "1171P";
+  return "1021P1";
+}
+
+function PlanoInsumos({ lotes, envase, hojeReal, resolverBase }) {
+  const [margem, setMargem] = useState(15);
+  const [visao, setVisao] = useState("semanal");
+  const [soComCompra, setSoComCompra] = useState(true);
+  const [estOv, setEstOv] = useState(() => { try { return JSON.parse(localStorage.getItem("hbier_insumos_est") || "{}"); } catch (e) { return {}; } });
+  const setEst = (c, v) => setEstOv(o => { const n = { ...o }; if (v === "" || v == null) delete n[c]; else n[c] = Number(v); try { localStorage.setItem("hbier_insumos_est", JSON.stringify(n)); } catch (e) {} return n; });
+
+  const calc = useMemo(() => {
+    const dow = hojeReal.getDay();
+    const primeira = somarDiasData(hojeReal, (3 - dow + 7) % 7); // próxima quarta (ou hoje, se for quarta)
+    const eventos = []; // {data, rec:{cod:qtd}}
+    const semReceita = {}, embGenerica = {};
+    const somar = (alvo, receita, mult) => { Object.keys(receita || {}).forEach(c => { alvo[c] = (alvo[c] || 0) + receita[c] * mult; }); };
+    (lotes || []).forEach(l => {
+      const cod = codInsumoEstilo(l.estilo, resolverBase);
+      if (!cod || !INSUMOS.rec[cod]) { semReceita[l.estilo] = (semReceita[l.estilo] || 0) + (l.volume || 0); return; }
+      (l.aloc || []).forEach(a => {
+        if (a.data < hojeReal) return;
+        const q = {}; somar(q, INSUMOS.rec[cod], (a.n * LITROS_BATELADA) / 1000);
+        eventos.push({ data: a.data, q });
+      });
+    });
+    Object.values(envase || {}).forEach(e => (e.petDias || []).forEach(d => {
+      if (d.data < hojeReal) return;
+      const q = {};
+      d.blocos.forEach(b => {
+        const lit = b.fmt === "500ml" ? 0.5 : parseFloat(b.fmt) || 1;
+        const cod = codEmbalagemPet(b.produto, b.estilo, b.fmt);
+        somar(q, INSUMOS.prec[cod], b.litros / lit);
+      });
+      if (Object.keys(q).length) eventos.push({ data: d.data, q });
+    }));
+    let nSem = 4;
+    eventos.forEach(ev => { ev.w = Math.max(0, Math.floor((ev.data - primeira) / 86400000 / 7)); if (ev.w + 1 > nSem) nSem = ev.w + 1; });
+    const semanas = Array.from({ length: nSem }, (_, i) => somarDiasData(primeira, 7 * i));
+    const need = {}; // cod -> [necessidade por semana]
+    eventos.forEach(ev => Object.keys(ev.q).forEach(c => { (need[c] = need[c] || Array(nSem).fill(0))[ev.w] += ev.q[c]; }));
+    return { semanas, need, semReceita, nSem };
+  }, [lotes, envase, hojeReal, resolverBase]);
+
+  const linhas = useMemo(() => {
+    const m = 1 + (Number(margem) || 0) / 100;
+    return INSUMOS.itens.map(it => {
+      const nec = calc.need[it.c] || Array(calc.nSem).fill(0);
+      let est = estOv[it.c] != null ? estOv[it.c] : it.est;
+      const compra = [];
+      nec.forEach(n => {
+        const alvo = n * m;
+        let comp = 0;
+        if (est < alvo - 1e-9) comp = Math.ceil((alvo - est) / it.pack - 1e-9) * it.pack;
+        compra.push(comp); est = est + comp - n;
+      });
+      return { ...it, estIni: estOv[it.c] != null ? estOv[it.c] : it.est, nec, compra, totNec: nec.reduce((s, v) => s + v, 0), totCompra: compra.reduce((s, v) => s + v, 0) };
+    });
+  }, [calc, margem, estOv]);
+
+  const colunas = useMemo(() => {
+    const out = [];
+    const chaveDe = (d) => {
+      if (visao === "semanal") return { k: chaveDia(d), r: fmtDataCurta(d) };
+      const a = d.getFullYear(), mm = d.getMonth() + 1;
+      if (visao === "mensal") return { k: `${a}-${String(mm).padStart(2, "0")}`, r: `${String(mm).padStart(2, "0")}/${a}` };
+      const t = Math.ceil(mm / 3); return { k: `${a}-T${t}`, r: `T${t}/${a}` };
+    };
+    calc.semanas.forEach((d, i) => { const c = chaveDe(d); let x = out.find(o => o.k === c.k); if (!x) { x = { k: c.k, r: c.r, idx: [] }; out.push(x); } x.idx.push(i); });
+    return out;
+  }, [calc, visao]);
+
+  const visiveis = linhas.filter(l => !soComCompra || l.totCompra > 0 || l.totNec > 0);
+  const custoCol = colunas.map(c => linhas.reduce((s, l) => s + c.idx.reduce((z, i) => z + l.compra[i], 0) * (l.preco || 0), 0));
+  const custoTot = custoCol.reduce((s, v) => s + v, 0);
+  const fmt = (v, un) => (v === 0 ? "–" : v.toLocaleString("pt-BR", { maximumFractionDigits: v < 10 && un !== "UN" ? 2 : 1 }));
+  const th = { padding: "5px 8px", textAlign: "right", color: "#aaa", fontWeight: 600, borderBottom: "1px solid #333", whiteSpace: "nowrap", position: "sticky", top: 0, background: "#161616" };
+  const td = { padding: "4px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd" };
+  const cats = [...new Set(INSUMOS.itens.map(i => i.k))];
+  const btnV = (id, t) => <button key={id} onClick={() => setVisao(id)} style={{ background: visao === id ? "#C69700" : "transparent", color: visao === id ? "#000" : "#ccc", border: "1px solid #444", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{t}</button>;
+  const semRec = Object.keys(calc.semReceita);
+
+  return (
+    <div style={{ marginTop: 18, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 12 }}>
+      <h4 style={{ color: "#fff", fontSize: 14, margin: "0 0 4px" }}>📦 Compra de insumos · calculada a partir do plano acima</h4>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+        Consumo = receita média de cada estilo × bateladas programadas (malte, lúpulo, aditivos…) + embalagens PET × unidades envasadas na simulação. Cada compra chega numa quarta-feira e cobre a semana (quarta a terça). Compra = necessidade × (1 + margem) − estoque, arredondada ao pacote (malte 25 kg, lúpulo 5 kg). Muda a projeção/lotes e tudo recalcula.
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        {btnV("semanal", "Semanal")}{btnV("mensal", "Mensal")}{btnV("trimestral", "Trimestral")}
+        <label style={{ fontSize: 12, color: "#ccc" }}>margem de segurança <input type="number" value={margem} min={0} max={100} onChange={e => setMargem(e.target.value)} style={{ width: 52, background: "#222", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "2px 4px" }} /> %</label>
+        <label style={{ fontSize: 12, color: "#ccc" }}><input type="checkbox" checked={soComCompra} onChange={e => setSoComCompra(e.target.checked)} /> ocultar itens sem consumo</label>
+        <BotaoExcel nomeAba="Compra de insumos" gerar={() => [
+          { nome: "Compra", linhas: [["Código", "Insumo", "Categoria", "Unid.", "Pacote", "Estoque inicial", ...colunas.map(c => c.r), "Total compra", "Custo est. R$"],
+            ...visiveis.map(l => [l.c, l.n, l.k, l.un, l.pack, l.estIni, ...colunas.map(c => Math.round(c.idx.reduce((z, i) => z + l.compra[i], 0) * 1000) / 1000), Math.round(l.totCompra * 1000) / 1000, Math.round(l.totCompra * (l.preco || 0))]),
+            ["", "CUSTO ESTIMADO (R$)", "", "", "", "", ...custoCol.map(v => Math.round(v)), "", Math.round(custoTot)]] },
+          { nome: "Necessidade", linhas: [["Código", "Insumo", "Unid.", ...calc.semanas.map(d => fmtDataCurta(d)), "Total"], ...visiveis.map(l => [l.c, l.n, l.un, ...l.nec.map(v => Math.round(v * 1000) / 1000), Math.round(l.totNec * 1000) / 1000])] },
+        ]} />
+      </div>
+      {semRec.length > 0 && <div style={{ fontSize: 11, color: "#e0a040", marginBottom: 6 }}>⚠️ Sem receita de insumos para: {semRec.join(", ")} — esses lotes não entraram na compra.</div>}
+      <div style={{ overflow: "auto", maxHeight: 560 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
+          <thead><tr>
+            <th style={{ ...th, textAlign: "left" }}>Insumo</th><th style={th}>Un.</th><th style={th}>Pacote</th><th style={th}>Estoque</th>
+            {colunas.map(c => <th key={c.k} style={th}>{c.r}</th>)}<th style={th}>Total</th><th style={th}>R$ est.</th>
+          </tr></thead>
+          <tbody>
+            {cats.map(cat => {
+              const ls = visiveis.filter(l => l.k === cat); if (!ls.length) return null;
+              return (<React.Fragment key={cat}>
+                <tr><td colSpan={colunas.length + 6} style={{ padding: "6px 8px", color: "#C69700", fontWeight: 700, background: "#1d1d1d" }}>{cat}</td></tr>
+                {ls.map(l => (
+                  <tr key={l.c}>
+                    <td style={{ ...td, textAlign: "left", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={l.c}>{l.n}</td>
+                    <td style={td}>{l.un}</td><td style={td}>{l.pack}</td>
+                    <td style={td}><input type="number" value={estOv[l.c] != null ? estOv[l.c] : l.est} onChange={e => setEst(l.c, e.target.value)} style={{ width: 70, background: "#222", color: estOv[l.c] != null ? "#C69700" : "#ddd", border: "1px solid #333", borderRadius: 4, padding: "1px 4px", textAlign: "right" }} /></td>
+                    {colunas.map(c => { const v = c.idx.reduce((z, i) => z + l.compra[i], 0); return <td key={c.k} style={{ ...td, background: v > 0 ? "#1f2a1f" : "transparent", color: v > 0 ? "#8fe3a0" : "#555", fontWeight: v > 0 ? 700 : 400 }}>{fmt(v, l.un)}</td>; })}
+                    <td style={{ ...td, fontWeight: 700 }}>{fmt(l.totCompra, l.un)}</td>
+                    <td style={td}>{Math.round(l.totCompra * (l.preco || 0)).toLocaleString("pt-BR")}</td>
+                  </tr>
+                ))}
+              </React.Fragment>);
+            })}
+            <tr><td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#fff" }} colSpan={4}>CUSTO ESTIMADO (R$)</td>
+              {custoCol.map((v, i) => <td key={i} style={{ ...td, fontWeight: 700, color: "#fff" }}>{Math.round(v).toLocaleString("pt-BR")}</td>)}
+              <td style={td}></td><td style={{ ...td, fontWeight: 700, color: "#fff" }}>{Math.round(custoTot).toLocaleString("pt-BR")}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>Estoque de referência = relatório BeerSales de 31/10/2026 (edite na célula; fica salvo neste navegador, em dourado). Preço = custo médio dos pedidos de produção. Embalagens de PET sem receita própria usam a do mesmo formato (Helles).</div>
+    </div>
+  );
+}
+
 function PlanejamentoProducao() {
   const { produtosDados, produtosNomes, produtosPeriodos, tanques, receitas, estoquePorProduto, planoSalvoTexto, cenariosSalvosTexto } = useData();
   const mesAtual = chaveMesAtualReal();
@@ -6475,6 +6638,7 @@ function PlanejamentoProducao() {
         </table>
       </div>
       <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>* estilo sem prazo cadastrado (usei {diasPadrao} dias). Vermelho = lote que não fica pronto até o início da semana de entrega.</div>
+      <PlanoInsumos lotes={lotesExibidos} envase={envase} hojeReal={hojeReal} resolverBase={resolverBase} />
       </>) : (
         <div style={{ color: "#777", fontSize: 12 }}>Valide o cenário acima para ver a programação dos tanques e da brassagem.</div>
       )}
