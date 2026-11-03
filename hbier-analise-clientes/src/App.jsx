@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.55";
+const APP_VERSION = "v10.56";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -203,6 +203,7 @@ const PRODUTOS_FIXOS_GRAFICO = [
   { apelido: "Oktoberfest 1L", tokens: [/OKTOBERFEST/, /\b1\s*L\b/], excluir: [/CHOPE/] },
   { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [/SEM/] },
   { apelido: "Chope Red Ale", tokens: [/CHOPE\s+RED\s+ALE/], excluir: [/OOMPA/] },
+  { apelido: "Chope American IPA", tokens: [/CHOPE\s+AMERICAN\s+IPA\s*$/], excluir: [] },
   { apelido: "Chope APA", tokens: [/CHOPE/, /\bAPA\b/], excluir: [/CACAU/] },
   { apelido: "Chope English IPA", tokens: [/CHOPE/, /ENGLISH/], excluir: [] },
   { apelido: "Chope Oompa Loompa Red Ale", tokens: [/CHOPE/, /OOMPA/], excluir: [] },
@@ -252,6 +253,7 @@ const FAMILIAS_COR = {
   teal: ["#14B8A6", "#5EEAD4", "#0F766E", "#CCFBF1", "#134E4A"],
   chocolate: ["#92400E", "#D97706", "#78350F", "#FCD9A8", "#451A03"],
   mostarda: ["#CA8A04", "#EAB308", "#A16207", "#FEF08A", "#713F12"],
+  oliva: ["#808000", "#BDBD4A", "#5A5A00", "#E4E4A8", "#3A3A00"],
   cinza: ["#9CA3AF", "#D1D5DB", "#6B7280", "#E5E7EB", "#374151"],
 };
 const FAMILIAS_RESERVA = ["rosa", "marrom", "teal", "indigo", "lima", "coral", "ambar", "grafite", "cinza"];
@@ -264,6 +266,7 @@ function familiaCorProduto(nome) {
     if (/HELLES/.test(n)) return "laranja";
     if (/CACAU/.test(n)) return "chocolate";
     if (/\bAPA\b/.test(n)) return "lima";
+    if (/AMERICAN\s+IPA\s*$/.test(n)) return "oliva";
     if (/ENGLISH/.test(n)) return "indigo";
     if (/WEIZEN/.test(n)) return "ambar";
     if (/STOUT/.test(n)) return "grafite";
