@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.54";
+const APP_VERSION = "v10.55";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -201,8 +201,16 @@ const PRODUTOS_FIXOS_GRAFICO = [
   { apelido: "Sem Álcool 500ml", tokens: [/^PET\b/, /SEM/, /ALCOOL/, /500\s*ML/], excluir: [/CHOPE/] },
   { apelido: "Redefort 1L", tokens: [/REDEFORT/, /\b1\s*L\b/], excluir: [/CHOPE/] },
   { apelido: "Oktoberfest 1L", tokens: [/OKTOBERFEST/, /\b1\s*L\b/], excluir: [/CHOPE/] },
-  { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [] },
-  { apelido: "Chope Red", tokens: [/CHOPE/, /\bRED\b/], excluir: [/REDEFORT/] },
+  { apelido: "Chope Helles", tokens: [/CHOPE/, /HELLES/], excluir: [/SEM/] },
+  { apelido: "Chope Red Ale", tokens: [/CHOPE\s+RED\s+ALE/], excluir: [/OOMPA/] },
+  { apelido: "Chope APA", tokens: [/CHOPE/, /\bAPA\b/], excluir: [/CACAU/] },
+  { apelido: "Chope English IPA", tokens: [/CHOPE/, /ENGLISH/], excluir: [] },
+  { apelido: "Chope Oompa Loompa Red Ale", tokens: [/CHOPE/, /OOMPA/], excluir: [] },
+  { apelido: "Chope Weizen", tokens: [/CHOPE/, /WEIZEN/], excluir: [] },
+  { apelido: "Chope Stout", tokens: [/CHOPE/, /STOUT/], excluir: [] },
+  { apelido: "Chope Cacau APA", tokens: [/CHOPE/, /CACAU/], excluir: [] },
+  { apelido: "Chope Oktoberfest", tokens: [/CHOPE/, /OKTOBERFEST/], excluir: [] },
+  { apelido: "Chope Pale Ale", tokens: [/CHOPE\s+PALE\s+ALE/], excluir: [] },
 ];
 
 function encontrarProdutoFixo(def, nomes) {
@@ -235,12 +243,33 @@ const FAMILIAS_COR = {
   rosa: ["#EC4899", "#F9A8D4", "#BE185D", "#FCE7F3", "#831843"],
   laranja: ["#F97316", "#FDBA74", "#C2410C", "#FFEDD5", "#7C2D12"],
   marrom: ["#A16207", "#D6B88A", "#713F12", "#E7D3B3", "#451A03"],
+  lima: ["#84CC16", "#BEF264", "#4D7C0F", "#ECFCCB", "#365314"],
+  indigo: ["#6366F1", "#A5B4FC", "#4338CA", "#E0E7FF", "#312E81"],
+  coral: ["#FB7185", "#FDA4AF", "#E11D48", "#FFE4E6", "#881337"],
+  bordo: ["#BE123C", "#F43F5E", "#881337", "#FDA4AF", "#4C0519"],
+  ambar: ["#F59E0B", "#FCD34D", "#B45309", "#FDE68A", "#78350F"],
+  grafite: ["#64748B", "#CBD5E1", "#334155", "#E2E8F0", "#0F172A"],
+  teal: ["#14B8A6", "#5EEAD4", "#0F766E", "#CCFBF1", "#134E4A"],
+  chocolate: ["#92400E", "#D97706", "#78350F", "#FCD9A8", "#451A03"],
+  mostarda: ["#CA8A04", "#EAB308", "#A16207", "#FEF08A", "#713F12"],
   cinza: ["#9CA3AF", "#D1D5DB", "#6B7280", "#E5E7EB", "#374151"],
 };
-const FAMILIAS_RESERVA = ["ciano", "rosa", "laranja", "marrom", "azul", "vermelho", "cinza"];
+const FAMILIAS_RESERVA = ["rosa", "marrom", "teal", "indigo", "lima", "coral", "ambar", "grafite", "cinza"];
 function familiaCorProduto(nome) {
   const n = normalizarTextoProduto(nome);
-  if (classificarEmbalagem(nome) === "chope") return "laranja";
+  if (classificarEmbalagem(nome) === "chope") {
+    if (/SEM\s*ALCOOL/.test(n)) return "ciano";
+    if (/OOMPA/.test(n)) return "coral";
+    if (/RED\s*ALE/.test(n)) return "bordo";
+    if (/HELLES/.test(n)) return "laranja";
+    if (/CACAU/.test(n)) return "chocolate";
+    if (/\bAPA\b/.test(n)) return "lima";
+    if (/ENGLISH/.test(n)) return "indigo";
+    if (/WEIZEN/.test(n)) return "ambar";
+    if (/STOUT/.test(n)) return "grafite";
+    if (/OKTOBERFEST/.test(n)) return "mostarda";
+    if (/PALE\s*ALE/.test(n)) return "teal";
+  }
   if (/SEM\s*ALCOOL/.test(n)) return "ciano";
   if (/REDEFORT/.test(n)) return "rosa";
   if (/OKTOBERFEST/.test(n)) return "marrom";
