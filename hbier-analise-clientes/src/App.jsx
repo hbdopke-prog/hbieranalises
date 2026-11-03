@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.56";
+const APP_VERSION = "v10.57";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -413,7 +413,7 @@ function useData() {
 // Cada cliente é identificado pelo CÓDIGO (não pelo nome) - isso evita que
 // clientes com o mesmo nome/razão social (ex: várias lojas da mesma rede)
 // sejam misturados num só. O nome exibido/buscado é o Nome Fantasia.
-function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto, cenariosSalvosTexto, unioesTexto) {
+function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receitas, planoSalvoTexto, cenariosSalvosTexto, unioesTexto, analitico) {
   const porCliente = {};       // codigo -> rows[]
   const grupoDoCliente = {};   // codigo -> grupo
   const labelDoCliente = {};   // codigo -> nome fantasia (exibido/buscado)
@@ -488,7 +488,7 @@ function processarDados(linhas, produtosPorTipo, linhasEstoque, tanques, receita
     labelDoCliente, razaoSocialDoCliente, dataCriacaoDoCliente,
     produtosDados: porProduto, produtosNomes, produtosPeriodos,
     estoquePorProduto,
-    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "", cenariosSalvosTexto: cenariosSalvosTexto || "", unioesTexto: unioesTexto || "",
+    tanques: tanques || [], receitas: receitas || [], planoSalvoTexto: planoSalvoTexto || "", cenariosSalvosTexto: cenariosSalvosTexto || "", unioesTexto: unioesTexto || "", analitico: analitico || { produtos: [], linhas: [] },
   };
 }
 
@@ -3667,7 +3667,7 @@ function MesTab() {
 
   // uniões de clientes: [{ id, nome, codigos: [] }] — guardadas na planilha (aba uniao_clientes) e neste navegador
   const lerUnioes = (texto) => { try { const a = JSON.parse(texto); if (Array.isArray(a)) return { ligadas: true, lista: a }; if (a && Array.isArray(a.lista)) return { ligadas: a.ligadas !== false, lista: a.lista }; } catch (e) { /* ignora */ } return null; };
-  const unioesIniciais = useMemo(() => (unioesTexto && lerUnioes(unioesTexto)) || lerUnioes(localStorage.getItem("hbier_unioes_clientes") || "") || { ligadas: true, lista: [] }, []);
+  const unioesIniciais = useMemo(() => (typeof window !== "undefined" && window.__hbUnioesTxt && lerUnioes(window.__hbUnioesTxt)) || (unioesTexto && lerUnioes(unioesTexto)) || lerUnioes(localStorage.getItem("hbier_unioes_clientes") || "") || { ligadas: true, lista: [] }, []);
   const [unioes, setUnioes] = useState(unioesIniciais.lista);
   const [unioesLigadas, setUnioesLigadas] = useState(unioesIniciais.ligadas); // chave geral: liga/desliga todas as uniões
   const [msgUniao, setMsgUniao] = useState("");
@@ -3678,7 +3678,7 @@ function MesTab() {
   async function persistirUnioes(lista, msgOk, ligadas = unioesLigadas) {
     setUnioes(lista); setUnioesLigadas(ligadas);
     const texto = JSON.stringify({ ligadas, lista });
-    try { localStorage.setItem("hbier_unioes_clientes", texto); } catch (e) { /* ignora */ }
+    try { window.__hbUnioesTxt = texto; localStorage.setItem("hbier_unioes_clientes", texto); } catch (e) { /* ignora */ }
     try {
       const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarUnioes", unioes: texto }) });
       const j = await r.json();
@@ -7435,6 +7435,343 @@ function ProdutosTab() {
   );
 }
 
+// ───────────────────────── Aba "Cliente Analítico" (cliente × produto, a partir da aba `analitico`) ─────────────────────────
+const TIPOS_ORDEM = ["Chope", "PET", "Garrafa", "Lata", "Growler", "Outros"];
+const COR_TIPO = { Chope: "#F59E0B", PET: "#22C55E", Garrafa: "#3B82F6", Lata: "#A855F7", Growler: "#06B6D4", Outros: "#9CA3AF" };
+function tipoDoProduto(nome) {
+  const n = normalizarTextoProduto(nome);
+  if (/^CHOPE/.test(n)) return "Chope";
+  if (/^PET\b|GROWLER PET/.test(n)) return "PET";
+  if (/RECARGA|GROWLER/.test(n)) return "Growler";
+  if (/^GARRAFA/.test(n)) return "Garrafa";
+  if (/^LATA/.test(n)) return "Lata";
+  return "Outros";
+}
+const lerUnioesTexto = (texto) => { try { const a = JSON.parse(texto); if (Array.isArray(a)) return { ligadas: true, lista: a }; if (a && Array.isArray(a.lista)) return { ligadas: a.ligadas !== false, lista: a.lista }; } catch (e) { /* ignora */ } return null; };
+
+function ClienteAnaliticoTab() {
+  const { analitico, nomes, grupos, clientesPorGrupo, labelDoCliente, razaoSocialDoCliente, unioesTexto } = useData();
+  const A = analitico || { produtos: [], linhas: [] };
+  const prodInfo = useMemo(() => A.produtos.map(n => ({ nome: n, tipo: tipoDoProduto(n) })), [A]);
+  const periodosA = useMemo(() => [...new Set(A.linhas.map(r => r[2]))].sort(), [A]);
+  const porCliente = useMemo(() => { const m = {}; A.linhas.forEach(r => { (m[r[0]] = m[r[0]] || []).push(r); }); return m; }, [A]);
+  const rotulo = (c) => labelDoCliente[c] || c;
+
+  // seleção
+  const [busca, setBusca] = useState("");
+  const [codsSel, setCodsSel] = useState([]);
+  const [gruposSel, setGruposSel] = useState([]);
+  const [unioesSel, setUnioesSel] = useState([]);
+  const [modo, setModo] = useState("juntos"); // 'juntos' | 'separados'
+  const [vendaSo, setVendaSo] = useState(false);
+  const [tipoFiltro, setTipoFiltro] = useState("todos");
+  const [ini, setIni] = useState(() => periodosA[Math.max(0, periodosA.length - 12)] || "");
+  const [fim, setFim] = useState(() => periodosA[periodosA.length - 1] || "");
+  const [metrica, setMetrica] = useState("litros"); // litros | faturamento | precoLitro | precoUn
+  const [produtoPreco, setProdutoPreco] = useState("");
+  const [detalhe, setDetalhe] = useState("");
+  const [metricaTipo, setMetricaTipo] = useState("litros");
+  const [tipoPct, setTipoPct] = useState(true);
+
+  // uniões (grupos firmados) — mesma lista da aba Top Clientes, gravada na planilha
+  const ini0 = useMemo(() => (typeof window !== "undefined" && window.__hbUnioesTxt && lerUnioesTexto(window.__hbUnioesTxt)) || (unioesTexto && lerUnioesTexto(unioesTexto)) || lerUnioesTexto((() => { try { return localStorage.getItem("hbier_unioes_clientes") || ""; } catch (e) { return ""; } })()) || { ligadas: true, lista: [] }, []);
+  const [unioes, setUnioes] = useState(ini0.lista);
+  const [ligadas] = useState(ini0.ligadas);
+  const [nomeGrupo, setNomeGrupo] = useState("");
+  const [msg, setMsg] = useState("");
+  async function gravarUnioes(lista, ok) {
+    setUnioes(lista);
+    const texto = JSON.stringify({ ligadas, lista });
+    try { window.__hbUnioesTxt = texto; localStorage.setItem("hbier_unioes_clientes", texto); } catch (e) { /* ignora */ }
+    try {
+      const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "salvarUnioes", unioes: texto }) });
+      const j = await r.json(); if (!j.ok) throw new Error(j.erro || "falha ao salvar");
+      setMsg(ok);
+    } catch (e) { setMsg("⚠️ Não consegui gravar na planilha (" + (e.message || e) + "); ficou só neste navegador."); }
+  }
+
+  const codigosSel = useMemo(() => {
+    const s = new Set(codsSel);
+    gruposSel.forEach(g => (clientesPorGrupo[g] || []).forEach(c => s.add(c)));
+    unioes.filter(u => unioesSel.includes(u.id)).forEach(u => u.codigos.forEach(c => s.add(c)));
+    return s;
+  }, [codsSel, gruposSel, unioesSel, unioes, clientesPorGrupo]);
+
+  const entidades = useMemo(() => {
+    if (!codigosSel.size) return [];
+    if (modo === "juntos") {
+      const partes = [...codsSel.map(rotulo), ...gruposSel.map(g => `Grupo ${g}`), ...unioes.filter(u => unioesSel.includes(u.id)).map(u => u.nome)];
+      const nome = partes.length <= 3 ? partes.join(" + ") : `${partes.slice(0, 2).join(" + ")} + ${partes.length - 2}`;
+      return [{ id: "sel", nome: `${nome} (${codigosSel.size} cliente${codigosSel.size > 1 ? "s" : ""})`, codigos: [...codigosSel] }];
+    }
+    const out = []; const usados = new Set();
+    unioes.filter(u => unioesSel.includes(u.id)).forEach(u => { out.push({ id: "u" + u.id, nome: u.nome, codigos: u.codigos }); u.codigos.forEach(c => usados.add(c)); });
+    [...codigosSel].filter(c => !usados.has(c)).forEach(c => out.push({ id: "c" + c, nome: rotulo(c), codigos: [c] }));
+    return out;
+  }, [codigosSel, modo, codsSel, gruposSel, unioesSel, unioes, labelDoCliente]);
+
+  const linhasDe = (codigos) => { const out = []; codigos.forEach(c => (porCliente[c] || []).forEach(r => out.push(r))); return out; };
+  const passa = (r, usarTipo = true) => r[2] >= ini && r[2] <= fim && (!vendaSo || r[3] === 1) && (!usarTipo || tipoFiltro === "todos" || prodInfo[r[1]].tipo === tipoFiltro);
+  const soma = (rows) => rows.reduce((a, r) => { a.q += r[4]; a.l += r[5]; a.f += r[6]; return a; }, { q: 0, l: 0, f: 0 });
+  const dados = useMemo(() => entidades.map(e => { const rows = linhasDe(e.codigos).filter(r => passa(r)); return { ...e, rows, ...soma(rows) }; }).sort((a, b) => b.f - a.f),
+    [entidades, ini, fim, vendaSo, tipoFiltro, porCliente, prodInfo]);
+  const totF = dados.reduce((s, d) => s + d.f, 0), totL = dados.reduce((s, d) => s + d.l, 0);
+  const topEnt = dados.slice(0, 10);
+  const cores = ["#22C55E", "#F59E0B", "#3B82F6", "#EF4444", "#A855F7", "#06B6D4", "#EC4899", "#84CC16", "#F97316", "#9CA3AF"];
+
+  // itens (produtos) da entidade escolhida (ou do total)
+  const alvoDet = dados.find(d => d.id === detalhe) || null;
+  const rowsDet = alvoDet ? alvoDet.rows : dados.flatMap(d => d.rows);
+  const itens = useMemo(() => {
+    const m = {};
+    rowsDet.forEach(r => { const o = m[r[1]] || (m[r[1]] = { p: r[1], q: 0, l: 0, f: 0 }); o.q += r[4]; o.l += r[5]; o.f += r[6]; });
+    return Object.values(m).filter(o => o.f !== 0 || o.l !== 0 || o.q !== 0).sort((a, b) => b.f - a.f);
+  }, [rowsDet]);
+  const itTotF = itens.reduce((s, o) => s + o.f, 0), itTotL = itens.reduce((s, o) => s + o.l, 0);
+
+  // comparação por ano (mesmos meses do ano em todos os anos)
+  const mesesAno = useMemo(() => {
+    if (!ini || !fim) return new Set();
+    const s = new Set(); let [a, m] = ini.split("-").map(Number); const [fa, fm] = fim.split("-").map(Number);
+    for (let n = 0; n < 12 && (a < fa || (a === fa && m <= fm)); n++) { s.add(m); m++; if (m > 12) { m = 1; a++; } }
+    return s;
+  }, [ini, fim]);
+  const anos = useMemo(() => [...new Set(periodosA.map(p => p.slice(0, 4)))].filter(a => a >= "2023"), [periodosA]);
+  const produtosSel = useMemo(() => { const s = new Set(); entidades.forEach(e => linhasDe(e.codigos).forEach(r => s.add(r[1]))); return [...s].sort((a, b) => prodInfo[a].nome.localeCompare(prodInfo[b].nome)); }, [entidades, porCliente, prodInfo]);
+  const valorMetrica = (rows) => {
+    const s = soma(rows);
+    if (metrica === "litros") return s.l;
+    if (metrica === "faturamento") return s.f;
+    if (metrica === "precoLitro") return s.l > 0 ? s.f / s.l : null;
+    return s.q > 0 ? s.f / s.q : null;
+  };
+  const fmtMetrica = (v) => v == null ? "-" : metrica === "litros" ? fmtLitros(v) : metrica === "faturamento" ? fmtMoeda(v) : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const filtroMetrica = (r, usarPeriodo) => (!vendaSo || r[3] === 1) && (tipoFiltro === "todos" || prodInfo[r[1]].tipo === tipoFiltro) && (metrica !== "precoUn" || String(r[1]) === String(produtoPreco));
+  const graficoAnos = useMemo(() => anos.map(a => {
+    const o = { ano: a };
+    topEnt.forEach(e => { const rows = e.rows === undefined ? [] : linhasDe(e.codigos).filter(r => r[2].slice(0, 4) === a && mesesAno.has(Number(r[2].slice(5))) && filtroMetrica(r)); o[e.nome] = rows.length ? valorMetrica(rows) : null; });
+    return o;
+  }), [anos, topEnt, mesesAno, metrica, produtoPreco, vendaSo, tipoFiltro]);
+  const periodoMeses = useMemo(() => periodosA.filter(p => p >= ini && p <= fim), [periodosA, ini, fim]);
+  const graficoMeses = useMemo(() => periodoMeses.map(p => {
+    const o = { mes: labelMes(p) };
+    topEnt.forEach(e => { const rows = linhasDe(e.codigos).filter(r => r[2] === p && filtroMetrica(r)); o[e.nome] = rows.length ? valorMetrica(rows) : null; });
+    return o;
+  }), [periodoMeses, topEnt, metrica, produtoPreco, vendaSo, tipoFiltro]);
+
+  // clientes × tipo de produto (ignora o filtro de tipo)
+  const porTipo = useMemo(() => dados.map(e => {
+    const rowsE = linhasDe(e.codigos).filter(r => passa(r, false));
+    const t = {}; TIPOS_ORDEM.forEach(k => { t[k] = { l: 0, f: 0 }; });
+    rowsE.forEach(r => { const k = prodInfo[r[1]].tipo; t[k].l += r[5]; t[k].f += r[6]; });
+    const totL = TIPOS_ORDEM.reduce((s, k) => s + t[k].l, 0), totF = TIPOS_ORDEM.reduce((s, k) => s + t[k].f, 0);
+    return { nome: e.nome, t, totL, totF };
+  }), [dados, ini, fim, vendaSo, porCliente, prodInfo]);
+  const graficoTipo = porTipo.slice(0, 15).map(e => {
+    const o = { nome: e.nome.length > 28 ? e.nome.slice(0, 27) + "…" : e.nome };
+    const tot = metricaTipo === "litros" ? e.totL : e.totF;
+    TIPOS_ORDEM.forEach(k => { const v = metricaTipo === "litros" ? e.t[k].l : e.t[k].f; o[k] = tipoPct ? (tot > 0 ? (v / tot) * 100 : 0) : v; });
+    return o;
+  });
+
+  // busca
+  const resultadosBusca = useMemo(() => {
+    const q = normalizarTextoProduto(busca.trim()); if (q.length < 2) return [];
+    return nomes.filter(c => porCliente[c] && !codsSel.includes(c) && (normalizarTextoProduto(rotulo(c)).includes(q) || normalizarTextoProduto(razaoSocialDoCliente[c] || "").includes(q) || c === busca.trim())).slice(0, 12);
+  }, [busca, nomes, codsSel, porCliente]);
+
+  const periodoLabel = ini && fim ? `${labelMes(ini)} a ${labelMes(fim)}` : "";
+  const th = { padding: "6px 8px", textAlign: "right", color: "#aaa", fontWeight: 600, borderBottom: "1px solid #333", whiteSpace: "nowrap", fontSize: 12 };
+  const td = { padding: "5px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd", fontSize: 12 };
+  const pct = (v, t) => t > 0 ? `${((v / t) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "-";
+  const brl2 = (v) => v == null ? "-" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const chip = (ativo, cor = "#4caf6b") => ({ ...modoBtnStyle(ativo, cor), cursor: "pointer", fontSize: 12, padding: "4px 10px" });
+
+  if (!A.linhas.length) {
+    return (<Section title="Cliente Analítico"><div style={{ color: "#aaa", fontSize: 13 }}>
+      Não encontrei dados da aba <strong style={{ color: "#C69700" }}>analitico</strong> no retorno da planilha{A.erro ? ` (${A.erro})` : ""}. Confirme que a aba existe e reimplante o Code.gs na versão v3.5.
+    </div></Section>);
+  }
+
+  return (
+    <div>
+      <Section title="Cliente Analítico" icon={<Users size={16} />}>
+        <div style={{ color: "#888", fontSize: 12, marginBottom: 12 }}>Compras por cliente e por item: volumes, % de cada item, faturamento (valor cobrado) e preço unitário. Fonte: aba <em>analitico</em> (pela data de entrega do pedido, por isso o mês pode diferir um pouco da aba Cliente).</div>
+
+        <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
+          <div style={{ flex: "1 1 320px", minWidth: 260, position: "relative" }}>
+            <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Buscar cliente (nome, razão social ou código)</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "6px 10px" }}>
+              <Search size={14} color="#C69700" />
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="digite para buscar…" style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
+            </div>
+            {resultadosBusca.length > 0 && (
+              <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, background: "#1D1D1B", border: "1px solid #444", borderRadius: 6, marginTop: 2, maxHeight: 240, overflow: "auto" }}>
+                {resultadosBusca.map(c => <div key={c} onClick={() => { setCodsSel(l => [...l, c]); setBusca(""); }} style={{ padding: "6px 10px", cursor: "pointer", fontSize: 12, color: "#ddd", borderBottom: "1px solid #2a2a2a" }}>{rotulo(c)} <span style={{ color: "#666" }}>· {c}</span></div>)}
+              </div>
+            )}
+          </div>
+          <div style={{ flex: "1 1 280px" }}>
+            <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Período avaliado</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <MonthPicker periodosDisponiveis={periodosA} valor={ini} onSelecionar={setIni} placeholder="Início" />
+              <span style={{ color: "#666" }}>a</span>
+              <MonthPicker periodosDisponiveis={periodosA} valor={fim} onSelecionar={setFim} placeholder="Fim" />
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+              <button style={chipBtnStyle} onClick={() => { setIni(periodosA[Math.max(0, periodosA.length - 12)]); setFim(periodosA[periodosA.length - 1]); }}>últimos 12 meses</button>
+              <button style={chipBtnStyle} onClick={() => { const a = periodosA[periodosA.length - 1].slice(0, 4); setIni(periodosA.find(p => p.startsWith(a))); setFim(periodosA[periodosA.length - 1]); }}>ano atual</button>
+              <button style={chipBtnStyle} onClick={() => { setIni(periodosA[0]); setFim(periodosA[periodosA.length - 1]); }}>tudo</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="no-print" style={{ marginBottom: 10 }}>
+          <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Grupos de cliente (marque um ou vários)</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {grupos.map(g => <label key={g} style={chip(gruposSel.includes(g))}><input type="checkbox" style={{ marginRight: 4 }} checked={gruposSel.includes(g)} onChange={() => setGruposSel(l => l.includes(g) ? l.filter(x => x !== g) : [...l, g])} />{g} ({(clientesPorGrupo[g] || []).length})</label>)}
+          </div>
+        </div>
+
+        {unioes.length > 0 && (
+          <div className="no-print" style={{ marginBottom: 10 }}>
+            <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Grupos firmados (clientes unidos)</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {unioes.map(u => <span key={u.id} style={{ ...chip(unioesSel.includes(u.id), "#C69700"), display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <label style={{ cursor: "pointer" }}><input type="checkbox" style={{ marginRight: 4 }} checked={unioesSel.includes(u.id)} onChange={() => setUnioesSel(l => l.includes(u.id) ? l.filter(x => x !== u.id) : [...l, u.id])} />{u.nome} ({u.codigos.length})</label>
+                <span title="apagar este grupo firmado" style={{ color: "#e57373", cursor: "pointer" }} onClick={() => { setUnioesSel(l => l.filter(x => x !== u.id)); gravarUnioes(unioes.filter(x => x.id !== u.id), `Grupo “${u.nome}” desfeito.`); }}>×</span>
+              </span>)}
+            </div>
+          </div>
+        )}
+
+        {codsSel.length > 0 && (
+          <div className="no-print" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+            {codsSel.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "2px 10px", fontSize: 12 }}>{rotulo(c)} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setCodsSel(l => l.filter(x => x !== c))}>×</span></span>)}
+            <button style={chipBtnStyle} onClick={() => { setCodsSel([]); setGruposSel([]); setUnioesSel([]); }}>limpar seleção</button>
+          </div>
+        )}
+
+        <div className="no-print" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ color: "#aaa", fontSize: 12 }}>Ver:</span>
+          <button style={chip(modo === "juntos")} onClick={() => setModo("juntos")}>clientes juntos (somados)</button>
+          <button style={chip(modo === "separados")} onClick={() => setModo("separados")}>cada cliente separado</button>
+          <label style={{ fontSize: 12, color: "#ccc" }}>Tipo de produto: <select value={tipoFiltro} onChange={e => setTipoFiltro(e.target.value)} style={{ background: "#222", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "3px 6px" }}><option value="todos">todos</option>{TIPOS_ORDEM.map(t => <option key={t} value={t}>{t}</option>)}</select></label>
+          <label style={{ fontSize: 12, color: "#ccc" }}><input type="checkbox" checked={vendaSo} onChange={e => setVendaSo(e.target.checked)} /> só vendas (sem bonificação/comodato)</label>
+          {codigosSel.size >= 2 && (
+            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <input value={nomeGrupo} onChange={e => setNomeGrupo(e.target.value)} placeholder="nome do grupo" style={{ background: "#222", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "4px 8px", fontSize: 12, width: 150 }} />
+              <button style={chipBtnStyle} disabled={!nomeGrupo.trim()} onClick={() => { const id = `${Date.now()}${Math.floor(Math.random() * 1000)}`; gravarUnioes([...unioes, { id, nome: nomeGrupo.trim(), codigos: [...codigosSel], ativa: true }], `Grupo “${nomeGrupo.trim()}” firmado.`); setNomeGrupo(""); setCodsSel([]); setGruposSel([]); setUnioesSel(l => [...l, id]); }}>🔒 firmar grupo ({codigosSel.size})</button>
+            </span>
+          )}
+        </div>
+        {msg && <div style={{ color: msg.startsWith("⚠️") ? "#e0a040" : "#4caf6b", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+
+        {!dados.length ? (
+          <div style={{ color: "#777", fontSize: 13, padding: "20px 0" }}>Selecione um ou mais clientes (busca), um grupo de cliente ou um grupo firmado para ver a análise.</div>
+        ) : (<>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "6px 0" }}>
+            <h4 style={{ color: "#fff", fontSize: 14, margin: 0 }}>Resumo · {periodoLabel}{tipoFiltro !== "todos" ? ` · ${tipoFiltro}` : ""}</h4>
+            <BotaoExcel nomeAba="Cliente Analitico" gerar={() => [
+              { nome: "Resumo", linhas: [["Cliente/grupo", "Faturamento R$", "Litros", "% faturamento", "% litros", "R$/L"], ...dados.map(d => [d.nome, Math.round(d.f * 100) / 100, Math.round(d.l * 100) / 100, totF ? d.f / totF : 0, totL ? d.l / totL : 0, d.l ? d.f / d.l : 0])] },
+              { nome: "Itens", linhas: [[alvoDet ? alvoDet.nome : "Total da seleção"], ["Produto", "Tipo", "Qtde", "Litros", "% litros", "Faturamento R$", "% faturamento", "Preço unit. R$", "R$/L"], ...itens.map(o => [prodInfo[o.p].nome, prodInfo[o.p].tipo, Math.round(o.q * 1000) / 1000, Math.round(o.l * 100) / 100, itTotL ? o.l / itTotL : 0, Math.round(o.f * 100) / 100, itTotF ? o.f / itTotF : 0, o.q ? o.f / o.q : 0, o.l ? o.f / o.l : 0])] },
+              { nome: "Por tipo", linhas: [["Cliente/grupo", ...TIPOS_ORDEM.map(t => `${t} (L)`), ...TIPOS_ORDEM.map(t => `${t} (R$)`)], ...porTipo.map(e => [e.nome, ...TIPOS_ORDEM.map(t => Math.round(e.t[t].l * 100) / 100), ...TIPOS_ORDEM.map(t => Math.round(e.t[t].f * 100) / 100)])] },
+            ]} />
+          </div>
+          <div style={{ overflow: "auto", maxHeight: 360, marginBottom: 18 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr><th style={{ ...th, textAlign: "left" }}>Cliente / grupo</th><th style={th}>Faturamento</th><th style={th}>% fat.</th><th style={th}>Litros</th><th style={th}>% litros</th><th style={th}>R$/L</th></tr></thead>
+              <tbody>
+                {dados.slice(0, 200).map(d => (
+                  <tr key={d.id} onClick={() => setDetalhe(d.id === detalhe ? "" : d.id)} style={{ cursor: "pointer", background: d.id === detalhe ? "#1f2a1f" : "transparent" }} title="clique para ver os itens deste cliente">
+                    <td style={{ ...td, textAlign: "left", whiteSpace: "normal" }}>{d.nome}</td>
+                    <td style={td}>{fmtMoeda(d.f)}</td><td style={td}>{pct(d.f, totF)}</td><td style={td}>{fmtLitros(d.l)}</td><td style={td}>{pct(d.l, totL)}</td><td style={td}>{d.l > 0 ? brl2(d.f / d.l) : "-"}</td>
+                  </tr>
+                ))}
+                {dados.length > 1 && <tr><td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#fff" }}>TOTAL</td><td style={{ ...td, fontWeight: 700 }}>{fmtMoeda(totF)}</td><td style={td}></td><td style={{ ...td, fontWeight: 700 }}>{fmtLitros(totL)}</td><td style={td}></td><td style={{ ...td, fontWeight: 700 }}>{totL > 0 ? brl2(totF / totL) : "-"}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          <h4 style={{ color: "#fff", fontSize: 14, margin: "6px 0" }}>Itens comprados · {alvoDet ? alvoDet.nome : (dados.length > 1 ? "total da seleção" : dados[0].nome)} <span style={{ color: "#888", fontWeight: 400, fontSize: 12 }}>{alvoDet ? "(clique de novo na linha para voltar ao total)" : dados.length > 1 ? "(clique num cliente acima para ver só ele)" : ""}</span></h4>
+          <div style={{ overflow: "auto", maxHeight: 460, marginBottom: 18 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr><th style={{ ...th, textAlign: "left" }}>Produto</th><th style={{ ...th, textAlign: "left" }}>Tipo</th><th style={th}>Qtde</th><th style={th}>Litros</th><th style={th}>% litros</th><th style={th}>Faturamento</th><th style={th}>% fat.</th><th style={th}>Preço unit.</th><th style={th}>R$/L</th></tr></thead>
+              <tbody>
+                {itens.map(o => (
+                  <tr key={o.p}>
+                    <td style={{ ...td, textAlign: "left", whiteSpace: "normal" }}>{prodInfo[o.p].nome}</td>
+                    <td style={{ ...td, textAlign: "left", color: COR_TIPO[prodInfo[o.p].tipo] }}>{prodInfo[o.p].tipo}</td>
+                    <td style={td}>{o.q.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
+                    <td style={td}>{fmtLitros(o.l)}</td><td style={td}>{pct(o.l, itTotL)}</td>
+                    <td style={td}>{fmtMoeda(o.f)}</td><td style={td}>{pct(o.f, itTotF)}</td>
+                    <td style={td}>{o.q > 0 ? brl2(o.f / o.q) : "-"}</td><td style={td}>{o.l > 0 ? brl2(o.f / o.l) : "-"}</td>
+                  </tr>
+                ))}
+                <tr><td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#fff" }} colSpan={3}>TOTAL</td><td style={{ ...td, fontWeight: 700 }}>{fmtLitros(itTotL)}</td><td style={td}></td><td style={{ ...td, fontWeight: 700 }}>{fmtMoeda(itTotF)}</td><td style={td}></td><td style={td}></td><td style={{ ...td, fontWeight: 700 }}>{itTotL > 0 ? brl2(itTotF / itTotL) : "-"}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11, color: "#777", marginBottom: 18 }}>Preço unit. = valor cobrado ÷ quantidade vendida (R$ por unidade; no chope, por litro). Bonificações e comodatos entram com valor cobrado zero (use “só vendas” para ver o preço praticado).</div>
+
+          <h4 style={{ color: "#fff", fontSize: 14, margin: "6px 0" }}>Comparativo · anos, preços e volumes</h4>
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+            {[["litros", "Volume (L)"], ["faturamento", "Faturamento"], ["precoLitro", "Preço médio R$/L"], ["precoUn", "Preço unitário de um produto"]].map(([k, t]) => <button key={k} style={chip(metrica === k)} onClick={() => { setMetrica(k); if (k === "precoUn" && !produtoPreco && produtosSel.length) setProdutoPreco(String(produtosSel[0])); }}>{t}</button>)}
+            {metrica === "precoUn" && <select value={produtoPreco} onChange={e => setProdutoPreco(e.target.value)} style={{ background: "#222", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "3px 6px", maxWidth: 320 }}>{produtosSel.map(p => <option key={p} value={p}>{prodInfo[p].nome}</option>)}</select>}
+          </div>
+          <div style={{ fontSize: 11, color: "#777", marginBottom: 6 }}>Por ano: soma dos mesmos meses do período ({[...mesesAno].map(m => MESES[m - 1]).join(", ")}) em cada ano, para comparar igual com igual. {dados.length > 10 ? "Mostrando os 10 maiores." : ""}</div>
+          <div style={{ width: "100%", height: 300 }}>
+            <ResponsiveContainer>
+              <BarChart data={graficoAnos}>
+                <CartesianGrid stroke="#2a2a2a" /><XAxis dataKey="ano" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" ? `${Math.round(v / 1000)}k` : metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
+                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                {topEnt.map((e, i) => <Bar key={e.id} dataKey={e.nome} fill={cores[i % cores.length]} />)}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ width: "100%", height: 300, marginTop: 14 }}>
+            <ResponsiveContainer>
+              <LineChart data={graficoMeses}>
+                <CartesianGrid stroke="#2a2a2a" /><XAxis dataKey="mes" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" || metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
+                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                {topEnt.map((e, i) => <Line key={e.id} type="monotone" dataKey={e.nome} stroke={cores[i % cores.length]} dot={false} strokeWidth={2} connectNulls />)}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <h4 style={{ color: "#fff", fontSize: 14, margin: "20px 0 6px" }}>Clientes por tipo de produto</h4>
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <button style={chip(metricaTipo === "litros")} onClick={() => setMetricaTipo("litros")}>Litros</button>
+            <button style={chip(metricaTipo === "faturamento")} onClick={() => setMetricaTipo("faturamento")}>Faturamento</button>
+            <button style={chip(tipoPct, "#C69700")} onClick={() => setTipoPct(v => !v)}>{tipoPct ? "em % do cliente" : "valores absolutos"}</button>
+          </div>
+          <div style={{ width: "100%", height: Math.max(220, graficoTipo.length * 34 + 60) }}>
+            <ResponsiveContainer>
+              <BarChart data={graficoTipo} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid stroke="#2a2a2a" /><XAxis type="number" stroke="#888" tickFormatter={v => tipoPct ? `${Math.round(v)}%` : `${Math.round(v / 1000)}k`} /><YAxis type="category" dataKey="nome" stroke="#888" width={170} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => tipoPct ? `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : (metricaTipo === "litros" ? fmtLitros(v) : fmtMoeda(v))} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                {TIPOS_ORDEM.map(k => <Bar key={k} dataKey={k} stackId="t" fill={COR_TIPO[k]} />)}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ overflow: "auto", maxHeight: 360, marginTop: 10 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%" }}>
+              <thead><tr><th style={{ ...th, textAlign: "left" }}>Cliente / grupo</th>{TIPOS_ORDEM.map(k => <th key={k} style={{ ...th, color: COR_TIPO[k] }}>{k}</th>)}<th style={th}>Total</th></tr></thead>
+              <tbody>
+                {porTipo.slice(0, 200).map(e => { const tot = metricaTipo === "litros" ? e.totL : e.totF; return (
+                  <tr key={e.nome}><td style={{ ...td, textAlign: "left", whiteSpace: "normal" }}>{e.nome}</td>
+                    {TIPOS_ORDEM.map(k => { const v = metricaTipo === "litros" ? e.t[k].l : e.t[k].f; return <td key={k} style={td}>{v === 0 ? "–" : tipoPct ? pct(v, tot) : (metricaTipo === "litros" ? fmtLitros(v) : fmtMoeda(v))}</td>; })}
+                    <td style={{ ...td, fontWeight: 700 }}>{metricaTipo === "litros" ? fmtLitros(tot) : fmtMoeda(tot)}</td></tr>
+                ); })}
+              </tbody>
+            </table>
+          </div>
+        </>)}
+      </Section>
+    </div>
+  );
+}
+
 export default function App() {
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
@@ -7461,7 +7798,7 @@ export default function App() {
       .then(r => r.json())
       .then(json => {
         if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || "", json.unioesClientes || ""));
+        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || "", json.unioesClientes || "", json.analitico || null));
         setStatus("ready");
       })
       .catch(err => {
@@ -7516,6 +7853,9 @@ export default function App() {
                 <button onClick={() => setTab("comparacao")} style={tabStyle(tab === "comparacao")}>
                   <GitCompareArrows size={14} /> Comparação
                 </button>
+                <button onClick={() => setTab("clienteAnalitico")} style={tabStyle(tab === "clienteAnalitico")}>
+                  <Users size={14} /> Cliente Analítico
+                </button>
                 <button onClick={() => setTab("dashboard")} style={tabStyle(tab === "dashboard")}>
                   <LayoutDashboard size={14} /> Canais
                 </button>
@@ -7547,6 +7887,7 @@ export default function App() {
 
               {tab === "cliente" && <ClienteDashboard />}
               {tab === "comparacao" && <ComparacaoTab />}
+              {tab === "clienteAnalitico" && <ClienteAnaliticoTab />}
               {tab === "dashboard" && <DashboardTab />}
               {tab === "mes" && <MesTab />}
               {tab === "produtos" && <ProdutosTab />}

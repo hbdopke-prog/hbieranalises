@@ -1,7 +1,7 @@
 /**
  * HBier - Análise de Clientes
  * Backend (Google Apps Script)
- * Versão: v3.4
+ * Versão: v3.5
  *
  * Lê o relatório "Faturamento Mês a Mês por Clientes" exportado do ERP,
  * nas abas "faturamento" e "litros" (mesmo layout nas duas, um valor
@@ -90,6 +90,7 @@ const SHEET_TANQUES = "tanques";
 const SHEET_RECEITAS = "receitas";
 const SHEET_PLANO = "plano_salvo";
 const SHEET_CENARIOS = "cenarios_salvos";
+const SHEET_ANALITICO = "analitico"; // relatório "Faturamento por Clientes Analítico" (cliente > itens), opcional
 const SHEET_UNIOES = "uniao_clientes"; // uniões de clientes (ex.: todas as lojas Miller), JSON em pedaços
 
 function doGet(e) {
@@ -130,12 +131,15 @@ function doGet(e) {
     try { cenariosSalvos = lerCenariosSalvos(ss); } catch (e4) { cenariosSalvos = ""; }
     let unioesClientes = "";
     try { unioesClientes = lerUnioesClientes(ss); } catch (e5) { unioesClientes = ""; }
+    let analitico = { produtos: [], linhas: [] };
+    try { analitico = lerAnalitico(ss); } catch (e6) { analitico = { produtos: [], linhas: [], erro: String(e6.message || e6) }; }
 
     return jsonResponse({
       ok: true,
       dados: combinado,
       cenariosSalvos: cenariosSalvos,
       unioesClientes: unioesClientes,
+      analitico: analitico,
       planoSalvo: planoSalvo,
       tanques: tanques,
       receitas: receitas,
@@ -174,6 +178,53 @@ function dataParaISO(bruto) {
   }
   m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[1] + "-" + m[2] + "-" + m[3] : "";
+}
+
+// Aba "analitico" (relatório de faturamento por clientes ANALÍTICO do BeerSales):
+//   cabeçalho: Cód. Cliente | Cliente | Cód. Produto | Produto | Nº Pedido | Operação | Data Entrega | Nota Fiscal |
+//              Valor Pedido | Valor Cobrado | Qtde. | Und. | Litros | Observação
+//   linha de cliente: código na coluna A e sem código de produto (é o subtotal); linhas de item: produto preenchido.
+// Devolve agregado por cliente x produto x mês x (venda / outras operações), para não pesar:
+//   { produtos: ["nome", ...], linhas: [[codCliente, idxProduto, "AAAA-MM", venda(1/0), qtde, litros, valorCobrado], ...] }
+function lerAnalitico(ss) {
+  const sheet = ss.getSheetByName(SHEET_ANALITICO);
+  if (!sheet) return { produtos: [], linhas: [] };
+  const v = sheet.getDataRange().getValues();
+  let h = -1;
+  for (let i = 0; i < Math.min(v.length, 40); i++) {
+    const a = String(v[i][0] || "").toLowerCase(), c = String(v[i][2] || "").toLowerCase();
+    if (/c[óo]d/.test(a) && /cliente/.test(a) && /c[óo]d/.test(c)) { h = i; break; }
+  }
+  if (h === -1) return { produtos: [], linhas: [], erro: "cabeçalho não encontrado" };
+  function mesDe(bruto) {
+    if (bruto instanceof Date && !isNaN(bruto.getTime())) return Utilities.formatDate(bruto, Session.getScriptTimeZone(), "yyyy-MM");
+    const m = String(bruto || "").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) return "";
+    let a = Number(m[1]), b = Number(m[2]); // este relatório vem em mês/dia/ano (ex.: 8/24/2024)
+    if (a > 12) { const t = a; a = b; b = t; }
+    return m[3] + "-" + ("0" + a).slice(-2);
+  }
+  const prodIdx = {}, produtos = [], mapa = {};
+  let cliente = "";
+  for (let i = h + 1; i < v.length; i++) {
+    const r = v[i];
+    const cp = String(r[2] || "").trim();
+    const ca = String(r[0] || "").trim();
+    if (!cp) { if (ca && /^\d+$/.test(ca)) cliente = ca; continue; }
+    if (!cliente) continue;
+    const mes = mesDe(r[6]);
+    if (!mes) continue;
+    let nome = String(r[3] || "").trim();
+    nome = nome.replace(/^\S+\s+-\s+/, "");
+    const chaveProd = cp + "|" + nome;
+    if (prodIdx[chaveProd] === undefined) { prodIdx[chaveProd] = produtos.length; produtos.push(nome || cp); }
+    const venda = String(r[5] || "").trim().toUpperCase() === "VENDA" ? 1 : 0;
+    const k = cliente + "|" + prodIdx[chaveProd] + "|" + mes + "|" + venda;
+    const o = mapa[k] || (mapa[k] = [cliente, prodIdx[chaveProd], mes, venda, 0, 0, 0]);
+    o[4] += numeroBR(r[10]) || 0; o[5] += numeroBR(r[12]) || 0; o[6] += numeroBR(r[9]) || 0;
+  }
+  const linhas = Object.keys(mapa).map(function (k) { const o = mapa[k]; return [o[0], o[1], o[2], o[3], Math.round(o[4] * 1000) / 1000, Math.round(o[5] * 1000) / 1000, Math.round(o[6] * 100) / 100]; });
+  return { produtos: produtos, linhas: linhas };
 }
 
 function lerTanques(ss) {
@@ -540,7 +591,7 @@ function autenticar(usuario, senha) {
 // dataCriacao vem no formato "AAAA-MM-DD". Se não encontrar nenhuma aba assim, devolve {}.
 function lerCadastroClientes(ss) {
   const sheets = ss.getSheets();
-  const conhecidas = [SHEET_FATURAMENTO.toLowerCase(), SHEET_LITROS.toLowerCase()];
+  const conhecidas = [SHEET_FATURAMENTO.toLowerCase(), SHEET_LITROS.toLowerCase(), SHEET_ANALITICO.toLowerCase()];
   const timezone = ss.getSpreadsheetTimeZone();
 
   for (let s = 0; s < sheets.length; s++) {
