@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.52";
+const APP_VERSION = "v10.54";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -220,6 +220,40 @@ function encontrarProdutoFixo(def, nomes) {
 // parecidas - ainda dentro da família verde (envasado) ou amarelo/âmbar (chope).
 const PALETA_ENVASADO_CLARO = ["#2ECC71", "#145A32", "#A5D6A7", "#0B8043", "#C6F17D", "#1B5E20", "#66BB6A", "#073B2E"];
 const PALETA_CHOPE_CLARO = ["#FFD600", "#8D6708", "#FFF176", "#B8860B", "#F9A825", "#5C4404", "#FBE27B", "#7A5B00"];
+
+// Cor por produto no gráfico comparativo: cada produto tem uma FAMÍLIA de cor própria (PET 1L = verde,
+// PET 2L = roxo, PET 500ml Helles = amarelo, IPA = azul, Red Ale = vermelho, Sem Álcool = ciano...) e os anos
+// do mesmo produto são tons da mesma família (ano mais recente = cor cheia; anos anteriores = mais claro/escuro).
+// ordem de cada família: [cor cheia, mais clara, mais escura, bem clara, bem escura]
+const FAMILIAS_COR = {
+  verde: ["#22C55E", "#86EFAC", "#15803D", "#BBF7D0", "#14532D"],
+  roxo: ["#A855F7", "#D8B4FE", "#7E22CE", "#EDE9FE", "#581C87"],
+  amarelo: ["#FACC15", "#FEF08A", "#CA8A04", "#FEF9C3", "#854D0E"],
+  azul: ["#3B82F6", "#93C5FD", "#1D4ED8", "#DBEAFE", "#1E3A8A"],
+  vermelho: ["#EF4444", "#FCA5A5", "#B91C1C", "#FECACA", "#7F1D1D"],
+  ciano: ["#06B6D4", "#67E8F9", "#0E7490", "#CFFAFE", "#164E63"],
+  rosa: ["#EC4899", "#F9A8D4", "#BE185D", "#FCE7F3", "#831843"],
+  laranja: ["#F97316", "#FDBA74", "#C2410C", "#FFEDD5", "#7C2D12"],
+  marrom: ["#A16207", "#D6B88A", "#713F12", "#E7D3B3", "#451A03"],
+  cinza: ["#9CA3AF", "#D1D5DB", "#6B7280", "#E5E7EB", "#374151"],
+};
+const FAMILIAS_RESERVA = ["ciano", "rosa", "laranja", "marrom", "azul", "vermelho", "cinza"];
+function familiaCorProduto(nome) {
+  const n = normalizarTextoProduto(nome);
+  if (classificarEmbalagem(nome) === "chope") return "laranja";
+  if (/SEM\s*ALCOOL/.test(n)) return "ciano";
+  if (/REDEFORT/.test(n)) return "rosa";
+  if (/OKTOBERFEST/.test(n)) return "marrom";
+  if (/500\s*ML/.test(n)) {
+    if (/\bIPA\b/.test(n)) return "azul";
+    if (/RED\s*ALE|\bRED\b/.test(n)) return "vermelho";
+    if (/HELLES/.test(n)) return "amarelo";
+  } else if (/\b2\s*L\b/.test(n)) return "roxo";
+  else if (/\b1\s*L\b/.test(n) && /HELLES/.test(n)) return "verde";
+  let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+  return FAMILIAS_RESERVA[h % FAMILIAS_RESERVA.length];
+}
+function corProdutoBase(nome) { return FAMILIAS_COR[familiaCorProduto(nome)][0]; }
 
 // Quantos litros cabem num pallet, de acordo com o tamanho da embalagem no nome do produto.
 // Retorna null se não reconhecer o tamanho (ex: garrafa 355ml, lata 473ml, chope) - nesses
@@ -5320,7 +5354,8 @@ function PlanejamentoProducao() {
   }, [mesAtual]);
 
   const [alvo, setAlvo] = useState(() => {
-    if (cfg0.alvo) return cfg0.alvo;
+    if (cfg0.alvo && cfg0.alvo >= mesAtual) return cfg0.alvo; // alvo salvo de mês que já passou não vale mais
+    if (cfg0.alvo) return mesAtual;
     let [a, m] = mesAtual.split("-").map(Number);
     m++; if (m > 12) { m = 1; a++; }
     return `${a}-${String(m).padStart(2, "0")}`;
@@ -5454,7 +5489,7 @@ function PlanejamentoProducao() {
     const set = new Set(mesesAlvo.filter(c => semanasPorMes[c].some(s => s > hoje && s <= limite)));
     set.add(alvo);
     set.add(mesAtual);
-    return [...set].sort();
+    return [...set].filter(c => c >= mesAtual).sort();
   }, [mesesAlvo, semanasPorMes, hoje, alvo, mesAtual]);
   // seletor: meses desmarcados saem da projeção (o mês em destaque fica sempre)
   const mesesPlano = useMemo(() => mesesCandidatos.filter(c => c === alvo || !mesesOff[c]), [mesesCandidatos, alvo, mesesOff]);
@@ -6740,11 +6775,10 @@ function ProdutosTab() {
       });
     });
     const anos = [...anosSet].sort((a, b) => a - b);
-    let idxEnvasado = 0, idxChope = 0;
     produtosGrafico.forEach(nome => {
-      const eChope = classificarEmbalagem(nome) === "chope";
-      anos.forEach(ano => {
-        const cor = eChope ? PALETA_CHOPE_CLARO[idxChope++ % PALETA_CHOPE_CLARO.length] : PALETA_ENVASADO_CLARO[idxEnvasado++ % PALETA_ENVASADO_CLARO.length];
+      const tons = FAMILIAS_COR[familiaCorProduto(nome)];
+      anos.forEach((ano, i) => {
+        const cor = tons[(anos.length - 1 - i) % tons.length]; // ano mais recente = cor cheia
         linhas.push({ key: `${nome}__${ano}`, produto: nome, ano, cor });
       });
     });
@@ -7255,6 +7289,7 @@ function ProdutosTab() {
               {envasadosFixosGrafico.map(nome => (
                 <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
                   <input type="checkbox" checked={produtosGrafico.includes(nome)} onChange={() => toggleProdutoGrafico(nome)} />
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: corProdutoBase(nome), display: "inline-block" }} />
                   {nome}
                 </label>
               ))}
@@ -7267,6 +7302,7 @@ function ProdutosTab() {
               {chopesFixosGrafico.map(nome => (
                 <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
                   <input type="checkbox" checked={produtosGrafico.includes(nome)} onChange={() => toggleProdutoGrafico(nome)} />
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: corProdutoBase(nome), display: "inline-block" }} />
                   {nome}
                 </label>
               ))}
