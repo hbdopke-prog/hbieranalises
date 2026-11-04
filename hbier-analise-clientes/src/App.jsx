@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.57";
+const APP_VERSION = "v10.58";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -7777,7 +7777,7 @@ export default function App() {
   const [usuario, setUsuario] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginDigitado, setLoginDigitado] = useState("");
-  const veSomentePlanejamento = loginDigitado === "henrique"; // aba Planejamento restrita ao login henrique
+  const veSomentePlanejamento = ["henrique", "augusto"].includes(loginDigitado); // aba Planejamento restrita aos logins henrique e augusto
   const [tab, setTab] = useState("cliente");
 
   const [status, setStatus] = useState("loading"); // loading | error | ready
