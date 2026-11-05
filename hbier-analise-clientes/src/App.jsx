@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.58";
+const APP_VERSION = "v10.59";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -5207,6 +5207,43 @@ function simularEnvase({ semanas, necPorMes, semanasPorMes, lotes, statusTanques
   return out;
 }
 
+// Nivelamento da produção no período: em vez de produzir em cada mês exatamente o que ele pede, distribui a
+// necessidade total do período (por estilo) entre os meses. k = intensidade (0 = segue a demanda de cada mês,
+// 1 = produção igual em todos os meses). Garante que a produção acumulada nunca fique abaixo da venda acumulada
+// (não falta cerveja) e que ninguém produza com mais antecedência que o prazo máximo de estoque.
+function nivelarProducao(necPorMes, k, extraPct, prazoDias) {
+  const M = necPorMes.length;
+  const estilos = [...new Set(necPorMes.flatMap(x => x.nec.map(n => n.estilo)))];
+  const Lm = Math.max(0, Math.floor((Number(prazoDias) || 0) / 30));
+  const somaAte = (a, m) => { let t = 0; for (let i = 0; i <= m; i++) t += a[i]; return t; };
+  const porEstilo = {};
+  estilos.forEach(e => {
+    const N = necPorMes.map(x => { const n = x.nec.find(y => y.estilo === e); return n ? n.necessario : 0; });
+    const extra = N.reduce((s, v) => s + v, 0) * (Number(extraPct) || 0) / 100;
+    const N2 = N.slice(); if (M) N2[M - 1] += extra;
+    const T = N2.reduce((s, v) => s + v, 0), avg = M ? T / M : 0;
+    const P = N2.map(n => n + k * (avg - n));
+    // 1) nunca produzir menos que o acumulado vendido: antecipa, tirando dos meses finais
+    for (let m = 0; m < M; m++) {
+      let d = somaAte(N2, m) - somaAte(P, m);
+      if (d > 1e-6) { P[m] += d; for (let j = M - 1; j > m && d > 1e-6; j--) { const t = Math.min(P[j], d); P[j] -= t; d -= t; } }
+    }
+    // 2) não produzir com mais antecedência que o prazo máximo de estoque: empurra o excesso para o mês seguinte
+    for (let m = 0; m < M - 1; m++) {
+      const lim = somaAte(N2, Math.min(M - 1, m + Lm)), ex = somaAte(P, m) - lim;
+      if (ex > 1e-6) { P[m] -= ex; P[m + 1] += ex; }
+    }
+    porEstilo[e] = { N, N2, P, extra };
+  });
+  const chaves = necPorMes.map(x => x.chave);
+  const linhas = chaves.map((chave, m) => {
+    let venda = 0, prod = 0; estilos.forEach(e => { venda += porEstilo[e].N2[m]; prod += porEstilo[e].P[m]; });
+    return { chave, venda, prod };
+  });
+  let ac = 0; linhas.forEach(l => { ac += l.prod - l.venda; l.saldo = ac; });
+  return { estilos, chaves, porEstilo, linhas, totVenda: linhas.reduce((s, l) => s + l.venda, 0), totProd: linhas.reduce((s, l) => s + l.prod, 0) };
+}
+
 // ───────────────────────── Compra de insumos (a partir do plano de brassagem/envase) ─────────────────────────
 function codInsumoEstilo(estilo, resolverBase) {
   const cands = [estilo, resolverBase ? resolverBase(estilo) : estilo].map(normalizarPlano);
@@ -5369,6 +5406,52 @@ function PlanoInsumos({ lotes, envase, hojeReal, resolverBase }) {
   );
 }
 
+function PainelNivelamento({ nivel, lotes, nivelar, estoqueExtra }) {
+  const [aberto, setAberto] = useState(false);
+  const L = (v) => `${Math.round(v).toLocaleString("pt-BR")} L`;
+  const dif = nivel.totProd - nivel.totVenda;
+  const lotesMes = {}; (lotes || []).forEach(l => { lotesMes[l.mes] = (lotesMes[l.mes] || 0) + (l.volume || 0); });
+  const totLotes = nivel.chaves.reduce((s, c) => s + (lotesMes[c] || 0), 0);
+  const th = { padding: "5px 8px", textAlign: "right", color: "#aaa", fontWeight: 600, borderBottom: "1px solid #333", whiteSpace: "nowrap", fontSize: 12 };
+  const td = { padding: "4px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd", fontSize: 12 };
+  const neg = nivel.linhas.some(l => l.saldo < -1);
+  return (
+    <div style={{ marginTop: 18, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 12 }}>
+      <h4 style={{ color: "#fff", fontSize: 14, margin: "0 0 4px" }}>⚖️ Validação do período · produção nivelada ({nivelar}%{estoqueExtra > 0 ? ` · +${estoqueExtra}% de estoque` : ""})</h4>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Soma da produção programada nos meses = necessidade do período{estoqueExtra > 0 ? " + estoque extra" : ""}. “Saldo” é o estoque que se forma (produzido − vendido, acumulado); nunca deve ficar negativo.</div>
+      <div style={{ overflow: "auto" }}>
+        <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
+          <thead><tr><th style={{ ...th, textAlign: "left" }}>Mês</th><th style={th}>Venda prevista</th><th style={th}>Produção programada</th><th style={th}>Saldo acumulado</th><th style={th}>Lotes (volume)</th></tr></thead>
+          <tbody>
+            {nivel.linhas.map(l => (
+              <tr key={l.chave}><td style={{ ...td, textAlign: "left" }}>{labelMes(l.chave)}</td><td style={td}>{L(l.venda)}</td><td style={{ ...td, color: "#8fe3a0", fontWeight: 700 }}>{L(l.prod)}</td><td style={{ ...td, color: l.saldo < -1 ? "#ef4444" : "#ddd" }}>{L(l.saldo)}</td><td style={td}>{lotesMes[l.chave] ? L(lotesMes[l.chave]) : "–"}</td></tr>
+            ))}
+            <tr><td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#fff" }}>TOTAL</td><td style={{ ...td, fontWeight: 700 }}>{L(nivel.totVenda)}</td><td style={{ ...td, fontWeight: 700 }}>{L(nivel.totProd)}</td>
+              <td style={{ ...td, fontWeight: 700, color: Math.abs(dif) < 1 ? "#4caf6b" : "#e0a040" }}>{Math.abs(dif) < 1 ? "✓ fecha" : `dif. ${L(dif)}`}</td><td style={{ ...td, fontWeight: 700 }}>{L(totLotes)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      {neg && <div style={{ fontSize: 11, color: "#ef4444", marginTop: 6 }}>⚠️ O saldo ficou negativo em algum mês: a produção não acompanha a venda.</div>}
+      <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>“Lotes (volume)” é o que os tanques realmente enchem em cada mês (lote cheio, por isso difere da produção alvo). Nos meses já em andamento, parte da produção programada pode já ter passado.</div>
+      <div style={{ marginTop: 8 }}>
+        <button style={chipBtnStyle} onClick={() => setAberto(v => !v)}>{aberto ? "ocultar" : "ver"} por estilo</button>
+        {aberto && (
+          <div style={{ overflow: "auto", marginTop: 8 }}>
+            <table style={{ borderCollapse: "collapse", minWidth: "100%" }}>
+              <thead><tr><th style={{ ...th, textAlign: "left" }}>Estilo</th>{nivel.chaves.map(c => <th key={c} style={th}>{labelMes(c)}<br /><span style={{ fontWeight: 400, color: "#666" }}>venda → produz</span></th>)}</tr></thead>
+              <tbody>
+                {nivel.estilos.map(e => { const o = nivel.porEstilo[e]; return (
+                  <tr key={e}><td style={{ ...td, textAlign: "left" }}>{e}</td>{o.N2.map((v, i) => <td key={i} style={td}>{Math.round(v).toLocaleString("pt-BR")} → <strong style={{ color: "#8fe3a0" }}>{Math.round(o.P[i]).toLocaleString("pt-BR")}</strong></td>)}</tr>
+                ); })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PlanejamentoProducao() {
   const { produtosDados, produtosNomes, produtosPeriodos, tanques, receitas, estoquePorProduto, planoSalvoTexto, cenariosSalvosTexto } = useData();
   const mesAtual = chaveMesAtualReal();
@@ -5397,6 +5480,9 @@ function PlanejamentoProducao() {
   const [incluirOutros, setIncluirOutros] = useState(cfg0.incluirOutros ?? true);
   const [descontarEstoque, setDescontarEstoque] = useState(cfg0.descontarEstoque ?? true);
   const [folga, setFolga] = useState(cfg0.folga ?? 3);
+  const [nivelar, setNivelar] = useState(cfg0.nivelar ?? 100);          // intensidade do nivelamento da produção (0–100%)
+  const [estoqueExtra, setEstoqueExtra] = useState(cfg0.estoqueExtra ?? 0); // % a mais produzido no período (vira estoque no fim)
+  const [prazoEstoque, setPrazoEstoque] = useState(cfg0.prazoEstoque ?? 60); // prazo máximo (dias) de cerveja pronta em estoque
   const [limpezaDias, setLimpezaDias] = useState(cfg0.limpezaDias ?? 1);
   const [diasPadrao, setDiasPadrao] = useState(cfg0.diasPadrao ?? 14);
   const [semVendaMeses, setSemVendaMeses] = useState(cfg0.semVendaMeses ?? 3);
@@ -5601,6 +5687,7 @@ function PlanejamentoProducao() {
   const descontaMes = () => false; // o estoque de produto acabado agora entra como suprimento (consumido semana a semana), não como desconto do 1º mês
   const necPorMes = useMemo(() => mesesPlano.map(chave => ({ chave, nec: montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)) })),
     [mesesPlano, projecoes, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  const nivel = useMemo(() => nivelarProducao(necPorMes, (Number(nivelar) || 0) / 100, estoqueExtra, prazoEstoque), [necPorMes, nivelar, estoqueExtra, prazoEstoque]);
   const necessidades = useMemo(() => montarNecessidades(projecoes[alvo], alvo, true, descontaMes(alvo)),
     [projecoes, alvo, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, incluirOutros, descontarEstoque, diasPadrao, receitaPorEstilo]);
 
@@ -5611,13 +5698,24 @@ function PlanejamentoProducao() {
     mesesPlano.forEach((chave, idx) => {
       const semanas = semanasPorMes[chave] || [];
       const W = semanas.length || 1;
-      const necs = montarNecessidades(projecoes[chave], chave, true, descontaMes(chave)).filter(n => n.necessario > 0);
+      const midx = nivel.chaves.indexOf(chave);
+      const brutas = montarNecessidades(projecoes[chave], chave, true, descontaMes(chave));
+      const necs = [];
+      nivel.estilos.forEach(e => {
+        const o = nivel.porEstilo[e], P = midx >= 0 ? o.P[midx] : 0;
+        if (P <= 0.5) return;
+        const n = brutas.find(x => x.estilo === e);
+        if (n && n.necessario > 0) { const f = P / n.necessario; necs.push({ ...n, necessario: P, petProd: n.petProd * f, barrilProd: n.barrilProd * f }); return; }
+        // mês sem demanda própria desse estilo, mas com produção nivelada: usa o perfil (barril/PET) de outro mês
+        let mod = null; necPorMes.forEach(x => { if (!mod) mod = x.nec.find(y => y.estilo === e && y.necessario > 0) || null; });
+        if (mod) { const sp = mod.necessario > 0 ? mod.petProd / mod.necessario : 0; necs.push({ ...mod, necessario: P, petProd: P * sp, barrilProd: P * (1 - sp) }); }
+      });
       semanas.filter(sm => sm > hoje && (sm <= limite || chave === alvo)).forEach(sm => {
         out.push({ chave, prazo: sm, necessidades: necs.map(n => ({ ...n, necessario: n.necessario / W, petProd: n.petProd / W, barrilProd: n.barrilProd / W })) });
       });
     });
     return out.sort((a, b) => a.prazo - b.prazo);
-  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo]);
+  }, [mesesPlano, semanasPorMes, hoje, projecoes, alvo, ovBarril, ovPet, ovProd, estilosOff, diasEstilo, diasMes, descontarEstoque, diasPadrao, receitaPorEstilo, nivel, necPorMes]);
 
   const planos = useMemo(() => {
     if (!temConfig) return null;
@@ -5658,7 +5756,7 @@ function PlanejamentoProducao() {
     if (primeiraRef.current) { primeiraRef.current = false; return; }
     setPrevia(true);
     if (planoSalvo) setCenarioValidado(true); // havia plano salvo: mantém a programação e a recomendação 3/6 visíveis
-  }, [estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, lotesManuais, semanasPet500, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario]);
+  }, [estilosOff, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, lotesManuais, semanasPet500, pcts, pctMes, ovBarril, ovPet, ovProd, diasEstilo, diasMes, descontarEstoque, semVendaMeses, limpezaDias, diasPadrao, alvo, cenario, nivelar, estoqueExtra, prazoEstoque]);
 
   const usarSalvo = !!planoSalvo && !previa;
   const lotesExibidos = usarSalvo ? reviverLotes(planoSalvo.lotes) : planoCalc.lotes;
@@ -5666,7 +5764,7 @@ function PlanejamentoProducao() {
   const chaveLote = l => `${l.tanque}|${l.estilo}|${l.mes}|${chaveDia(l.inicio)}`;
   const plano = { lotes: lotesExibidos, atrasados: lotesExibidos.filter(l => l.atrasado).length };
 
-  const configAtual = () => ({ lotesManuais, semanasPet500, regrasTanque, loteMax, reporTanques, diasLote, toleranciaSemana, prioridade, mesesOff, ovProd, diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos });
+  const configAtual = () => ({ lotesManuais, semanasPet500, regrasTanque, loteMax, reporTanques, diasLote, toleranciaSemana, prioridade, mesesOff, ovProd, diasEstilo, diasMes, cenarioValidado, alvo, cenario, pcts, pctMes, estilosOff, incluirOutros, descontarEstoque, folga, limpezaDias, diasPadrao, semVendaMeses, ovBarril, ovPet, ritmo, feitos, nivelar, estoqueExtra, prazoEstoque });
   async function salvarPlano(lotesParaSalvar, ritmoSalvo, feitosAtual) {
     setSalvando(true); setMsgSalvar("");
     const payload = { salvoEm: new Date().toISOString(), ritmo: ritmoSalvo, config: { ...configAtual(), feitos: feitosAtual }, lotes: serializarLotes(lotesParaSalvar) };
@@ -5703,7 +5801,7 @@ function PlanejamentoProducao() {
     necPorMes.forEach(({ chave, nec }) => { resumo[chave] = Math.round(nec.reduce((s, n) => s + n.necessario, 0)); });
     const novo = {
       nome, salvoEm: new Date().toISOString(), resumo,
-      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, ovProd, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, lotesManuais, semanasPet500, semVendaMeses, descontarEstoque, diasEstilo, diasMes },
+      config: { cenario, pcts, pctMes, estilosOff, ovBarril, ovPet, ovProd, mesesOff, prioridade, toleranciaSemana, diasLote, reporTanques, regrasTanque, loteMax, lotesManuais, semanasPet500, semVendaMeses, descontarEstoque, diasEstilo, diasMes, nivelar, estoqueExtra, prazoEstoque },
     };
     const existe = cenariosSalvos.some(c => c.nome.toLowerCase() === nome.toLowerCase());
     const lista = existe ? cenariosSalvos.map(c => (c.nome.toLowerCase() === nome.toLowerCase() ? novo : c)) : [...cenariosSalvos, novo];
@@ -5980,6 +6078,19 @@ function PlanejamentoProducao() {
         <label style={{ fontSize: 12, color: "#aaa" }} title="A venda da semana acontece ao longo dos 5 dias úteis, não toda na segunda. Cerveja que fica pronta até este dia da semana de entrega não conta como atraso.">Tolerância na semana (dias após a segunda)<br />
           <input type="number" min="0" max="6" value={toleranciaSemana} onChange={e => setToleranciaSemana(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={inputNum} />
         </label>
+        <div style={{ flexBasis: "100%", background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ fontSize: 12, color: "#aaa", minWidth: 260 }} title="0% = cada mês produz o que ele mesmo vende (como antes). 100% = a produção do período inteiro é dividida igualmente entre os meses (a sobra dos meses fracos vira estoque para os fortes).">
+            <strong style={{ color: "#C69700" }}>Nivelar produção no período: {nivelar}%</strong><br />
+            <input type="range" min="0" max="100" step="5" value={nivelar} onChange={e => setNivelar(Number(e.target.value))} style={{ width: 260 }} />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#666" }}><span>cada mês por si</span><span>igual em todos</span></div>
+          </label>
+          <label style={{ fontSize: 12, color: "#aaa" }} title="Produz mais que a venda prevista do período; o excedente fica como estoque no fim do período.">Estoque extra no período (%)<br />
+            <input type="number" min="0" max="100" value={estoqueExtra} onChange={e => setEstoqueExtra(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} style={inputNum} />
+          </label>
+          <label style={{ fontSize: 12, color: "#aaa" }} title="Limite de antecedência: a produção de um mês só adianta volume para até este prazo (arredondado em meses de 30 dias).">Prazo máx. de estoque (dias)<br />
+            <input type="number" min="0" max="365" value={prazoEstoque} onChange={e => setPrazoEstoque(Math.max(0, Number(e.target.value) || 0))} style={inputNum} />
+          </label>
+        </div>
         <label style={{ fontSize: 12, color: "#ddd", display: "flex", gap: 6, alignItems: "center" }} title="Desligado: só produz quando o consumo previsto passa do estoque (a sobra de cada lote vai para o estoque). Ligado: tanque que libera sem demanda é enchido de qualquer forma (reposição).">
           <input type="checkbox" checked={reporTanques} onChange={e => setReporTanques(e.target.checked)} /> Repor tanques sem demanda (tanque sempre cheio)
         </label>
@@ -6705,6 +6816,7 @@ function PlanejamentoProducao() {
         </table>
       </div>
       <div style={{ fontSize: 11, color: "#777", marginTop: 6 }}>* estilo sem prazo cadastrado (usei {diasPadrao} dias). Vermelho = lote que não fica pronto até o início da semana de entrega.</div>
+      <PainelNivelamento nivel={nivel} lotes={lotesExibidos} nivelar={nivelar} estoqueExtra={estoqueExtra} />
       <PlanoInsumos lotes={lotesExibidos} envase={envase} hojeReal={hojeReal} resolverBase={resolverBase} />
       </>) : (
         <div style={{ color: "#777", fontSize: 12 }}>Valide o cenário acima para ver a programação dos tanques e da brassagem.</div>
