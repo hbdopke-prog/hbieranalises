@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.59";
+const APP_VERSION = "v10.60";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -162,6 +162,25 @@ const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2e
 // palavra "online" - não pelo texto exato, porque o mesmo conceito aparece com nomes diferentes
 // em taxonomias diferentes (ex: Grupo de Cliente usa "5. Venda Consumo Direto HBier", já o Canal
 // de Produto usa "5. Consumidor Final" - o padrão numérico é o que se mantém igual nos dois).
+// Faixas de categoria usadas no seletor da aba Global
+const FAIXAS_CLIENTE_GLOBAL = [
+  { id: "c12", label: "Categoria 1 e 2" },
+  { id: "c3", label: "Categoria 3" },
+  { id: "c4", label: "Categoria 4" },
+  { id: "c56", label: "Categoria 5, 6 e Venda Online" },
+];
+function faixaDoGrupo(g) {
+  const norm = (g || "").trim().toUpperCase();
+  if (!norm) return null;
+  if (norm.includes("ONLINE")) return "c56";
+  const m = norm.match(/^([1-6])(?![0-9])/);
+  if (!m) return null;
+  const n = m[1];
+  if (n === "1" || n === "2") return "c12";
+  if (n === "3") return "c3";
+  if (n === "4") return "c4";
+  return "c56";
+}
 function grupoEhPesado(g) {
   const norm = (g || "").trim().toUpperCase();
   if (!norm) return false;
@@ -3143,7 +3162,18 @@ function DashboardTab() {
 }
 
 function GlobalTab() {
-  const { dados, nomes, periodos, grupos, clientesPorGrupo, dataCriacaoDoCliente } = useData();
+  const { dados, nomes: nomesTodos, periodos, grupos: gruposTodos, clientesPorGrupo, dataCriacaoDoCliente } = useData();
+
+  // seletor de categoria: começa com tudo marcado; clientes sem categoria só entram com todas marcadas
+  const [faixasSel, setFaixasSel] = useState(() => FAIXAS_CLIENTE_GLOBAL.map(f => f.id));
+  const todasFaixas = faixasSel.length === FAIXAS_CLIENTE_GLOBAL.length;
+  const grupos = useMemo(() => gruposTodos.filter(g => faixasSel.includes(faixaDoGrupo(g))), [gruposTodos, faixasSel]);
+  const nomes = useMemo(() => {
+    if (todasFaixas) return nomesTodos;
+    const set = new Set(grupos.flatMap(g => clientesPorGrupo[g] || []));
+    return nomesTodos.filter(n => set.has(n));
+  }, [nomesTodos, grupos, clientesPorGrupo, todasFaixas]);
+  const toggleFaixa = id => setFaixasSel(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   // agrega todos os clientes num "cliente virtual" - a empresa toda, mês a mês
   const rowsGlobais = useMemo(() => {
@@ -3279,14 +3309,14 @@ function GlobalTab() {
   const dadosPizza = useMemo(() => {
     if (!inicioPizza || !fimPizza) return [];
     const chaves = new Set(periodos.filter(p => p >= inicioPizza && p <= fimPizza));
-    return gruposSelPizza.map(g => {
+    return gruposSelPizza.filter(g => grupos.includes(g)).map(g => {
       let fat = 0, lit = 0;
       (clientesPorGrupo[g] || []).forEach(codigo => {
         (dados[codigo] || []).forEach(r => { if (chaves.has(r.chave)) { fat += r.faturamento; lit += r.litros; } });
       });
       return { grupo: g, fat, lit };
     }).filter(d => d.fat > 0 || d.lit > 0);
-  }, [gruposSelPizza, inicioPizza, fimPizza, periodos, clientesPorGrupo, dados]);
+  }, [gruposSelPizza, grupos, inicioPizza, fimPizza, periodos, clientesPorGrupo, dados]);
 
   const totalFatPizza = dadosPizza.reduce((s, d) => s + d.fat, 0);
   const totalLitPizza = dadosPizza.reduce((s, d) => s + d.lit, 0);
@@ -3376,6 +3406,17 @@ function GlobalTab() {
             { nome: "Por grupo", linhas: porGrupo }];
         }} />
         <BotaoImprimir label="Imprimir Global" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+        <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Layers size={13} /> Tipo de cliente ({nomes.length} clientes):</span>
+        {FAIXAS_CLIENTE_GLOBAL.map(f => (
+          <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
+            <input type="checkbox" checked={faixasSel.includes(f.id)} onChange={() => toggleFaixa(f.id)} />
+            {f.label}
+          </label>
+        ))}
+        <button onClick={() => setFaixasSel(FAIXAS_CLIENTE_GLOBAL.map(f => f.id))} style={chipBtnStyle}>Marcar todos</button>
+        {!todasFaixas && <span style={{ color: "#C69700", fontSize: 11 }}>⚠ filtro ativo — clientes sem categoria ficam de fora</span>}
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />}
