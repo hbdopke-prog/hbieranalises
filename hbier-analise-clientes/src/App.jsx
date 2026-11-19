@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.61";
+const APP_VERSION = "v10.62";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -93,7 +93,7 @@ function AvisoMesAndamento({ emAndamento, rowsFechados }) {
   const projecao = calcularProjecaoMesAndamento(emAndamento, rowsFechados);
 
   return (
-    <div style={{ color: "#888", fontSize: 11, marginBottom: 10, background: "#141412", border: "1px dashed #444", borderRadius: 6, padding: "8px 10px" }}>
+    <div style={{ color: "#888", fontSize: 11, marginBottom: 10, background: "#0E1510", border: "1px dashed #444", borderRadius: 6, padding: "8px 10px" }}>
       <div style={{ marginBottom: projecao ? 6 : 0 }}>
         ⏳ {labelMes(emAndamento.chave)} em andamento (dia {projecao?.diaAtual ?? "?"} de {projecao?.diasNoMes ?? "?"}): {fmtMoeda(emAndamento.faturamento)} · {fmtLitros(emAndamento.litros)} até o momento
       </div>
@@ -154,8 +154,8 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 }
 
 // Paleta de cores pra distinguir anos sobrepostos no mesmo gráfico (12 meses no eixo X)
-const PALETA_PIZZA10 = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c", "#f1c40f", "#e84393"];
-const PALETA_ANOS = ["#02601D", "#C69700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
+const PALETA_PIZZA10 = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c", "#f1c40f", "#e84393"];
+const PALETA_ANOS = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
 // Grupos/canais que pesam muito nos filtros "Todos" (consumo interno, eventos, venda online -
 // muitos clientes/pedidos de baixo valor unitário) e por isso ficam DE FORA da seleção padrão.
 // Detecta pelo PADRÃO de numeração da empresa (5.xxx = consumo direto, 6.xxx = eventos) e pela
@@ -400,7 +400,7 @@ function TooltipPorAno({ active, label, payload, formatador }) {
   const anosOrdenados = Object.keys(porAno).map(Number).sort((a, b) => a - b);
 
   return (
-    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "10px 12px" }}>
+    <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 6, padding: "10px 12px" }}>
       <div style={{ color: "#fff", fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{label}</div>
       {anosOrdenados.map(ano => {
         const valor = porAno[ano];
@@ -547,10 +547,10 @@ function BadgeTendencia({ variacao, formatador, periodoTexto }) {
 function StatCard({ label, value, icon, badge }) {
   return (
     <div style={{
-      background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
-      flex: "1 1 160px", minWidth: 160, border: "1px solid #33332f",
+      background: "#15201A", borderRadius: 10, padding: "14px 16px",
+      flex: "1 1 160px", minWidth: 160, border: "1px solid #2E3831",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4, lineHeight: 1.4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C99700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4, lineHeight: 1.4 }}>
         {icon}{label}
       </div>
       <div style={{ color: "#fff", fontSize: 22, fontWeight: 800, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.2 }}>
@@ -581,10 +581,10 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
 
   return (
     <div style={{
-      background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
-      flex: "1 1 280px", minWidth: 280, border: "1px solid #33332f",
+      background: "#15201A", borderRadius: 10, padding: "14px 16px",
+      flex: "1 1 280px", minWidth: 280, border: "1px solid #2E3831",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C99700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 }}>
         {icon}{titulo}
         {rowsAtual.length > 0 && <span style={{ textTransform: "none", color: "#555", fontWeight: 400 }}>({periodoTexto(rowsAtual)})</span>}
       </div>
@@ -609,7 +609,7 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
       )}
 
       {rowsAnterior.length > 0 && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2a2a28" }}>
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #232D26" }}>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 4 }}>Período anterior comparado ({periodoTexto(rowsAnterior)})</div>
           <div style={{ display: "flex", gap: 24 }}>
             <div>
@@ -711,8 +711,8 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
   const rotuloComparacao = comparacaoParcial ? `média/mês vs mesmo período de ${ano - 1}` : `média/mês vs ${ano - 1}`;
   const trimestres = mostrarTrimestres ? calcularTrimestres(rowsDoAno, rowsAnoAnterior, totalFat, totalLit) : [];
   return (
-    <div style={{ background: "#1D1D1B", borderRadius: 10, padding: "14px 16px", border: "1px solid #33332f" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
+    <div style={{ background: "#15201A", borderRadius: 10, padding: "14px 16px", border: "1px solid #2E3831" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C99700", fontSize: 12, marginBottom: 10, fontWeight: 700 }}>
         <Calendar size={14} /> Ano {ano}{meses < 12 ? ` (${meses} meses fechados)` : ""}
       </div>
       <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
@@ -730,12 +730,12 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
         </div>
         <div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Preço médio/L</div>
-          <div style={{ color: "#C69700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
+          <div style={{ color: "#C99700", fontSize: 18, fontWeight: 800 }}>{fmtPrecoLitro(precoMedioLitro(totalFat, totalLit))}</div>
         </div>
       </div>
 
       {comparacaoParcial && (
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #2a2a28" }}>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #232D26" }}>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 6 }}>
             {ano - 1} no mesmo período ({periodoTexto(rowsAnoAnteriorMesmoPeriodo)}) — base da comparação acima
           </div>
@@ -767,15 +767,15 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
       )}
 
       {trimestres.length > 0 && (
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232D26" }}>
           <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Por trimestre</div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 8 }}>
             O % entre parênteses ao lado do total compara com o mesmo trimestre do ano anterior (mesmos meses, mesmo se o trimestre atual ainda estiver parcial).
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {trimestres.map(t => (
-              <div key={t.nome} style={{ background: "#141412", border: "1px solid #333", borderRadius: 8, padding: 10, flex: "1 1 160px", minWidth: 160 }}>
-                <div style={{ color: "#C69700", fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+              <div key={t.nome} style={{ background: "#0E1510", border: "1px solid #333", borderRadius: 8, padding: 10, flex: "1 1 160px", minWidth: 160 }}>
+                <div style={{ color: "#C99700", fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
                   {t.nome} · {t.label}{!t.completo ? ` (${t.mesesFechados} mês${t.mesesFechados > 1 ? "es" : ""} fechado${t.mesesFechados > 1 ? "s" : ""})` : ""}
                 </div>
                 <div style={{ color: "#666", fontSize: 9 }}>Litros total</div>
@@ -804,11 +804,11 @@ function CardAnualCompleto({ dados, projecao, mostrarTrimestres }) {
           <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
             <div>
               <div style={{ color: "#666", fontSize: 10 }}>+ Faturamento projetado</div>
-              <div style={{ color: "#C69700", fontSize: 15, fontWeight: 700 }}>+ {fmtMoeda(projecao.fat)}</div>
+              <div style={{ color: "#C99700", fontSize: 15, fontWeight: 700 }}>+ {fmtMoeda(projecao.fat)}</div>
             </div>
             <div>
               <div style={{ color: "#666", fontSize: 10 }}>+ Litros projetados</div>
-              <div style={{ color: "#C69700", fontSize: 15, fontWeight: 700 }}>+ {fmtLitros(projecao.lit)}</div>
+              <div style={{ color: "#C99700", fontSize: 15, fontWeight: 700 }}>+ {fmtLitros(projecao.lit)}</div>
             </div>
             <div>
               <div style={{ color: "#666", fontSize: 10 }}>Total com projeção</div>
@@ -827,7 +827,7 @@ function Section({ title, icon, children }) {
       <h3 style={{
         color: "#fff", fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 16,
         fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8,
-        borderBottom: "2px solid #02601D", paddingBottom: 8, marginBottom: 14,
+        borderBottom: "2px solid #025F1D", paddingBottom: 8, marginBottom: 14,
       }}>
         {icon}{title}
       </h3>
@@ -838,12 +838,12 @@ function Section({ title, icon, children }) {
 
 const inputStyle = {
   width: "100%", padding: "10px 12px", marginBottom: 12, borderRadius: 8,
-  border: "1px solid #444", background: "#141412", color: "#fff", fontSize: 14,
+  border: "1px solid #444", background: "#0E1510", color: "#fff", fontSize: 14,
   outline: "none", boxSizing: "border-box",
 };
 const selectStyle = {
   flex: 1, padding: "8px 10px", borderRadius: 6, border: "1px solid #444",
-  background: "#141412", color: "#fff", fontSize: 13,
+  background: "#0E1510", color: "#fff", fontSize: 13,
 };
 
 function LoginScreen({ onLogin }) {
@@ -884,17 +884,17 @@ function LoginScreen({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight: 420, display: "flex", alignItems: "center", justifyContent: "center", background: "#1D1D1B", borderRadius: 12, padding: 24 }}>
+    <div style={{ minHeight: 420, display: "flex", alignItems: "center", justifyContent: "center", background: "#15201A", borderRadius: 12, padding: 24 }}>
       <div style={{ width: 300, textAlign: "center" }}>
         <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 34, letterSpacing: 1.5, marginBottom: 4 }}>
-          HBIER <span style={{ color: "#C69700" }}>BI</span>
+          HBIER <span style={{ color: "#C99700" }}>BI</span>
         </div>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 18 }}>{APP_VERSION}</div>
         <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} disabled={carregando} />
         <input placeholder="Senha" type="password" value={senha} onKeyDown={handleKeyDown} onChange={e => setSenha(e.target.value)} style={inputStyle} disabled={carregando} />
         {erro && <div style={{ color: "#e0645a", fontSize: 13, marginBottom: 10 }}>{erro}</div>}
         <button type="button" onClick={tentarEntrar} disabled={carregando} style={{
-          width: "100%", background: "#02601D", color: "#fff", border: "none",
+          width: "100%", background: "#025F1D", color: "#fff", border: "none",
           borderRadius: 8, padding: "10px 0", fontSize: 15, fontWeight: 600,
           cursor: carregando ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           opacity: carregando ? 0.7 : 1,
@@ -918,11 +918,11 @@ function TabelaClienteMeses({ cliente, rows }) {
         </thead>
         <tbody>
           <tr>
-            <td style={{ ...tdStyle, color: "#02601D", fontWeight: 700 }}>Faturamento</td>
+            <td style={{ ...tdStyle, color: "#025F1D", fontWeight: 700 }}>Faturamento</td>
             {rows.map(r => <td key={r.chave} style={tdStyle}>{fmtMoeda(r.faturamento)}</td>)}
           </tr>
           <tr>
-            <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>Litros</td>
+            <td style={{ ...tdStyle, color: "#C99700", fontWeight: 700 }}>Litros</td>
             {rows.map(r => <td key={r.chave} style={tdStyle}>{fmtLitros(r.litros)}</td>)}
           </tr>
         </tbody>
@@ -932,15 +932,15 @@ function TabelaClienteMeses({ cliente, rows }) {
 }
 
 const thStyle = {
-  background: "#1D1D1B", color: "#fff", fontSize: 12, padding: "8px 10px",
+  background: "#15201A", color: "#fff", fontSize: 12, padding: "8px 10px",
   borderBottom: "1px solid #333", whiteSpace: "nowrap", textAlign: "left", position: "sticky", top: 0,
 };
 const tdStyle = {
-  color: "#ddd", fontSize: 12, padding: "6px 10px", borderBottom: "1px solid #262624", whiteSpace: "nowrap",
+  color: "#ddd", fontSize: 12, padding: "6px 10px", borderBottom: "1px solid #222B25", whiteSpace: "nowrap",
 };
 
 const chipBtnStyle = {
-  background: "transparent", border: "1px solid #444", color: "#C69700",
+  background: "transparent", border: "1px solid #444", color: "#C99700",
   borderRadius: 6, padding: "6px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600,
 };
 
@@ -1198,8 +1198,8 @@ function ClienteDashboard() {
         <BotaoImprimir label="Imprimir Cliente" />
       </div>
       <div style={{ position: "relative", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
-          <Search size={16} color="#C69700" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#15201A", borderRadius: 8, padding: "10px 14px", border: "1px solid #333" }}>
+          <Search size={16} color="#C99700" />
           <input placeholder="Buscar cliente... (pode adicionar vários)" value={busca}
             onChange={e => setBusca(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 14 }} />
@@ -1210,11 +1210,11 @@ function ClienteDashboard() {
           )}
         </div>
         {sugestoes.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 5, background: "#15201A", border: "1px solid #333", borderRadius: 8, marginTop: 4, overflow: "hidden" }}>
             {sugestoes.map(c => (
               <div key={c} onClick={() => adicionarCliente(c)}
-                style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #2a2a28" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
+                style={{ padding: "10px 14px", color: "#fff", cursor: "pointer", fontSize: 14, borderBottom: "1px solid #232D26" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#025F1D"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {labelDoCliente[c]}
                 {razaoSocialDoCliente[c] && razaoSocialDoCliente[c] !== labelDoCliente[c] && (
@@ -1230,12 +1230,12 @@ function ClienteDashboard() {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
           {clientesSel.map(c => (
             <div key={c} style={{
-              display: "flex", alignItems: "center", gap: 6, background: "#1D1D1B", border: "1px solid #02601D",
+              display: "flex", alignItems: "center", gap: 6, background: "#15201A", border: "1px solid #025F1D",
               borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
             }}>
               {labelDoCliente[c]}
               <button onClick={() => removerCliente(c)} style={{
-                background: "#02601D", border: "none", color: "#fff", borderRadius: "50%",
+                background: "#025F1D", border: "none", color: "#fff", borderRadius: "50%",
                 width: 18, height: 18, cursor: "pointer", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
               }}>×</button>
             </div>
@@ -1257,7 +1257,7 @@ function ClienteDashboard() {
 
       {clientesSel.length > 0 && todasRows && todasRows.length > 0 && (
         <>
-          <h2 style={{ color: "#C69700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
+          <h2 style={{ color: "#C99700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
             {clientesSel.length === 1 ? labelDoCliente[clientesSel[0]] : `${clientesSel.length} clientes (somados)`}
           </h2>
           {clientesSel.length === 1 && razaoSocialDoCliente[clientesSel[0]] && razaoSocialDoCliente[clientesSel[0]] !== labelDoCliente[clientesSel[0]] && (
@@ -1266,7 +1266,7 @@ function ClienteDashboard() {
 
           <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 22, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
             <button onClick={() => setInicio(primeiroPeriodo)} style={chipBtnStyle}>Desde o início</button>
             <MonthPicker periodosDisponiveis={todasRows.map(r => r.chave)} valor={inicio} onSelecionar={setInicio} placeholder="Início" />
@@ -1275,7 +1275,7 @@ function ClienteDashboard() {
             <button onClick={() => setFim(ultimoPeriodo)} style={chipBtnStyle}>Até hoje</button>
           </div>
 
-          <Section title="Preço médio por litro" icon={<Droplets size={18} color="#C69700" />}>
+          <Section title="Preço médio por litro" icon={<Droplets size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <StatCard label={`Últimos 3 meses (${periodoTexto(ultimos3)})`}
                 value={fmtPrecoLitro(precoMedioLitro(soma(ultimos3, "faturamento"), soma(ultimos3, "litros")))} icon={<Droplets size={14} />}
@@ -1295,9 +1295,9 @@ function ClienteDashboard() {
             </div>
           </Section>
 
-          <Section title="Comparação Ano a Ano" icon={<Calendar size={18} color="#C69700" />}>
+          <Section title="Comparação Ano a Ano" icon={<Calendar size={18} color="#C99700" />}>
             <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
                 <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
                 <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
                 <span style={{ color: "#666", fontSize: 11 }}>
@@ -1329,7 +1329,7 @@ function ClienteDashboard() {
             </div>
           </Section>
 
-          <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
+          <Section title="Faturamento" icon={<TrendingUp size={18} color="#025F1D" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="faturamento" formatador={fmtMoeda} />
               <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<TrendingUp size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="faturamento" formatador={fmtMoeda} />
@@ -1352,7 +1352,7 @@ function ClienteDashboard() {
             </div>
           </Section>
 
-          <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
+          <Section title="Litros" icon={<Droplets size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={ultimos3} rowsAnterior={anteriores3} campo="litros" formatador={fmtLitros} />
               <CardJanelaDetalhada titulo="Últimos 6 meses" icon={<Droplets size={13} />} rowsAtual={ultimos6} rowsAnterior={anteriores6} campo="litros" formatador={fmtLitros} />
@@ -1376,7 +1376,7 @@ function ClienteDashboard() {
           </Section>
 
           {mediasPorAno.length > 0 && (
-            <Section title="Faturamento e Litros por Ano" icon={<Calendar size={18} color="#C69700" />}>
+            <Section title="Faturamento e Litros por Ano" icon={<Calendar size={18} color="#C99700" />}>
               <div style={{ background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 10, padding: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {mediasPorAno.map(m => (
@@ -1397,7 +1397,7 @@ function ClienteDashboard() {
 }
 
 const navBtnStyle = {
-  background: "transparent", border: "1px solid #444", color: "#C69700",
+  background: "transparent", border: "1px solid #444", color: "#C99700",
   borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 14, lineHeight: 1,
 };
 
@@ -1418,7 +1418,7 @@ function MonthPicker({ periodosDisponiveis, valor, onSelecionar, disabled, place
   return (
     <div style={{ position: "relative", flex: 1 }}>
       <button type="button" disabled={disabled} onClick={() => setAberto(a => !a)} style={{
-        width: "100%", textAlign: "left", background: "#141412", border: "1px solid #444",
+        width: "100%", textAlign: "left", background: "#0E1510", border: "1px solid #444",
         borderRadius: 6, padding: "8px 10px", fontSize: 13, cursor: disabled ? "not-allowed" : "pointer",
         color: disabled ? "#555" : (valor ? "#fff" : "#888"),
       }}>
@@ -1428,7 +1428,7 @@ function MonthPicker({ periodosDisponiveis, valor, onSelecionar, disabled, place
       {aberto && !disabled && (
         <div style={{
           position: "absolute", zIndex: 30, top: "100%", left: 0, marginTop: 4,
-          background: "#1D1D1B", border: "1px solid #444", borderRadius: 8, padding: 10, width: 220,
+          background: "#15201A", border: "1px solid #444", borderRadius: 8, padding: 10, width: 220,
           boxShadow: "0 8px 20px rgba(0,0,0,0.4)",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -1447,9 +1447,9 @@ function MonthPicker({ periodosDisponiveis, valor, onSelecionar, disabled, place
                   style={{
                     padding: "6px 0", fontSize: 12, borderRadius: 6,
                     cursor: disponivel ? "pointer" : "not-allowed",
-                    background: selecionado ? "#C69700" : "transparent",
-                    color: !disponivel ? "#444" : (selecionado ? "#141412" : "#ddd"),
-                    border: "1px solid " + (selecionado ? "#C69700" : "#333"), fontWeight: selecionado ? 700 : 400,
+                    background: selecionado ? "#C99700" : "transparent",
+                    color: !disponivel ? "#444" : (selecionado ? "#0E1510" : "#ddd"),
+                    border: "1px solid " + (selecionado ? "#C99700" : "#333"), fontWeight: selecionado ? 700 : 400,
                   }}>
                   {m}
                 </button>
@@ -1508,7 +1508,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
   }
 
   return (
-    <div style={{ flex: 1, minWidth: 280, background: "#1D1D1B", borderRadius: 10, padding: 16, border: `1px solid ${cor}` }}>
+    <div style={{ flex: 1, minWidth: 280, background: "#15201A", borderRadius: 10, padding: 16, border: `1px solid ${cor}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div style={{ color: cor, fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 0.5 }}>
           {titulo}
@@ -1534,7 +1534,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
         <div style={{ maxHeight: 140, overflowY: "auto", border: "1px solid #333", borderRadius: 6, padding: "6px 8px" }}>
           {grupos.length === 0 && <div style={{ color: "#666", fontSize: 12, padding: "4px 0" }}>Nenhum grupo cadastrado ainda.</div>}
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupo(g)} />
               {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
@@ -1571,7 +1571,7 @@ function modoBtnStyle(ativo, cor) {
   return {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
     padding: "6px 0", fontSize: 12, borderRadius: 6, cursor: "pointer",
-    background: ativo ? cor : "transparent", color: ativo ? "#141412" : "#888",
+    background: ativo ? cor : "transparent", color: ativo ? "#0E1510" : "#888",
     border: `1px solid ${ativo ? cor : "#444"}`, fontWeight: 600,
   };
 }
@@ -1585,10 +1585,10 @@ function mediaSimples(valores) {
 function CardComparativo({ titulo, valorA, valorB, variacao, formatador, icon }) {
   return (
     <div style={{
-      background: "#1D1D1B", borderRadius: 10, padding: "14px 16px",
-      flex: "1 1 220px", minWidth: 220, border: "1px solid #33332f",
+      background: "#15201A", borderRadius: 10, padding: "14px 16px",
+      flex: "1 1 220px", minWidth: 220, border: "1px solid #2E3831",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C69700", fontSize: 11, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C99700", fontSize: 11, marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>
         {icon}{titulo}
       </div>
       <div style={{ display: "flex", gap: 20, marginBottom: 8 }}>
@@ -1823,10 +1823,10 @@ function ComparacaoTab() {
         <BotaoImprimir label="Imprimir Comparação" />
       </div>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
-        <ColunaComparacao titulo="Cenário A" cor="#02601D"
+        <ColunaComparacao titulo="Cenário A" cor="#025F1D"
           modo={modoA} setModo={setModoA} selecionados={selA} setSelecionados={setSelA}
           gruposSel={gruposA} setGruposSel={setGruposA} inicio={inicioA} setInicio={setInicioA} fim={fimA} setFim={setFimA} />
-        <ColunaComparacao titulo="Cenário B" cor="#C69700"
+        <ColunaComparacao titulo="Cenário B" cor="#C99700"
           modo={modoB} setModo={setModoB} selecionados={selB} setSelecionados={setSelB}
           gruposSel={gruposB} setGruposSel={setGruposB} inicio={inicioB} setInicio={setInicioB} fim={fimB} setFim={setFimB} />
       </div>
@@ -1853,7 +1853,7 @@ function ComparacaoTab() {
             <StatCard label={`${labelBCurto} · Média 3 meses (Lit.)`} value={fmtLitros(media3LitB)} icon={<Droplets size={14} />} />
           </div>
 
-          <Section title="Comparativo A vs B" icon={<GitCompareArrows size={18} color="#C69700" />}>
+          <Section title="Comparativo A vs B" icon={<GitCompareArrows size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <CardComparativo titulo="Faturamento · Média 3 meses" valorA={media3FatA} valorB={media3FatB} variacao={compMedia3Fat} formatador={fmtMoeda} icon={<TrendingUp size={13} />} />
               <CardComparativo titulo="Faturamento · Média do período" valorA={mediaFatA} valorB={mediaFatB} variacao={compMediaFat} formatador={fmtMoeda} icon={<TrendingUp size={13} />} />
@@ -1866,18 +1866,18 @@ function ComparacaoTab() {
           </Section>
 
           <div style={{ background: "rgba(76,175,107,0.05)", border: "1px solid rgba(76,175,107,0.2)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
-            <Section title="Faturamento" icon={<TrendingUp size={18} color="#02601D" />}>
+            <Section title="Faturamento" icon={<TrendingUp size={18} color="#025F1D" />}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={12} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend content={<LegendaBranca />} />
-                  <Bar dataKey="faturamentoA" name={labelA} fill="#02601D" radius={[4,4,0,0]}>
+                  <Bar dataKey="faturamentoA" name={labelA} fill="#025F1D" radius={[4,4,0,0]}>
                     <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
                   </Bar>
-                  <Bar dataKey="faturamentoB" name={labelB} fill="#C69700" radius={[4,4,0,0]}>
+                  <Bar dataKey="faturamentoB" name={labelB} fill="#C99700" radius={[4,4,0,0]}>
                     <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
                   </Bar>
                   <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
@@ -1892,7 +1892,7 @@ function ComparacaoTab() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaMoeda(v), "Diferença A − B"]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <ReferenceLine y={0} stroke="#666" />
                   <Bar dataKey="diferencaFat" radius={[3,3,3,3]}>
                     <LabelList dataKey="diferencaFat" position="top" formatter={rotuloDiferencaMoeda} style={{ fontSize: 10, fill: "#ccc" }} />
@@ -1906,18 +1906,18 @@ function ComparacaoTab() {
           </div>
 
           <div style={{ background: "rgba(74,144,217,0.05)", border: "1px solid rgba(74,144,217,0.2)", borderRadius: 12, padding: 16 }}>
-            <Section title="Litros" icon={<Droplets size={18} color="#C69700" />}>
+            <Section title="Litros" icon={<Droplets size={18} color="#C99700" />}>
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={chartLit} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={12} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend content={<LegendaBranca />} />
-                  <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#02601D" strokeWidth={2} dot={{ r: 3 }}>
+                  <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#025F1D" strokeWidth={2} dot={{ r: 3 }}>
                     <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
                   </Line>
-                  <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C69700" strokeWidth={2} dot={{ r: 3 }}>
+                  <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C99700" strokeWidth={2} dot={{ r: 3 }}>
                     <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
                   </Line>
                   <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
@@ -1932,7 +1932,7 @@ function ComparacaoTab() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                   <XAxis dataKey="periodo" tick={{ fill: "#fff", fontSize: 12 }} interval="preserveStartEnd" />
                   <YAxis stroke="#888" fontSize={11} tickFormatter={v => `${(v/1000).toFixed(1)}k`} />
-                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={v => [v == null ? "-" : rotuloDiferencaLitros(v), "Diferença A − B"]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <ReferenceLine y={0} stroke="#666" />
                   <Bar dataKey="diferencaLit" radius={[3,3,3,3]}>
                     <LabelList dataKey="diferencaLit" position="top" formatter={rotuloDiferencaLitros} style={{ fontSize: 10, fill: "#ccc" }} />
@@ -1976,7 +1976,7 @@ function ComparacaoTab() {
         )}
 
         {gruposComparar.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 20, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
             <MonthPicker periodosDisponiveis={periodos} valor={inicioComparar} onSelecionar={setInicioComparar} placeholder="Início" />
             <span style={{ color: "#666" }}>até</span>
@@ -1998,7 +1998,7 @@ function ComparacaoTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={v => v == null ? "-" : fmtMoeda(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 {gruposComparar.map((grupo, idx) => (
                   <Line key={grupo.id} type="monotone" dataKey={`fat_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -2012,7 +2012,7 @@ function ComparacaoTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtMoeda(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 <ReferenceLine y={0} stroke="#666" />
                 {gruposComparar.map((grupo, idx) => (
@@ -2027,7 +2027,7 @@ function ComparacaoTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={v => v == null ? "-" : fmtLitros(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 {gruposComparar.map((grupo, idx) => (
                   <Line key={grupo.id} type="monotone" dataKey={`lit_${grupo.id}`} name={grupo.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -2041,7 +2041,7 @@ function ComparacaoTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => `${(v/1000).toFixed(1)}k L`} />
-                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={v => v == null ? "-" : (v >= 0 ? "+" : "") + fmtLitros(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 <ReferenceLine y={0} stroke="#666" />
                 {gruposComparar.map((grupo, idx) => (
@@ -2083,7 +2083,7 @@ function ComparacaoTab() {
                           <td style={{ ...tdStyle, color: idx === 0 ? "#4caf6b" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
                             {idx === 0 ? "líder" : `${pctLider.toFixed(1)}%`}
                           </td>
-                          <td style={{ ...tdStyle, color: "#C69700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
+                          <td style={{ ...tdStyle, color: "#C99700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
                         </tr>
                       );
                     });
@@ -2106,7 +2106,7 @@ function CarregandoDados({ onRetry, mensagem }) {
     <div style={{ minHeight: 300, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, color: "#888" }}>
       {mensagem ? (
         <>
-          <AlertTriangle size={28} color="#C69700" />
+          <AlertTriangle size={28} color="#C99700" />
           <div style={{ fontSize: 14, textAlign: "center", maxWidth: 360 }}>{mensagem}</div>
           <button onClick={onRetry} style={{
             display: "flex", alignItems: "center", gap: 6, background: "transparent",
@@ -2211,15 +2211,15 @@ function PctInline({ variacao }) {
 
 function ListaTop10({ titulo, itens, formatador, labelDoCliente }) {
   return (
-    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 300px", minWidth: 300 }}>
-      <div style={{ color: "#C69700", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo}</div>
+    <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 300px", minWidth: 300 }}>
+      <div style={{ color: "#C99700", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{titulo}</div>
       {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Sem dados suficientes pra esse comparativo.</div>}
       {itens.map((item, idx) => {
         const { cor, Icon } = classificarTendencia(item.variacao.pct);
         return (
           <div key={item.nome} style={{
             display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-            padding: "6px 0", borderBottom: idx < itens.length - 1 ? "1px solid #262624" : "none", fontSize: 12,
+            padding: "6px 0", borderBottom: idx < itens.length - 1 ? "1px solid #222B25" : "none", fontSize: 12,
           }}>
             <span style={{ color: "#fff" }}>{idx + 1}. {labelDoCliente[item.nome]}</span>
             <span style={{ color: cor, fontWeight: 700, display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap" }}>
@@ -2249,15 +2249,15 @@ function JanelaMetrica({ label, fat, lit, precoLitro, varFat, varLit, periodoTex
         {fmtLitros(lit)}{mediaLit != null && <span style={{ color: "#888", fontSize: 10, fontWeight: 400 }}> ({fmtLitros(mediaLit)} média/mês)</span>}
       </div>
       <BadgeTendencia variacao={varLit} formatador={fmtLitros} periodoTexto={periodoAnteriorTexto ? `vs ${periodoAnteriorTexto}` : ""} />
-      <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginTop: 6 }}>{fmtPrecoLitro(precoLitro)}</div>
+      <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, marginTop: 6 }}>{fmtPrecoLitro(precoLitro)}</div>
     </div>
   );
 }
 
 function CardClienteDashboard({ posicao, nome, metricas }) {
   return (
-    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 16, marginBottom: 10 }}>
-      <div style={{ color: "#C69700", fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
+    <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 10, padding: 16, marginBottom: 10 }}>
+      <div style={{ color: "#C99700", fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
         #{posicao} · {nome}
       </div>
       <AvisoMesAndamento emAndamento={metricas.emAndamentoRow} rowsFechados={metricas.rowsFechados} />
@@ -2276,7 +2276,7 @@ function CardClienteDashboard({ posicao, nome, metricas }) {
       </div>
 
       {metricas.comparacaoAno && (
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #2a2a28" }}>
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #232D26" }}>
           <div style={{ color: "#888", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>vs mesmo período do ano anterior</div>
           <div style={{ background: "rgba(224,101,90,0.06)", border: "1px solid rgba(224,101,90,0.22)", borderRadius: 10, padding: 12, display: "flex", gap: 20, flexWrap: "wrap" }}>
             <JanelaMetrica label="Este mês" periodoTexto={metricas.comparacaoAno.m1.periodoTexto} periodoAnteriorTexto={metricas.comparacaoAno.m1.periodoAnteriorTexto} meses={metricas.comparacaoAno.m1.meses}
@@ -2388,12 +2388,12 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
           <tr>
             <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2 }}>{rotuloColuna}</th>
             {linhas[0]?.valores.map(v => (
-              <th key={v.periodo} style={{ ...thStyle, color: ehProjecao(v.periodo) ? "#C69700" : "#fff", fontStyle: ehProjecao(v.periodo) ? "italic" : "normal" }}>
+              <th key={v.periodo} style={{ ...thStyle, color: ehProjecao(v.periodo) ? "#C99700" : "#fff", fontStyle: ehProjecao(v.periodo) ? "italic" : "normal" }}>
                 {labelMes(v.periodo)}{ehProjecao(v.periodo) ? "*" : ""}
               </th>
             ))}
-            <th style={{ ...thStyle, color: "#C69700", borderLeft: "2px solid #444" }}>Total</th>
-            <th style={{ ...thStyle, color: "#C69700" }}>Média/mês</th>
+            <th style={{ ...thStyle, color: "#C99700", borderLeft: "2px solid #444" }}>Total</th>
+            <th style={{ ...thStyle, color: "#C99700" }}>Média/mês</th>
             {mostrarMedia7d && (
               <>
                 <th style={{ ...thStyle, color: "#4a90d9", borderLeft: "2px solid #444" }}>Média 7d (últ. mês)</th>
@@ -2428,7 +2428,7 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
 
             return (
               <tr key={linha.categoria}>
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#15201A", position: "sticky", left: 0 }}>{linha.categoria}</td>
                 {linha.valores.map(v => {
                   const valor = v.valor || 0;
 
@@ -2436,7 +2436,7 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                     return (
                       <td key={v.periodo} title={`Projeção: ${formatador(valor)}`} style={{
                         ...tdStyle, background: "rgba(198,151,0,0.08)", border: "1px dashed rgba(198,151,0,0.4)",
-                        color: "#C69700", fontStyle: "italic", cursor: "default",
+                        color: "#C99700", fontStyle: "italic", cursor: "default",
                       }}>
                         {valor ? formatador(valor) : "-"}
                       </td>
@@ -2458,7 +2458,7 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                   );
                 })}
                 <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.04)", borderLeft: "2px solid #444" }}>{formatador(total)}</td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#C69700", background: "rgba(198,151,0,0.06)" }}>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#C99700", background: "rgba(198,151,0,0.06)" }}>
                   {formatador(media)}<PctInline variacao={variacaoMediaPeriodo} />
                 </td>
                 {mostrarMedia7d && (
@@ -2492,14 +2492,14 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
 
             return (
               <tr>
-                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#2a2a28", position: "sticky", left: 0, borderTop: "2px solid #444" }}>TOTAL</td>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#232D26", position: "sticky", left: 0, borderTop: "2px solid #444" }}>TOTAL</td>
                 {colunas.map(chave => {
                   if (ehProjecao(chave)) {
                     const v = buscarValorTotal(chave) || 0;
                     return (
                       <td key={chave} title={`Projeção total: ${formatador(v)}`} style={{
                         ...tdStyle, fontWeight: 800, background: "rgba(198,151,0,0.14)", border: "1px dashed rgba(198,151,0,0.4)",
-                        color: "#C69700", fontStyle: "italic", cursor: "default", borderTop: "2px solid #444",
+                        color: "#C99700", fontStyle: "italic", cursor: "default", borderTop: "2px solid #444",
                       }}>
                         {v ? formatador(v) : "-"}
                       </td>
@@ -2510,7 +2510,7 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                   const valorAnoAnterior = buscarValorTotal(chaveAnoAnterior(chave));
                   const variacaoMes = valorMesAnterior != null ? calcularVariacao(valor, valorMesAnterior) : null;
                   const variacaoAno = valorAnoAnterior != null ? calcularVariacao(valor, valorAnoAnterior) : null;
-                  const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "#2a2a28";
+                  const bg = variacaoMes ? classificarTendencia(variacaoMes.pct).corFundo : "#232D26";
                   const tooltip = formatador(valor) + textoVariacao("vs mês anterior", variacaoMes) + textoVariacao("vs mesmo mês ano anterior", variacaoAno);
                   return (
                     <td key={chave} title={tooltip} style={{ ...tdStyle, fontWeight: 800, background: bg, cursor: "default", borderTop: "2px solid #444" }}>
@@ -2519,7 +2519,7 @@ function TabelaHeatmapCategoria({ linhas, rotuloColuna, unidade, dadosCompletos,
                   );
                 })}
                 <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "rgba(255,255,255,0.1)", borderLeft: "2px solid #444", borderTop: "2px solid #444" }}>{formatador(totalGeral)}</td>
-                <td style={{ ...tdStyle, fontWeight: 800, color: "#C69700", background: "rgba(198,151,0,0.14)", borderTop: "2px solid #444" }}>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#C99700", background: "rgba(198,151,0,0.14)", borderTop: "2px solid #444" }}>
                   {formatador(mediaGeral)}<PctInline variacao={variacaoMediaTotal} />
                 </td>
                 {mostrarMedia7d && (
@@ -2552,12 +2552,12 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 700 }}>
         <thead>
           <tr>
-            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2, background: "#1D1D1B" }}>{rotuloColuna}</th>
+            <th style={{ ...thStyle, position: "sticky", left: 0, zIndex: 2, background: "#15201A" }}>{rotuloColuna}</th>
             {linhas[0]?.valores.map(v => (
-              <th key={v.periodo} style={{ ...thStyle, color: "#C69700", fontStyle: "italic" }}>{labelMes(v.periodo)}*</th>
+              <th key={v.periodo} style={{ ...thStyle, color: "#C99700", fontStyle: "italic" }}>{labelMes(v.periodo)}*</th>
             ))}
-            <th style={{ ...thStyle, color: "#C69700", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>Total</th>
-            <th style={{ ...thStyle, color: "#C69700" }}>Média/mês</th>
+            <th style={{ ...thStyle, color: "#C99700", borderLeft: "2px solid rgba(198,151,0,0.4)" }}>Total</th>
+            <th style={{ ...thStyle, color: "#C99700" }}>Média/mês</th>
           </tr>
         </thead>
         <tbody>
@@ -2568,9 +2568,9 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
             const n = linha.valores.length || 1;
             return (
               <tr key={linha.categoria}>
-                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#1D1D1B", position: "sticky", left: 0 }}>{linha.categoria}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: "#fff", background: "#15201A", position: "sticky", left: 0 }}>{linha.categoria}</td>
                 {linha.valores.map(v => (
-                  <td key={v.periodo} style={{ ...tdStyle, color: "#C69700", fontStyle: "italic" }}>
+                  <td key={v.periodo} style={{ ...tdStyle, color: "#C99700", fontStyle: "italic" }}>
                     <div>{v.base ? formatador(v.base) : "-"}</div>
                     <div style={{ fontSize: 9, color: "#888", fontStyle: "normal", marginTop: 2 }}>
                       Mín {formatador(v.min)} · Máx {formatador(v.max)}
@@ -2601,7 +2601,7 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
             });
             return (
               <tr>
-                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#2a2a28", position: "sticky", left: 0, borderTop: "2px solid rgba(198,151,0,0.4)" }}>TOTAL</td>
+                <td style={{ ...tdStyle, fontWeight: 800, color: "#fff", background: "#232D26", position: "sticky", left: 0, borderTop: "2px solid rgba(198,151,0,0.4)" }}>TOTAL</td>
                 {colunas.map(chave => {
                   let base = 0, min = 0, max = 0;
                   linhas.forEach(linha => {
@@ -2609,7 +2609,7 @@ function TabelaProjecao({ linhas, rotuloColuna, unidade }) {
                     if (v) { base += v.base || 0; min += v.min || 0; max += v.max || 0; }
                   });
                   return (
-                    <td key={chave} style={{ ...tdStyle, fontWeight: 800, color: "#C69700", fontStyle: "italic", background: "rgba(198,151,0,0.14)", borderTop: "2px solid rgba(198,151,0,0.4)" }}>
+                    <td key={chave} style={{ ...tdStyle, fontWeight: 800, color: "#C99700", fontStyle: "italic", background: "rgba(198,151,0,0.14)", borderTop: "2px solid rgba(198,151,0,0.4)" }}>
                       <div>{base ? formatador(base) : "-"}</div>
                       <div style={{ fontSize: 9, color: "#ccc", fontWeight: 400, fontStyle: "normal", marginTop: 2 }}>Mín {formatador(min)} · Máx {formatador(max)}</div>
                     </td>
@@ -2897,7 +2897,7 @@ function DashboardTab() {
         }} />
         <BotaoImprimir label="Imprimir Canais" />
       </div>
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Layers size={13} /> Filtrar por grupo ({clientesFiltrados.length} clientes selecionados) — vale pra toda a aba:
         </div>
@@ -2908,14 +2908,14 @@ function DashboardTab() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
               {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
-          <Search size={14} color="#C69700" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#0E1510", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
+          <Search size={14} color="#C99700" />
           <input placeholder="Buscar um cliente específico dentro do ranking..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
         </div>
@@ -2925,16 +2925,16 @@ function DashboardTab() {
         </div>
       </div>
 
-      <Section title={`Comparação mês a mês por grupo · ${metricaHeatmapGrupo === "litros" ? "Litros" : "Faturamento"}`} icon={<AlertTriangle size={16} color="#C69700" />}>
+      <Section title={`Comparação mês a mês por grupo · ${metricaHeatmapGrupo === "litros" ? "Litros" : "Faturamento"}`} icon={<AlertTriangle size={16} color="#C99700" />}>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          <button onClick={() => setMetricaHeatmapGrupo("faturamento")} style={modoBtnStyle(metricaHeatmapGrupo === "faturamento", "#02601D")}>
+          <button onClick={() => setMetricaHeatmapGrupo("faturamento")} style={modoBtnStyle(metricaHeatmapGrupo === "faturamento", "#025F1D")}>
             <TrendingUp size={13} /> Faturamento
           </button>
-          <button onClick={() => setMetricaHeatmapGrupo("litros")} style={modoBtnStyle(metricaHeatmapGrupo === "litros", "#C69700")}>
+          <button onClick={() => setMetricaHeatmapGrupo("litros")} style={modoBtnStyle(metricaHeatmapGrupo === "litros", "#C99700")}>
             <Droplets size={13} /> Litros
           </button>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
           <span style={{ color: "#888", fontSize: 12 }}>Período (padrão: últimos 3 meses):</span>
           <MonthPicker periodosDisponiveis={periodos} valor={inicioHeatmapGrupo} onSelecionar={setInicioHeatmapGrupo} placeholder="Início" />
           <span style={{ color: "#666" }}>até</span>
@@ -2985,7 +2985,7 @@ function DashboardTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                     <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
-                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                     <Legend content={<LegendaBranca />} />
                     {gruposNoGrafico.map((cat, idx) => (
                       <Line key={cat} type="monotone" dataKey={cat} name={cat} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -3024,7 +3024,7 @@ function DashboardTab() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                     <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 12 }} />
                     <YAxis tick={{ fill: "#ccc", fontSize: 12 }} tickFormatter={v => rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} />
-                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                    <Tooltip formatter={v => v == null ? "-" : rotuloCompactoGeral(v, metricaHeatmapGrupo === "litros" ? "L" : undefined)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                     <Legend content={<LegendaBranca />} />
                     {agrupamentosGrafico.map((ag, idx) => (
                       <Line key={ag.id} type="monotone" dataKey={`ag_${ag.id}`} name={ag.nome} stroke={corDoAno(idx)} strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -3038,8 +3038,8 @@ function DashboardTab() {
       </Section>
 
       {temDataCriacao && (
-        <Section title="Novos Clientes" icon={<Users size={18} color="#C69700" />}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+        <Section title="Novos Clientes" icon={<Users size={18} color="#C99700" />}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
             <MonthPicker periodosDisponiveis={periodos} valor={inicioNovos} onSelecionar={setInicioNovos} placeholder="Início" />
             <span style={{ color: "#666" }}>até</span>
@@ -3074,7 +3074,7 @@ function DashboardTab() {
               <div style={{ color: "#888", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
                 Nomes dos novos clientes em {labelMes(ultimoMesNovos.mes)} ({ultimoMesNovos.clientes.length})
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 14 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px", background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 14 }}>
                 {ultimoMesNovos.clientes.map((nomeCliente, idx) => (
                   <div key={idx} style={{ color: "#fff", fontSize: 13, minWidth: 200 }}>{nomeCliente}</div>
                 ))}
@@ -3092,7 +3092,7 @@ function DashboardTab() {
           </select>
         </div>
 
-        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
           <div style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>
             Período customizado (opcional) — ex: "quem mais cresceu entre Mar/25 e Jun/25": compara o valor do mês final com o valor do mês inicial.
           </div>
@@ -3142,7 +3142,7 @@ function DashboardTab() {
         </div>
       </Section>
 
-      <Section title={`Melhores Clientes (${clientesExibidos.length} de ${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C69700" />}>
+      <Section title={`Melhores Clientes (${clientesExibidos.length} de ${clientesComMetricas.length})`} icon={<Trophy size={18} color="#C99700" />}>
         {clientesComMetricas.length === 0 && (
           <div style={{ color: "#888", textAlign: "center", padding: "30px 0", fontSize: 14 }}>
             Selecione ao menos um grupo, ou clique em "Marcar todos".
@@ -3407,7 +3407,7 @@ function GlobalTab() {
         }} />
         <BotaoImprimir label="Imprimir Global" />
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#1D1D1B", border: "1px solid #C69700", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#15201A", border: "1px solid #C99700", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
         <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Layers size={13} /> Tipo de cliente ({nomes.length} clientes):</span>
         {FAIXAS_CLIENTE_GLOBAL.map(f => (
           <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
@@ -3416,7 +3416,7 @@ function GlobalTab() {
           </label>
         ))}
         <button onClick={() => setFaixasSel(FAIXAS_CLIENTE_GLOBAL.map(f => f.id))} style={chipBtnStyle}>Marcar todos</button>
-        {!todasFaixas && <span style={{ color: "#C69700", fontSize: 11 }}>⚠ filtro ativo — clientes sem categoria ficam de fora</span>}
+        {!todasFaixas && <span style={{ color: "#C99700", fontSize: 11 }}>⚠ filtro ativo — clientes sem categoria ficam de fora</span>}
       </div>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label="Faturamento (12 meses)" value={fmtMoeda(soma(ultimos12, "faturamento"))} icon={<TrendingUp size={14} />}
@@ -3437,7 +3437,7 @@ function GlobalTab() {
 
       <AvisoMesAndamento emAndamento={emAndamento} rowsFechados={rowsFechadas} />
 
-      <Section title="Evolução Mensal · Faturamento (por ano)" icon={<TrendingUp size={18} color="#02601D" />}>
+      <Section title="Evolução Mensal · Faturamento (por ano)" icon={<TrendingUp size={18} color="#025F1D" />}>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={seriesFat.dados}>
@@ -3454,7 +3454,7 @@ function GlobalTab() {
         </div>
       </Section>
 
-      <Section title="Evolução Mensal · Litros (por ano)" icon={<Droplets size={18} color="#C69700" />}>
+      <Section title="Evolução Mensal · Litros (por ano)" icon={<Droplets size={18} color="#C99700" />}>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "12px 8px 4px" }}>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={seriesLit.dados}>
@@ -3471,9 +3471,9 @@ function GlobalTab() {
         </div>
       </Section>
 
-      <Section title="Comparação Ano a Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
+      <Section title="Comparação Ano a Ano (Global)" icon={<Calendar size={18} color="#C99700" />}>
         <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
             <MonthPicker periodosDisponiveis={rowsGlobais.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
             {emAndamento && mesRefAno === emAndamento.chave && (
@@ -3507,12 +3507,12 @@ function GlobalTab() {
       </Section>
 
       {mediasPorAno.length > 0 && (
-        <Section title="Faturamento e Litros por Ano (Global)" icon={<Calendar size={18} color="#C69700" />}>
+        <Section title="Faturamento e Litros por Ano (Global)" icon={<Calendar size={18} color="#C99700" />}>
           {projecaoAnoParcial && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
               <span style={{ color: "#888", fontSize: 12 }}>% do ano anterior usado na projeção dos meses restantes:</span>
               <input type="number" min="0" max="200" value={pctProjecao} onChange={e => setPctProjecao(Math.max(0, Math.min(200, Number(e.target.value) || 0)))}
-                style={{ width: 70, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                style={{ width: 70, background: "#0E1510", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
               <span style={{ color: "#666", fontSize: 11 }}>% (100% = igual ao mesmo período do ano anterior)</span>
             </div>
           )}
@@ -3524,8 +3524,8 @@ function GlobalTab() {
         </Section>
       )}
 
-      <Section title="Faturamento e Litros por Grupo (pizza)" icon={<Layers size={18} color="#C69700" />}>
-        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+      <Section title="Faturamento e Litros por Grupo (pizza)" icon={<Layers size={18} color="#C99700" />}>
+        <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Período:</span>
             <MonthPicker periodosDisponiveis={periodos} valor={inicioPizza} onSelecionar={setInicioPizza} placeholder="Início" />
@@ -3540,7 +3540,7 @@ function GlobalTab() {
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {grupos.map(g => (
-              <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+              <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
                 <input type="checkbox" checked={gruposSelPizza.includes(g)} onChange={() => toggleGrupoPizza(g)} />
                 {g}{grupoEhPesado(g) ? " ⚠" : ""}
               </label>
@@ -3568,7 +3568,7 @@ function GlobalTab() {
                   <Pie data={dadosPizza} dataKey="fat" nameKey="grupo" cx="38%" cy="50%" outerRadius={105}>
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
-                  <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalFatPizza} campo="fat" formatador={fmtMoeda} />} />
                 </PieChart>
               </ResponsiveContainer>
@@ -3581,7 +3581,7 @@ function GlobalTab() {
                   <Pie data={dadosPizza} dataKey="lit" nameKey="grupo" cx="38%" cy="50%" outerRadius={105}>
                     {dadosPizza.map((d, idx) => <Cell key={d.grupo} fill={corDoAno(idx)} />)}
                   </Pie>
-                  <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={v => fmtLitros(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalLitPizza} campo="lit" formatador={fmtLitros} />} />
                 </PieChart>
               </ResponsiveContainer>
@@ -3591,14 +3591,14 @@ function GlobalTab() {
       </Section>
 
       {fatPorGrupo.length > 0 && (
-        <Section title="Faturamento por Grupo (últimos 12 meses)" icon={<Layers size={18} color="#C69700" />}>
+        <Section title="Faturamento por Grupo (últimos 12 meses)" icon={<Layers size={18} color="#C99700" />}>
           <ResponsiveContainer width="100%" height={Math.max(200, fatPorGrupo.length * 40)}>
             <BarChart data={chartGrupo} layout="vertical" margin={{ left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#333" />
               <XAxis type="number" stroke="#888" fontSize={11} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
               <YAxis type="category" dataKey="grupo" stroke="#888" fontSize={11} width={160} />
-              <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
-              <Bar dataKey="Faturamento" fill="#02601D" radius={[0,4,4,0]}>
+              <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
+              <Bar dataKey="Faturamento" fill="#025F1D" radius={[0,4,4,0]}>
                 <LabelList dataKey="Faturamento" position="right" formatter={v => fmtMoeda(v)} style={{ fontSize: 10, fill: "#8fd19e" }} />
               </Bar>
             </BarChart>
@@ -3614,7 +3614,7 @@ function GlobalTab() {
 // Card de um "agrupamento" de grupos (junta vários grupos numa linha só do gráfico, somados)
 function AgrupamentoGraficoCard({ agrupamento, opcoes, cor, onRenomear, onToggleGrupo, onRemover }) {
   return (
-    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 12, background: "#1D1D1B", flex: "1 1 260px", minWidth: 240 }}>
+    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 12, background: "#15201A", flex: "1 1 260px", minWidth: 240 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <input value={agrupamento.nome} onChange={e => onRenomear(e.target.value)}
           style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${cor}`, color: cor, fontWeight: 700, fontSize: 13, padding: "3px 2px", outline: "none" }} />
@@ -3644,7 +3644,7 @@ function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRem
   }, [busca, nomesVisiveis, labelDoCliente, grupo.clientes]);
 
   return (
-    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 14, background: "#1D1D1B", flex: "1 1 300px", minWidth: 280 }}>
+    <div style={{ border: `1px solid ${cor}`, borderRadius: 10, padding: 14, background: "#15201A", flex: "1 1 300px", minWidth: 280 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <input value={grupo.nome} onChange={e => onRenomear(e.target.value)}
           style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${cor}`, color: cor, fontWeight: 700, fontSize: 14, padding: "3px 2px", outline: "none" }} />
@@ -3655,13 +3655,13 @@ function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRem
 
       <div style={{ position: "relative", marginBottom: 8 }}>
         <input placeholder="Adicionar cliente a esse grupo..." value={busca} onChange={e => setBusca(e.target.value)}
-          style={{ width: "100%", boxSizing: "border-box", background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "7px 10px", color: "#fff", fontSize: 13, outline: "none" }} />
+          style={{ width: "100%", boxSizing: "border-box", background: "#0E1510", border: "1px solid #333", borderRadius: 6, padding: "7px 10px", color: "#fff", fontSize: 13, outline: "none" }} />
         {sugestoes.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 6, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, marginTop: 4, overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 6, background: "#15201A", border: "1px solid #333", borderRadius: 6, marginTop: 4, overflow: "hidden" }}>
             {sugestoes.map(c => (
               <div key={c} onClick={() => { onAdicionarCliente(c); setBusca(""); }}
-                style={{ padding: "8px 10px", fontSize: 13, color: "#fff", cursor: "pointer", borderBottom: "1px solid #2a2a28" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#02601D"}
+                style={{ padding: "8px 10px", fontSize: 13, color: "#fff", cursor: "pointer", borderBottom: "1px solid #232D26" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#025F1D"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {labelDoCliente[c]}
               </div>
@@ -3672,7 +3672,7 @@ function GrupoComparacaoCard({ grupo, cor, onRenomear, onAdicionarCliente, onRem
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {grupo.clientes.map(c => (
-          <div key={c} style={{ display: "flex", alignItems: "center", gap: 6, background: "#141412", border: `1px solid ${cor}`, borderRadius: 16, padding: "3px 4px 3px 10px", fontSize: 11, color: "#fff" }}>
+          <div key={c} style={{ display: "flex", alignItems: "center", gap: 6, background: "#0E1510", border: `1px solid ${cor}`, borderRadius: 16, padding: "3px 4px 3px 10px", fontSize: 11, color: "#fff" }}>
             {labelDoCliente[c]}
             <button onClick={() => onRemoverCliente(c)} style={{ background: cor, border: "none", color: "#fff", borderRadius: "50%", width: 16, height: 16, cursor: "pointer", fontSize: 11, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
           </div>
@@ -3886,12 +3886,12 @@ function MesTab() {
         }} />
         <BotaoImprimir label="Imprimir Top Clientes" />
       </div>
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-          <button onClick={() => setModo("mes")} style={modoBtnStyle(modo === "mes", "#C69700")}>
+          <button onClick={() => setModo("mes")} style={modoBtnStyle(modo === "mes", "#C99700")}>
             <Calendar size={13} /> Mês único
           </button>
-          <button onClick={() => setModo("periodo")} style={modoBtnStyle(modo === "periodo", "#C69700")}>
+          <button onClick={() => setModo("periodo")} style={modoBtnStyle(modo === "periodo", "#C99700")}>
             <Calendar size={13} /> Período
           </button>
         </div>
@@ -3922,21 +3922,21 @@ function MesTab() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
               {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
           ))}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
-          <Search size={14} color="#C69700" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#0E1510", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+          <Search size={14} color="#C99700" />
           <input placeholder="Buscar um cliente específico dentro da lista..." value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
         </div>
       </div>
 
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <strong style={{ color: "#fff", fontSize: 13 }}>🔗 Unir clientes</strong>
           <span style={{ color: "#888", fontSize: 12 }}>junte lojas da mesma rede (ex.: todos os Miller) para ver como um cliente só.</span>
@@ -3948,7 +3948,7 @@ function MesTab() {
         {msgUniao && <div style={{ color: "#bfe6cc", fontSize: 12, marginTop: 6 }}>{msgUniao}</div>}
         {painelUniao && (
           <div style={{ marginTop: 12 }}>
-            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Uniões criadas</div>
+            <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Uniões criadas</div>
             {unioes.length === 0 && <div style={{ color: "#666", fontSize: 12, marginBottom: 8 }}>Nenhuma ainda. Use as sugestões abaixo ou crie a sua.</div>}
             {unioes.map(u => (
               <div key={u.id} style={{ border: "1px solid #333", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
@@ -3957,20 +3957,20 @@ function MesTab() {
                     <input type="checkbox" checked={u.ativa !== false} onChange={e => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, ativa: e.target.checked } : x), e.target.checked ? `“${u.nome}” ativada.` : `“${u.nome}” desativada (continua salva).`)} /> ativa
                   </label>
                   <input value={u.nome} onChange={e => setUnioes(l => l.map(x => x.id === u.id ? { ...x, nome: e.target.value } : x))} onBlur={() => persistirUnioes(unioes, "União renomeada.")}
-                    style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "3px 8px", fontSize: 13, fontWeight: 700 }} />
+                    style={{ background: "#0E1510", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "3px 8px", fontSize: 13, fontWeight: 700 }} />
                   <span style={{ color: "#888", fontSize: 12 }}>{u.codigos.length} cliente(s)</span>
                   <button style={{ ...chipBtnStyle, color: "#e57373", padding: "2px 8px" }} onClick={() => persistirUnioes(unioes.filter(x => x.id !== u.id), `União “${u.nome}” desfeita.`)}>desfazer união</button>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                  {u.codigos.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c] || c} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, codigos: x.codigos.filter(y => y !== c) } : x).filter(x => x.codigos.length > 1), "Cliente retirado da união.")}>×</span></span>)}
+                  {u.codigos.map(c => <span key={c} style={{ background: "#26302A", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c] || c} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, codigos: x.codigos.filter(y => y !== c) } : x).filter(x => x.codigos.length > 1), "Cliente retirado da união.")}>×</span></span>)}
                 </div>
               </div>
             ))}
 
-            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>💡 Sugestões de agrupamento <span style={{ color: "#888", fontWeight: 400 }}>— por razão social, começo do nome e redes conhecidas; ordenadas pelo volume do período</span></div>
+            <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>💡 Sugestões de agrupamento <span style={{ color: "#888", fontWeight: 400 }}>— por razão social, começo do nome e redes conhecidas; ordenadas pelo volume do período</span></div>
             {sugestoes.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Sem sugestões (ou todos os candidatos já estão unidos).</div>}
             {sugestoes.map(sg => (
-              <div key={sg.chave} style={{ border: "1px solid #2a2a2a", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
+              <div key={sg.chave} style={{ border: "1px solid #26302A", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <strong style={{ color: "#fff", fontSize: 13 }}>{sg.nome}</strong>
                   <span style={{ color: "#888", fontSize: 12 }}>{sg.codigos.length} clientes · {fmtLitros(sg.vol)} no período · {sg.motivo}</span>
@@ -3980,19 +3980,19 @@ function MesTab() {
               </div>
             ))}
 
-            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>➕ Criar união à mão</div>
+            <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>➕ Criar união à mão</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-              <input placeholder="Nome da união (ex.: Miller)" value={novaUniao.nome} onChange={e => setNovaUniao(p => ({ ...p, nome: e.target.value }))} style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 220 }} />
-              <input placeholder="Buscar cliente para adicionar…" value={buscaUniao} onChange={e => setBuscaUniao(e.target.value)} style={{ background: "#141412", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 240 }} />
+              <input placeholder="Nome da união (ex.: Miller)" value={novaUniao.nome} onChange={e => setNovaUniao(p => ({ ...p, nome: e.target.value }))} style={{ background: "#0E1510", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 220 }} />
+              <input placeholder="Buscar cliente para adicionar…" value={buscaUniao} onChange={e => setBuscaUniao(e.target.value)} style={{ background: "#0E1510", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 13, width: 240 }} />
               <button style={chipBtnStyle} disabled={!novaUniao.nome.trim() || novaUniao.codigos.length < 2} onClick={() => { persistirUnioes([...unioes, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, nome: novaUniao.nome.trim(), codigos: novaUniao.codigos }], `União “${novaUniao.nome.trim()}” criada.`); setNovaUniao({ nome: "", codigos: [] }); setBuscaUniao(""); }}>criar união ({novaUniao.codigos.length} selecionados)</button>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-              {novaUniao.codigos.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c]} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setNovaUniao(p => ({ ...p, codigos: p.codigos.filter(x => x !== c) }))}>×</span></span>)}
+              {novaUniao.codigos.map(c => <span key={c} style={{ background: "#26302A", color: "#ddd", borderRadius: 10, padding: "1px 8px", fontSize: 11 }}>{labelDoCliente[c]} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setNovaUniao(p => ({ ...p, codigos: p.codigos.filter(x => x !== c) }))}>×</span></span>)}
             </div>
             {buscaUniao.trim().length >= 2 && (
               <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #333", borderRadius: 6 }}>
                 {nomesVisiveis.filter(c => !codigosEmAlgumaUniao[c] && !novaUniao.codigos.includes(c) && normalizarNomeCliente(labelDoCliente[c]).includes(normalizarNomeCliente(buscaUniao))).slice(0, 40).map(c => (
-                  <div key={c} onClick={() => setNovaUniao(p => ({ ...p, codigos: [...p.codigos, c] }))} style={{ padding: "4px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #262624" }}>+ {labelDoCliente[c]}</div>
+                  <div key={c} onClick={() => setNovaUniao(p => ({ ...p, codigos: [...p.codigos, c] }))} style={{ padding: "4px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #222B25" }}>+ {labelDoCliente[c]}</div>
                 ))}
               </div>
             )}
@@ -4007,12 +4007,12 @@ function MesTab() {
         <StatCard label="Clientes com venda no período" value={String(clientesMes.length)} icon={<Users size={14} />} />
       </div>
 
-      <Section title={`Top Clientes · ${rotuloPeriodo}`} icon={<Trophy size={18} color="#C69700" />}>
+      <Section title={`Top Clientes · ${rotuloPeriodo}`} icon={<Trophy size={18} color="#C99700" />}>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <button onClick={() => setOrdenacao("litros")} style={modoBtnStyle(ordenacao === "litros", "#C69700")}>
+          <button onClick={() => setOrdenacao("litros")} style={modoBtnStyle(ordenacao === "litros", "#C99700")}>
             <Droplets size={13} /> Litros
           </button>
-          <button onClick={() => setOrdenacao("faturamento")} style={modoBtnStyle(ordenacao === "faturamento", "#02601D")}>
+          <button onClick={() => setOrdenacao("faturamento")} style={modoBtnStyle(ordenacao === "faturamento", "#025F1D")}>
             <TrendingUp size={13} /> Faturamento
           </button>
           <button onClick={() => setOrdenacao("precoLitro")} style={modoBtnStyle(ordenacao === "precoLitro", "#4a90d9")}>
@@ -4037,9 +4037,9 @@ function MesTab() {
                   <tr>
                     <th style={thStyle}>#</th>
                     <th style={thStyle}>Cliente</th>
-                    <th style={{ ...thStyle, color: ordenacao === "litros" ? "#C69700" : "#fff" }}>Litros</th>
-                    <th style={{ ...thStyle, color: ordenacao === "faturamento" ? "#C69700" : "#fff" }}>Faturamento</th>
-                    <th style={{ ...thStyle, color: ordenacao === "precoLitro" ? "#C69700" : "#fff" }}>Preço/L</th>
+                    <th style={{ ...thStyle, color: ordenacao === "litros" ? "#C99700" : "#fff" }}>Litros</th>
+                    <th style={{ ...thStyle, color: ordenacao === "faturamento" ? "#C99700" : "#fff" }}>Faturamento</th>
+                    <th style={{ ...thStyle, color: ordenacao === "precoLitro" ? "#C99700" : "#fff" }}>Preço/L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4047,7 +4047,7 @@ function MesTab() {
                     <tr key={c.codigo}>
                       <td style={{ ...tdStyle, color: "#888" }}>{idx + 1}</td>
                       <td style={{ ...tdStyle, color: "#fff", fontWeight: 600 }}>{rotuloDe(c)}{c.rotulo && <span style={{ color: "#888", fontWeight: 400 }}> · {c.qtd} cliente(s) unidos</span>}</td>
-                      <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C69700" : "#ddd" }}>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C99700" : "#ddd" }}>
                         {fmtLitros(c.lit)}<PctInline variacao={c.varLit} />
                       </td>
                       <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#4caf6b" : "#ddd" }}>
@@ -4071,15 +4071,15 @@ function MesTab() {
             <div style={{ marginTop: 24 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
                 <strong style={{ color: "#fff", fontSize: 13 }}>🥧 Participação dos 10 maiores clientes · {rotuloPeriodo}</strong>
-                <button onClick={() => setMetricaPizza("litros")} style={modoBtnStyle(metricaPizza === "litros", "#C69700")}>Litros</button>
-                <button onClick={() => setMetricaPizza("faturamento")} style={modoBtnStyle(metricaPizza === "faturamento", "#02601D")}>Faturamento</button>
+                <button onClick={() => setMetricaPizza("litros")} style={modoBtnStyle(metricaPizza === "litros", "#C99700")}>Litros</button>
+                <button onClick={() => setMetricaPizza("faturamento")} style={modoBtnStyle(metricaPizza === "faturamento", "#025F1D")}>Faturamento</button>
               </div>
               <ResponsiveContainer width="100%" height={340}>
                 <PieChart>
                   <Pie data={dadosPizzaClientes} dataKey="valor" nameKey="nome" cx="36%" cy="50%" outerRadius={115}>
                     {dadosPizzaClientes.map((d, idx) => <Cell key={d.nome} fill={d.outros ? "#555" : PALETA_PIZZA10[idx % PALETA_PIZZA10.length]} />)}
                   </Pie>
-                  <Tooltip formatter={v => (metricaPizza === "faturamento" ? fmtMoeda(v) : fmtLitros(v))} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                  <Tooltip formatter={v => (metricaPizza === "faturamento" ? fmtMoeda(v) : fmtLitros(v))} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend layout="vertical" align="right" verticalAlign="middle" content={<LegendaPizza total={totalPizzaClientes} campo="valor" formatador={metricaPizza === "faturamento" ? fmtMoeda : fmtLitros} />} />
                 </PieChart>
               </ResponsiveContainer>
@@ -4116,7 +4116,7 @@ function calcularComparativoCategoria(rowsBrutas) {
 
 function CardCategoriaProduto({ nome, comp, cor }) {
   return (
-    <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 260px", minWidth: 260 }}>
+    <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 10, padding: 14, flex: "1 1 260px", minWidth: 260 }}>
       <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{nome}</div>
       {!comp && <div style={{ color: "#666", fontSize: 12, marginTop: 6 }}>Sem dado no último mês fechado.</div>}
       {comp && (
@@ -4134,7 +4134,7 @@ function CardCategoriaProduto({ nome, comp, cor }) {
             <BadgeTendencia variacao={comp.varLitMes} formatador={fmtLitros} periodoTexto="vs mês anterior" />
             <BadgeTendencia variacao={comp.varLitAno} formatador={fmtLitros} periodoTexto={comp.mesmoMesAnoPassadoTexto ? `vs ${comp.mesmoMesAnoPassadoTexto}` : ""} />
           </div>
-          <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginTop: 8 }}>{fmtPrecoLitro(comp.precoLitro)}</div>
+          <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, marginTop: 8 }}>{fmtPrecoLitro(comp.precoLitro)}</div>
         </>
       )}
     </div>
@@ -4144,7 +4144,7 @@ function CardCategoriaProduto({ nome, comp, cor }) {
 function CardResumoPositivacao({ titulo, cor, quantidade, total, icone }) {
   const pct = total ? (quantidade / total * 100) : 0;
   return (
-    <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 16, flex: "1 1 220px", minWidth: 220 }}>
+    <div style={{ background: "#15201A", border: `1px solid ${cor}`, borderRadius: 10, padding: 16, flex: "1 1 220px", minWidth: 220 }}>
       <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
         {icone} {titulo}
       </div>
@@ -4168,7 +4168,7 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
   const mesResumo = mesesUnicos.size === 1 ? labelMes([...mesesUnicos][0]) : null;
 
   return (
-    <div style={{ background: "#1D1D1B", border: `1px solid ${cor}`, borderRadius: 10, padding: 14, flex: "1 1 280px", minWidth: 280 }}>
+    <div style={{ background: "#15201A", border: `1px solid ${cor}`, borderRadius: 10, padding: 14, flex: "1 1 280px", minWidth: 280 }}>
       <div style={{ color: cor, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{titulo} ({itens.length})</div>
       {itensComCompra.length > 0 && (
         <div style={{ color: "#888", fontSize: 11, marginBottom: 10 }}>
@@ -4177,7 +4177,7 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
       )}
       {itens.length === 0 && <div style={{ color: "#666", fontSize: 12 }}>Nenhum cliente nesse grupo.</div>}
       {visiveis.map(({ codigo, ultimaCompra, ultimoFat, ultimoLit }) => (
-        <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #2a2a28", fontSize: 12 }}>
+        <div key={codigo} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid #232D26", fontSize: 12 }}>
           <span style={{ color: "#fff" }}>{labelDoCliente[codigo]}</span>
           <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>
             {mostrarData && <div style={{ color: "#888" }}>{ultimaCompra ? labelMes(ultimaCompra) : "nunca"}</div>}
@@ -4309,7 +4309,7 @@ function EstoqueTab() {
       </div>
 
       {todosProdutosNomes.length > 0 && (
-        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+        <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
           <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
             <Package size={13} /> Embalagem ({produtosNomes.length} de {todosProdutosNomes.length} produtos):
           </div>
@@ -4338,26 +4338,26 @@ function EstoqueTab() {
 
       {semDadosDeEstoqueNenhum && (
         <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
-          Nenhum dado de estoque encontrado ainda. Crie a aba <strong style={{ color: "#C69700" }}>estoque</strong> na planilha,
+          Nenhum dado de estoque encontrado ainda. Crie a aba <strong style={{ color: "#C99700" }}>estoque</strong> na planilha,
           com colunas "Produto" e pelo menos uma de "Estoque (Unidades)" ou "Estoque (Litros)" — o nome do produto precisa bater
           com o que já aparece em produtos_faturamento/produtos_litros.
         </div>
       )}
 
       {produtosComEstoque.length > 0 && (
-        <Section title="Tempo de Estoque" icon={<Package size={18} color="#C69700" />}>
-          <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
+        <Section title="Tempo de Estoque" icon={<Package size={18} color="#C99700" />}>
+          <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, background: "rgba(74,144,217,0.06)", border: "1px solid rgba(74,144,217,0.25)", borderRadius: 8, padding: 10 }}>
               <span style={{ color: "#888", fontSize: 12 }}>% de crescimento esperado vs ano passado (usado nas colunas "ano passado"):</span>
               <input type="number" min="0" max="500" value={pctCrescimento} onChange={e => setPctCrescimento(Math.max(0, Number(e.target.value) || 0))}
-                style={{ width: 65, background: "#141412", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                style={{ width: 65, background: "#0E1510", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
               <span style={{ color: "#666", fontSize: 11 }}>% (100% = repete exatamente o ritmo do ano passado; 120% = espera 20% de crescimento)</span>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <span style={{ color: "#888", fontSize: 12 }}>Ordenar pela coluna "Recente" de:</span>
               {["30", "60", "90", "120"].map(d => (
-                <button key={d} onClick={() => setBaseDestaque(d)} style={modoBtnStyle(baseDestaque === d, "#C69700")}>
+                <button key={d} onClick={() => setBaseDestaque(d)} style={modoBtnStyle(baseDestaque === d, "#C99700")}>
                   {d} dias
                 </button>
               ))}
@@ -4365,11 +4365,11 @@ function EstoqueTab() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <span style={{ color: "#888", fontSize: 12 }}>Alertar quando dias de estoque forem menos que:</span>
               <input type="number" min="0" max="90" value={limiteAlerta} onChange={e => setLimiteAlerta(Math.max(0, Number(e.target.value) || 0))}
-                style={{ width: 60, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                style={{ width: 60, background: "#0E1510", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
               <span style={{ color: "#666", fontSize: 11 }}>dias</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#141412", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
-              <Search size={14} color="#C69700" />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#0E1510", border: "1px solid #333", borderRadius: 6, padding: "8px 12px" }}>
+              <Search size={14} color="#C99700" />
               <input placeholder="Buscar um produto específico..." value={buscaTipo} onChange={e => setBuscaTipo(e.target.value)}
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
             </div>
@@ -4396,7 +4396,7 @@ function EstoqueTab() {
                   {[30, 60, 90, 120].map(d => (
                     <React.Fragment key={d}>
                       <th style={{ ...thStyle, color: "#4a90d9", borderLeft: "2px solid #444" }}>Ano passado ({d}d)</th>
-                      <th style={{ ...thStyle, color: String(d) === baseDestaque ? "#C69700" : "#fff" }}>Recente ({d}d)</th>
+                      <th style={{ ...thStyle, color: String(d) === baseDestaque ? "#C99700" : "#fff" }}>Recente ({d}d)</th>
                     </React.Fragment>
                   ))}
                 </tr>
@@ -4433,7 +4433,7 @@ function EstoqueTab() {
                           </td>
                           <td title={`Estimativa de venda (recente): ${fmtLitros(l.bases[d].recente.taxaDiaria)}/dia`} style={{
                             ...tdStyle, fontWeight: destaque ? 800 : 400,
-                            color: alertaRec ? "#e0645a" : (destaque ? "#C69700" : "#ddd"),
+                            color: alertaRec ? "#e0645a" : (destaque ? "#C99700" : "#ddd"),
                             background: destaque ? (alertaRec ? "rgba(224,101,90,0.12)" : "rgba(198,151,0,0.06)") : "transparent",
                           }}>
                             <div>{vRec != null ? (cortadoRec ? "150+ dias" : `${vRec.toFixed(1)} dias`) : "-"}{alertaRec ? " ⚠" : ""}</div>
@@ -4616,7 +4616,7 @@ function ProjecaoVendasTab() {
         <BotaoImprimir label="Imprimir Projeção" />
       </div>
 
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
           <span style={{ color: "#888", fontSize: 12 }}>Período que define "clientes novos":</span>
           <MonthPicker periodosDisponiveis={periodos} valor={inicioNovos} onSelecionar={setInicioNovos} placeholder="Início" />
@@ -4634,7 +4634,7 @@ function ProjecaoVendasTab() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
               {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
@@ -4648,7 +4648,7 @@ function ProjecaoVendasTab() {
 
       {analise && (
         <>
-          <Section title={`Novos Clientes · ${labelMes(inicioNovos)} a ${labelMes(fimNovos)}`} icon={<Users size={18} color="#C69700" />}>
+          <Section title={`Novos Clientes · ${labelMes(inicioNovos)} a ${labelMes(fimNovos)}`} icon={<Users size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
               <StatCard label="Quantidade de clientes novos" value={String(analise.novos.length)} icon={<Users size={14} />} />
               <StatCard label="Faturamento total gerado (desde o cadastro até hoje)" value={fmtMoeda(analise.fatNovosTotal)} icon={<TrendingUp size={14} />} />
@@ -4691,13 +4691,13 @@ function ProjecaoVendasTab() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: ritmo === "anoAnterior" ? 8 : 16, flexWrap: "wrap" }}>
               <span style={{ color: "#888", fontSize: 12 }}>{ritmo === "anoAnterior" ? "% de ajuste sobre a base (ano passado):" : "% de ajuste sobre o ritmo (100% = sem ajuste):"}</span>
               <input type="number" min="0" max="300" value={pctAjuste} onChange={e => setPctAjuste(Math.max(0, Number(e.target.value) || 0))}
-                style={{ width: 65, background: "#141412", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                style={{ width: 65, background: "#0E1510", border: "1px solid #4a90d9", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
             </div>
             {ritmo === "anoAnterior" && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
                 <span style={{ color: "#4caf6b", fontSize: 12 }}>% de ajuste sobre os Novos PDVs:</span>
                 <input type="number" min="0" max="500" value={pctNovos} onChange={e => setPctNovos(Math.max(0, Number(e.target.value) || 0))}
-                  style={{ width: 65, background: "#141412", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                  style={{ width: 65, background: "#0E1510", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 <span style={{ color: "#666", fontSize: 11 }}>(separado da base — dá pra simular os novos PDVs crescendo mais rápido, por exemplo)</span>
               </div>
             )}
@@ -4811,7 +4811,7 @@ function PositivacaoTab() {
         <BotaoImprimir label="Imprimir Positivação" />
       </div>
 
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Mês de referência:</span>
           <MonthPicker periodosDisponiveis={periodos} valor={mesRef} onSelecionar={setMesRef} placeholder="Selecionar mês" />
@@ -4828,7 +4828,7 @@ function PositivacaoTab() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {grupos.map(g => (
-            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C69700" : "#fff", cursor: "pointer" }}>
+            <label key={g} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: grupoEhPesado(g) ? "#C99700" : "#fff", cursor: "pointer" }}>
               <input type="checkbox" checked={gruposSel.includes(g)} onChange={() => toggleGrupoFiltro(g)} />
               {g} ({clientesPorGrupo[g].length}){grupoEhPesado(g) ? " ⚠" : ""}
             </label>
@@ -4842,7 +4842,7 @@ function PositivacaoTab() {
 
       {mesRef && (
         <>
-          <Section title={`Positivação de Clientes · ${labelMes(mesRef)}`} icon={<Trophy size={18} color="#C69700" />}>
+          <Section title={`Positivação de Clientes · ${labelMes(mesRef)}`} icon={<Trophy size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
               <CardResumoPositivacao titulo="Positivados" cor="#4caf6b" icone="🟢" quantidade={classificacao.positivados.length} total={totalFiltrado} />
               <CardResumoPositivacao titulo="Sem compra no mês" cor="#e8c400" icone="🟡" quantidade={classificacao.semCompraMes.length} total={totalFiltrado} />
@@ -5389,14 +5389,14 @@ function PlanoInsumos({ lotes, envase, hojeReal, resolverBase }) {
   const custoCol = colunas.map(c => linhas.reduce((s, l) => s + c.idx.reduce((z, i) => z + l.compra[i], 0) * (l.preco || 0), 0));
   const custoTot = custoCol.reduce((s, v) => s + v, 0);
   const fmt = (v, un) => (v === 0 ? "–" : v.toLocaleString("pt-BR", { maximumFractionDigits: v < 10 && un !== "UN" ? 2 : 1 }));
-  const th = { padding: "5px 8px", textAlign: "right", color: "#aaa", fontWeight: 600, borderBottom: "1px solid #333", whiteSpace: "nowrap", position: "sticky", top: 0, background: "#161616" };
+  const th = { padding: "5px 8px", textAlign: "right", color: "#aaa", fontWeight: 600, borderBottom: "1px solid #333", whiteSpace: "nowrap", position: "sticky", top: 0, background: "#111812" };
   const td = { padding: "4px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd" };
   const cats = [...new Set(INSUMOS.itens.map(i => i.k))];
-  const btnV = (id, t) => <button key={id} onClick={() => setVisao(id)} style={{ background: visao === id ? "#C69700" : "transparent", color: visao === id ? "#000" : "#ccc", border: "1px solid #444", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{t}</button>;
+  const btnV = (id, t) => <button key={id} onClick={() => setVisao(id)} style={{ background: visao === id ? "#C99700" : "transparent", color: visao === id ? "#000" : "#ccc", border: "1px solid #444", borderRadius: 6, padding: "5px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>{t}</button>;
   const semRec = Object.keys(calc.semReceita);
 
   return (
-    <div style={{ marginTop: 18, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 12 }}>
+    <div style={{ marginTop: 18, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: 12 }}>
       <h4 style={{ color: "#fff", fontSize: 14, margin: "0 0 4px" }}>📦 Compra de insumos · calculada a partir do plano acima</h4>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
         Consumo = receita média de cada estilo × bateladas programadas (malte, lúpulo, aditivos…) + embalagens PET × unidades envasadas na simulação. Cada compra chega numa quarta-feira e cobre a semana (quarta a terça). Compra = necessidade × (1 + margem) − estoque, arredondada ao pacote (malte 25 kg, lúpulo 5 kg). Muda a projeção/lotes e tudo recalcula.
@@ -5423,12 +5423,12 @@ function PlanoInsumos({ lotes, envase, hojeReal, resolverBase }) {
             {cats.map(cat => {
               const ls = visiveis.filter(l => l.k === cat); if (!ls.length) return null;
               return (<React.Fragment key={cat}>
-                <tr><td colSpan={colunas.length + 6} style={{ padding: "6px 8px", color: "#C69700", fontWeight: 700, background: "#1d1d1d" }}>{cat}</td></tr>
+                <tr><td colSpan={colunas.length + 6} style={{ padding: "6px 8px", color: "#C99700", fontWeight: 700, background: "#1d1d1d" }}>{cat}</td></tr>
                 {ls.map(l => (
                   <tr key={l.c}>
                     <td style={{ ...td, textAlign: "left", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={l.c}>{l.n}</td>
                     <td style={td}>{l.un}</td><td style={td}>{l.pack}</td>
-                    <td style={td}><input type="number" value={estOv[l.c] != null ? estOv[l.c] : l.est} onChange={e => setEst(l.c, e.target.value)} style={{ width: 70, background: "#222", color: estOv[l.c] != null ? "#C69700" : "#ddd", border: "1px solid #333", borderRadius: 4, padding: "1px 4px", textAlign: "right" }} /></td>
+                    <td style={td}><input type="number" value={estOv[l.c] != null ? estOv[l.c] : l.est} onChange={e => setEst(l.c, e.target.value)} style={{ width: 70, background: "#222", color: estOv[l.c] != null ? "#C99700" : "#ddd", border: "1px solid #333", borderRadius: 4, padding: "1px 4px", textAlign: "right" }} /></td>
                     {colunas.map(c => { const v = c.idx.reduce((z, i) => z + l.compra[i], 0); return <td key={c.k} style={{ ...td, background: v > 0 ? "#1f2a1f" : "transparent", color: v > 0 ? "#8fe3a0" : "#555", fontWeight: v > 0 ? 700 : 400 }}>{fmt(v, l.un)}</td>; })}
                     <td style={{ ...td, fontWeight: 700 }}>{fmt(l.totCompra, l.un)}</td>
                     <td style={td}>{Math.round(l.totCompra * (l.preco || 0)).toLocaleString("pt-BR")}</td>
@@ -5457,7 +5457,7 @@ function PainelNivelamento({ nivel, lotes, nivelar, estoqueExtra }) {
   const td = { padding: "4px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd", fontSize: 12 };
   const neg = nivel.linhas.some(l => l.saldo < -1);
   return (
-    <div style={{ marginTop: 18, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 12 }}>
+    <div style={{ marginTop: 18, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: 12 }}>
       <h4 style={{ color: "#fff", fontSize: 14, margin: "0 0 4px" }}>⚖️ Validação do período · produção nivelada ({nivelar}%{estoqueExtra > 0 ? ` · +${estoqueExtra}% de estoque` : ""})</h4>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Soma da produção programada nos meses = necessidade do período{estoqueExtra > 0 ? " + estoque extra" : ""}. “Saldo” é o estoque que se forma (produzido − vendido, acumulado); nunca deve ficar negativo.</div>
       <div style={{ overflow: "auto" }}>
@@ -5770,7 +5770,7 @@ function PlanejamentoProducao() {
   if (!temConfig) {
     return (
       <div style={{ color: "#888", fontSize: 13, padding: 16 }}>
-        Não encontrei as abas <strong style={{ color: "#C69700" }}>tanques</strong> e <strong style={{ color: "#C69700" }}>receitas</strong> no retorno da planilha.
+        Não encontrei as abas <strong style={{ color: "#C99700" }}>tanques</strong> e <strong style={{ color: "#C99700" }}>receitas</strong> no retorno da planilha.
         Atualize o Code.gs no Apps Script (versão v3.1), reimplante e recarregue o app.
       </div>
     );
@@ -5952,10 +5952,10 @@ function PlanejamentoProducao() {
   const litrosTanques = statusTanques.reduce((s, t) => s + (t.litrosNoTanque || 0), 0);
 
   const inputNum = { background: "#111", border: "1px solid #444", color: "#fff", borderRadius: 4, padding: "4px 6px", fontSize: 12, width: 78, textAlign: "right" };
-  const th = { textAlign: "right", padding: "6px 8px", color: "#C69700", fontSize: 11, borderBottom: "1px solid #333", whiteSpace: "nowrap" };
+  const th = { textAlign: "right", padding: "6px 8px", color: "#C99700", fontSize: 11, borderBottom: "1px solid #333", whiteSpace: "nowrap" };
   const td = { textAlign: "right", padding: "6px 8px", fontSize: 12, color: "#ddd", borderBottom: "1px solid #222" };
   const card = (titulo, valor, sub, cor) => (
-    <div style={{ flex: "1 1 150px", background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px" }}>
+    <div style={{ flex: "1 1 150px", background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "10px 12px" }}>
       <div style={{ fontSize: 11, color: "#999" }}>{titulo}</div>
       <div style={{ fontSize: 20, fontWeight: 800, color: cor || "#fff" }}>{valor}</div>
       {sub && <div style={{ fontSize: 11, color: "#888" }}>{sub}</div>}
@@ -6028,7 +6028,7 @@ function PlanejamentoProducao() {
           </div>
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-          {usarSalvo && <button style={btn("#C69700")} onClick={() => setPrevia(true)}>🔄 Replanejar com os dados atuais</button>}
+          {usarSalvo && <button style={btn("#C99700")} onClick={() => setPrevia(true)}>🔄 Replanejar com os dados atuais</button>}
           {!usarSalvo && <button disabled={salvando} style={btn("#4caf6b")} onClick={() => salvarPlano(planoCalc.lotes, ritmoUsado, feitos)}>{salvando ? "Salvando…" : "💾 Salvar este plano"}</button>}
           {!usarSalvo && planoSalvo && <button style={btn("#888")} onClick={() => setPrevia(false)}>↩ Voltar ao plano salvo</button>}
           <BotaoExcel nomeAba="PlanejamentoProducao" gerar={gerarExcel} />
@@ -6052,11 +6052,11 @@ function PlanejamentoProducao() {
                 <td style={{ ...td, textAlign: "left" }}>{t.cerveja || <span style={{ color: "#555" }}>—</span>}{t.cerveja && !t.base && <span style={{ color: "#e57373" }}> (sem receita)</span>}</td>
                 <td style={td}>{t.diasProd ?? "—"}</td>
                 <td style={td}>{t.dataProd ? t.dataProd.toLocaleDateString("pt-BR") : "—"}</td>
-                <td style={{ ...td, color: t.situacao === "maturando" ? "#C69700" : "#ddd" }}>{t.diasLiberar ?? "—"}{t.dataProd && !t.diasRec ? "*" : ""}</td>
+                <td style={{ ...td, color: t.situacao === "maturando" ? "#C99700" : "#ddd" }}>{t.diasLiberar ?? "—"}{t.dataProd && !t.diasRec ? "*" : ""}</td>
                 <td style={td}>{t.litrosNoTanque ? L(t.litrosNoTanque) : "—"}</td>
                 <td style={{ ...td, textAlign: "left" }}>
                   {t.situacao === "vazio" && <span style={{ color: "#4caf6b" }}>🟢 livre</span>}
-                  {t.situacao === "maturando" && <span style={{ color: "#C69700" }}>⏳ maturando — libera {fmtDataCurta(t.pronto)}</span>}
+                  {t.situacao === "maturando" && <span style={{ color: "#C99700" }}>⏳ maturando — libera {fmtDataCurta(t.pronto)}</span>}
                   {t.situacao === "pronta" && <span style={{ color: "#4caf6b" }}>🟢 cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
                   {t.situacao === "sem data" && <span style={{ color: "#e57373" }}>informe os dias no tanque</span>}
                 </td>
@@ -6070,7 +6070,7 @@ function PlanejamentoProducao() {
       </div>
 
       {/* premissas */}
-      <div style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#bbb" }}>
+      <div style={{ background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: "#bbb" }}>
         <div><strong style={{ color: "#fff" }}>Cenário usado:</strong> {nomeCenario} ({pcts[cenario]}%) — projeção de cada produto = litros vendidos no <em>mesmo mês do ano anterior</em> × {pcts[cenario]}% (produto sem histórico no ano anterior: média dos 3 últimos meses fechados). Não usa a aba Projeção do app.</div>
         <div><strong style={{ color: "#fff" }}>Divisão do mês:</strong> o volume de cada mês é dividido igualmente entre as suas 4 ou 5 semanas; cada fatia precisa estar pronta no início da sua semana (não tudo no dia 1º). Hoje {labelMes(alvo)} tem {(semanasPorMes[alvo] || []).length} semanas ≈ {L(totNec / Math.max(1, (semanasPorMes[alvo] || []).length))} L por semana.</div>
         <div><strong style={{ color: "#fff" }}>Regras dos tanques:</strong> tanques grandes (8.000 L ou mais) ficam sempre com Helles; os pequenos (1.000, 2.000 e 3.000 L) rodam os outros estilos, sempre cheios (6.000 L de Oktoberfest = 2 lotes de 3.000 L, não 8.000 L). Outro estilo só entra em tanque grande se, com os pequenos, ficaria atrasado.</div>
@@ -6119,9 +6119,9 @@ function PlanejamentoProducao() {
         <label style={{ fontSize: 12, color: "#aaa" }} title="A venda da semana acontece ao longo dos 5 dias úteis, não toda na segunda. Cerveja que fica pronta até este dia da semana de entrega não conta como atraso.">Tolerância na semana (dias após a segunda)<br />
           <input type="number" min="0" max="6" value={toleranciaSemana} onChange={e => setToleranciaSemana(Math.max(0, Math.min(6, Number(e.target.value) || 0)))} style={inputNum} />
         </label>
-        <div style={{ flexBasis: "100%", background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ flexBasis: "100%", background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "10px 12px", display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-end" }}>
           <label style={{ fontSize: 12, color: "#aaa", minWidth: 260 }} title="0% = cada mês produz o que ele mesmo vende (como antes). 100% = a produção do período inteiro é dividida igualmente entre os meses (a sobra dos meses fracos vira estoque para os fortes).">
-            <strong style={{ color: "#C69700" }}>Nivelar produção no período: {nivelar}%</strong><br />
+            <strong style={{ color: "#C99700" }}>Nivelar produção no período: {nivelar}%</strong><br />
             <input type="range" min="0" max="100" step="5" value={nivelar} onChange={e => setNivelar(Number(e.target.value))} style={{ width: 260 }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#666" }}><span>cada mês por si</span><span>igual em todos</span></div>
           </label>
@@ -6140,7 +6140,7 @@ function PlanejamentoProducao() {
         </label>
       </div>
 
-      <div style={{ marginBottom: 14, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px" }}>
+      <div style={{ marginBottom: 14, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "10px 12px" }}>
         <div style={{ fontSize: 12, color: "#fff", marginBottom: 6 }}><strong>🚦 Prioridade contra atrasos</strong> <span style={{ color: "#888" }}>— monte a ordem dos estilos que não podem atrasar; na disputa por tanque e brassagem (mesma semana de entrega) o 1º da lista é atendido primeiro.</span></div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }}>
           {prioridade.length === 0 && <div style={{ fontSize: 11, color: "#777" }}>Nenhuma prioridade definida (vale a ordem automática).</div>}
@@ -6148,7 +6148,7 @@ function PlanejamentoProducao() {
             const atrasadosE = (lotesExibidos || []).filter(l => l.estilo === e && l.atrasado && !l.reposicao).length;
             return (
               <div key={e} style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: "#ddd" }}>
-                <span style={{ width: 22, color: "#C69700" }}>{i + 1}º</span><strong style={{ minWidth: 150 }}>{e}</strong>
+                <span style={{ width: 22, color: "#C99700" }}>{i + 1}º</span><strong style={{ minWidth: 150 }}>{e}</strong>
                 <button style={{ ...btn("#888"), padding: "1px 7px" }} disabled={i === 0} onClick={() => setPrioridade(p => { const a = p.slice(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; return a; })}>↑</button>
                 <button style={{ ...btn("#888"), padding: "1px 7px" }} disabled={i === prioridade.length - 1} onClick={() => setPrioridade(p => { const a = p.slice(); [a[i + 1], a[i]] = [a[i], a[i + 1]]; return a; })}>↓</button>
                 <button style={{ ...btn("#c0392b"), padding: "1px 7px" }} onClick={() => setPrioridade(p => p.filter(x => x !== e))}>remover</button>
@@ -6163,7 +6163,7 @@ function PlanejamentoProducao() {
         </select>
       </div>
 
-      <details style={{ marginBottom: 14, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 12px" }}>
+      <details style={{ marginBottom: 14, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "8px 12px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12, color: "#fff" }}><strong>🎛️ Instruções por tanque e por estilo</strong> <span style={{ color: "#888" }}>— diga quais estilos cada tanque pode produzir e o tamanho máximo do lote de cada estilo.</span></summary>
         <div style={{ marginTop: 8, fontSize: 12, color: "#ccc" }}>
           <div style={{ color: "#fff", fontWeight: 700, marginBottom: 4 }}>Por tanque</div>
@@ -6177,7 +6177,7 @@ function PlanejamentoProducao() {
                 <div key={t.nome} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: r.bloqueado ? 0.5 : 1 }}>
                   <strong style={{ width: 90, color: "#fff" }}>{t.nome}</strong><span style={{ width: 60, color: "#888" }}>{L(t.capacidade)} L</span>
                   <label style={{ display: "flex", gap: 4, alignItems: "center" }}><input type="checkbox" checked={!!r.bloqueado} onChange={e => set({ bloqueado: e.target.checked })} /> não usar</label>
-                  {sel.map(e => <span key={e} style={{ background: "#2a2a2a", borderRadius: 10, padding: "1px 8px" }}>{e} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => set({ estilos: sel.filter(x => x !== e) })}>×</span></span>)}
+                  {sel.map(e => <span key={e} style={{ background: "#26302A", borderRadius: 10, padding: "1px 8px" }}>{e} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => set({ estilos: sel.filter(x => x !== e) })}>×</span></span>)}
                   <select value="" onChange={ev => { const v = ev.target.value; if (v) set({ estilos: [...sel, v] }); }} style={{ ...inputNum, width: 170, textAlign: "left" }}>
                     <option value="">{sel.length ? "+ outro estilo…" : "automático — + restringir a…"}</option>
                     {listaEstilos.filter(e => !sel.includes(e.estilo)).map(e => <option key={e.estilo} value={e.estilo}>{e.estilo}</option>)}
@@ -6204,14 +6204,14 @@ function PlanejamentoProducao() {
             {listaEstilos.map(e => (
               <label key={e.estilo} style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}>
                 <span>{e.estilo}</span>
-                <input type="number" min="0" step="500" placeholder="cheio" value={loteMax[e.estilo] ?? ""} onChange={ev => setLoteMax(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: (loteMax[e.estilo] ?? "") !== "" ? "#C69700" : "#444" }} />
+                <input type="number" min="0" step="500" placeholder="cheio" value={loteMax[e.estilo] ?? ""} onChange={ev => setLoteMax(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: (loteMax[e.estilo] ?? "") !== "" ? "#C99700" : "#444" }} />
               </label>
             ))}
           </div>
         </div>
       </details>
 
-      <details style={{ marginBottom: 14, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 12px" }}>
+      <details style={{ marginBottom: 14, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "8px 12px" }}>
         <summary style={{ cursor: "pointer", fontSize: 12, color: "#fff" }}><strong>🧴 Projeção por produto (PET e chope)</strong> <span style={{ color: "#888" }}>— histórico real de cada produto (últimos 3 meses fechados e mesmo mês do ano anterior) ao lado do campo para digitar os litros/mês. Em cinza no campo está a sugestão automática.</span></summary>
         {(() => {
           const fechadosHist = (produtosPeriodos || []).filter(c => c < mesAtual).slice(-3);
@@ -6245,7 +6245,7 @@ function PlanejamentoProducao() {
                       <tr key={nome} style={{ borderTop: "1px solid #222" }}>
                         <td style={{ padding: "3px 8px", whiteSpace: "nowrap" }}>{nome}{!est && <span style={{ color: "#e57373" }}> (sem receita)</span>}</td>
                         {vals.map((v, k) => <td key={k} style={{ padding: "3px 6px", textAlign: "right", color: v === null ? "#555" : "#ddd", borderLeft: k === 0 ? "1px solid #333" : undefined }}>{v === null ? "—" : L(v)}</td>)}
-                        <td style={{ padding: "3px 6px", textAlign: "right", color: "#C69700" }}>{media === null ? "—" : L(media)}</td>
+                        <td style={{ padding: "3px 6px", textAlign: "right", color: "#C99700" }}>{media === null ? "—" : L(media)}</td>
                         {mesesPlano.map(c => {
                           const kp = `${c}|${nome}`;
                           const ref = valMes(nome, refAnoDe(c));
@@ -6253,7 +6253,7 @@ function PlanejamentoProducao() {
                           return (
                             <React.Fragment key={c}>
                               <td style={{ padding: "3px 6px", textAlign: "right", color: ref === null ? "#555" : "#ddd", borderLeft: "1px solid #333" }}>{ref === null ? "—" : L(ref)}</td>
-                              <td style={{ padding: "2px 4px" }}><input type="number" min="0" placeholder={String(Math.round(d ? d.lit : 0))} value={ovProd[kp] ?? ""} onChange={ev => setOvProd(p => ({ ...p, [kp]: ev.target.value }))} style={{ ...inputNum, width: 70, borderColor: (ovProd[kp] ?? "") !== "" ? "#C69700" : "#444" }} /></td>
+                              <td style={{ padding: "2px 4px" }}><input type="number" min="0" placeholder={String(Math.round(d ? d.lit : 0))} value={ovProd[kp] ?? ""} onChange={ev => setOvProd(p => ({ ...p, [kp]: ev.target.value }))} style={{ ...inputNum, width: 70, borderColor: (ovProd[kp] ?? "") !== "" ? "#C99700" : "#444" }} /></td>
                             </React.Fragment>
                           );
                         })}
@@ -6276,14 +6276,14 @@ function PlanejamentoProducao() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 6 }}>
           {listaEstilos.map(e => (
-            <label key={e.estilo} style={{ fontSize: 12, color: estilosOff[e.estilo] ? "#666" : "#ddd", display: "flex", gap: 6, alignItems: "flex-start", background: "#161616", border: "1px solid #2a2a2a", borderRadius: 6, padding: "6px 8px" }}>
+            <label key={e.estilo} style={{ fontSize: 12, color: estilosOff[e.estilo] ? "#666" : "#ddd", display: "flex", gap: 6, alignItems: "flex-start", background: "#111812", border: "1px solid #26302A", borderRadius: 6, padding: "6px 8px" }}>
               <input type="checkbox" checked={!estilosOff[e.estilo]} onChange={() => setEstilosOff(p => ({ ...p, [e.estilo]: !p[e.estilo] }))} style={{ marginTop: 2 }} />
               <span>
                 <strong>{e.estilo}</strong> <span style={{ color: "#888" }}>· {L(e.vol)} L em {labelMes(alvo)}</span>
                 <div style={{ fontSize: 11, color: "#999", marginTop: 3 }} onClick={ev => ev.preventDefault()}>
                   dias até pronto{" "}
-                  <input type="number" min="1" placeholder={String(e.dias || diasPadrao)} value={diasEstilo[e.estilo] ?? ""} onChange={ev => setDiasEstilo(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 54, padding: "2px 4px", borderColor: diasEstilo[e.estilo] ? "#C69700" : "#444" }} />
-                  {diasEstilo[e.estilo] ? <span style={{ color: "#C69700" }}> (receita: {e.dias || "—"})</span> : null}
+                  <input type="number" min="1" placeholder={String(e.dias || diasPadrao)} value={diasEstilo[e.estilo] ?? ""} onChange={ev => setDiasEstilo(p => ({ ...p, [e.estilo]: ev.target.value }))} style={{ ...inputNum, width: 54, padding: "2px 4px", borderColor: diasEstilo[e.estilo] ? "#C99700" : "#444" }} />
+                  {diasEstilo[e.estilo] ? <span style={{ color: "#C99700" }}> (receita: {e.dias || "—"})</span> : null}
                 </div>
                 {e.derivados.length > 0 && <div style={{ fontSize: 10, color: "#777" }}>inclui: {e.derivados.join(", ")}</div>}
               </span>
@@ -6313,13 +6313,13 @@ function PlanejamentoProducao() {
         const tBarril = nec.reduce((s, n) => s + n.barrilProd, 0), tPet = nec.reduce((s, n) => s + n.petProd, 0), tNec = nec.reduce((s, n) => s + n.necessario, 0);
         const nSem = (semanasPorMes[chave] || []).length || 1;
         return (
-          <div key={chave} style={{ background: "#141414", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, marginBottom: 12 }}>
+          <div key={chave} style={{ background: "#141414", border: "1px solid #26302A", borderRadius: 8, padding: 10, marginBottom: 12 }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", marginBottom: 8 }}>
               <strong style={{ color: "#fff", fontSize: 14, minWidth: 70 }}>{labelMes(chave)}</strong>
               <label style={{ fontSize: 12, color: "#aaa" }}>% sobre o ano passado{" "}
                 <input type="number" placeholder={String(pcts[cenario])} value={pctMes[chave] ?? ""} onChange={e => setPctMes(p => ({ ...p, [chave]: e.target.value }))} style={{ ...inputNum, width: 64 }} />
               </label>
-              <span style={{ fontSize: 12, color: "#C69700" }}>A produzir: <strong>{L(tNec)} L</strong> ({L(tBarril)} barril · {L(tPet)} PET) · {nSem} semanas ≈ {L(tNec / nSem)} L/semana</span>
+              <span style={{ fontSize: 12, color: "#C99700" }}>A produzir: <strong>{L(tNec)} L</strong> ({L(tBarril)} barril · {L(tPet)} PET) · {nSem} semanas ≈ {L(tNec / nSem)} L/semana</span>
               <span style={{ fontSize: 12, color: "#888" }}>Envase PET: {(tPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias</span>
             </div>
             <div style={{ overflowX: "auto" }}>
@@ -6344,7 +6344,7 @@ function PlanejamentoProducao() {
                           <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[kx] ?? ""} onChange={e => setOvPet(p => ({ ...p, [kx]: e.target.value }))} style={inputNum} /></td>
                           <td style={td}>{L(n.estoque)}</td>
                           <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
-                          <td style={td}><input type="number" min="1" placeholder={n.diasEstiloBase ? String(n.diasEstiloBase) : "preencher"} value={diasMes[kx] ?? ""} onChange={e => setDiasMes(p => ({ ...p, [kx]: e.target.value }))} style={{ ...inputNum, width: 54, borderColor: (diasMes[kx] || diasEstilo[n.estilo]) ? "#C69700" : n.dias ? "#444" : "#e57373" }} title={n.diasReceita ? `receita: ${n.diasReceita} dias` : "sem prazo na receita"} /></td>
+                          <td style={td}><input type="number" min="1" placeholder={n.diasEstiloBase ? String(n.diasEstiloBase) : "preencher"} value={diasMes[kx] ?? ""} onChange={e => setDiasMes(p => ({ ...p, [kx]: e.target.value }))} style={{ ...inputNum, width: 54, borderColor: (diasMes[kx] || diasEstilo[n.estilo]) ? "#C99700" : n.dias ? "#444" : "#e57373" }} title={n.diasReceita ? `receita: ${n.diasReceita} dias` : "sem prazo na receita"} /></td>
                           <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
                           <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [kx]: !p[kx] }))}>{expandidos[kx] ? "ocultar" : "por quê?"}</button></td>
                         </tr>
@@ -6357,7 +6357,7 @@ function PlanejamentoProducao() {
                               return (
                                 <div key={i} style={{ fontSize: 11, color: "#aaa", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "2px 0" }}>
                                   <span style={{ minWidth: 230 }}>• <strong style={{ color: "#ddd" }}>{d.produto}</strong> ({d.emb === "chope" ? "🛢️ barril" : "🧴 PET"})</span>
-                                  <input type="number" placeholder={String(Math.round(d.litProj))} value={ovProd[kp] ?? ""} onChange={ev => setOvProd(p => ({ ...p, [kp]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: d.manual ? "#C69700" : "#444" }} />
+                                  <input type="number" placeholder={String(Math.round(d.litProj))} value={ovProd[kp] ?? ""} onChange={ev => setOvProd(p => ({ ...p, [kp]: ev.target.value }))} style={{ ...inputNum, width: 80, borderColor: d.manual ? "#C99700" : "#444" }} />
                                   <span>L/mês{d.manual ? " (manual)" : ""} — {d.origem}{d.est > 0 ? ` · estoque ${L(d.est)} L` : ""}</span>
                                 </div>
                               );
@@ -6375,8 +6375,8 @@ function PlanejamentoProducao() {
         );
       })}
 
-      <div style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, marginBottom: 6 }}>Cenários salvos {cenarioCarregado && <span style={{ color: "#C69700", fontWeight: 400 }}>· em uso: {cenarioCarregado}</span>}</div>
+      <div style={{ background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "10px 12px", marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, marginBottom: 6 }}>Cenários salvos {cenarioCarregado && <span style={{ color: "#C99700", fontWeight: 400 }}>· em uso: {cenarioCarregado}</span>}</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
           <input type="text" placeholder="Nome do cenário (ex.: Natal forte)" value={nomeNovoCenario} onChange={e => setNomeNovoCenario(e.target.value)} style={{ ...inputNum, width: 240, textAlign: "left" }} />
           <button style={btn("#4caf6b")} onClick={salvarCenarioComNome}>💾 Salvar cenário futuro</button>
@@ -6385,7 +6385,7 @@ function PlanejamentoProducao() {
         {cenariosSalvos.length === 0 ? <div style={{ fontSize: 12, color: "#666" }}>Nenhum cenário salvo ainda. Ajuste os números acima, dê um nome e salve — dá para guardar quantos quiser e alternar entre eles.</div> : (
           <div style={{ display: "grid", gap: 6 }}>
             {cenariosSalvos.map(c => (
-              <div key={c.nome} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", background: "#101010", border: `1px solid ${c.nome === cenarioCarregado ? "#C69700" : "#242424"}`, borderRadius: 6, padding: "6px 8px" }}>
+              <div key={c.nome} style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", background: "#101010", border: `1px solid ${c.nome === cenarioCarregado ? "#C99700" : "#242424"}`, borderRadius: 6, padding: "6px 8px" }}>
                 <strong style={{ color: "#fff", fontSize: 13, minWidth: 140 }}>{c.nome}</strong>
                 <span style={{ fontSize: 11, color: "#888" }}>salvo em {new Date(c.salvoEm).toLocaleString("pt-BR")}</span>
                 <span style={{ fontSize: 11, color: "#aaa", flex: "1 1 220px" }}>{Object.entries(c.resumo || {}).sort().map(([k, v]) => `${labelMes(k)}: ${L(v)} L`).join(" · ")}</span>
@@ -6418,7 +6418,7 @@ function PlanejamentoProducao() {
         {!usarSalvo && (
           <div style={{ fontSize: 12, color: "#aaa" }}>Ritmo da brassagem<br />
             <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
-              {["auto", "3", "6"].map(r => <button key={r} onClick={() => setRitmo(r)} style={modoBtnStyle(ritmo === r, "#C69700")}>{rotuloRitmo(r)}</button>)}
+              {["auto", "3", "6"].map(r => <button key={r} onClick={() => setRitmo(r)} style={modoBtnStyle(ritmo === r, "#C99700")}>{rotuloRitmo(r)}</button>)}
             </div>
           </div>
         )}
@@ -6522,19 +6522,19 @@ function PlanejamentoProducao() {
       <div style={{ fontSize: 11, color: "#888", marginBottom: 6 }}>Uma linha por tanque: o que tem hoje, cada produção (datas e volume), quando fica pronto, o que vira estoque ao ficar pronto, em 🛢️ barris de 50 L e 🧴 PET e quando esvazia. Regra: ao ficar pronta, a cerveja vai para barril ou PET (estoque de produto acabado) e o tanque libera na hora; a venda sai do estoque. A divisão barril/PET segue a previsão de vendas do estilo.</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {visaoTanques.map(({ t, atual, passos }) => (
-          <div key={t.nome} style={{ display: "flex", gap: 10, background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px" }}>
+          <div key={t.nome} style={{ display: "flex", gap: 10, background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "8px 10px" }}>
             <div style={{ minWidth: 92, color: "#fff", fontWeight: 700, fontSize: 12 }}>{t.nome}<div style={{ color: "#888", fontWeight: 400 }}>{L(t.capacidade)} L</div></div>
             <div style={{ flex: 1, fontSize: 12, color: "#ddd", display: "flex", flexDirection: "column", gap: 4 }}>
               {atual ? (
                 <div>
-                  <span style={{ color: "#C69700" }}>AGORA</span> · {atual.cerveja} {L(atual.litros)} L · {atual.pronto && atual.pronto > hojeReal ? `⏳ pronta em ${fmtDataCurta(atual.pronto)}` : "🟢 pronta"}
-                  {" · "}maturação <input type="number" min="1" placeholder={String(t.diasUsados)} value={diasLote[`${t.nome}|atual`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|atual`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|atual`] ?? "") !== "" ? "#C69700" : "#444" }} /> dias
+                  <span style={{ color: "#C99700" }}>AGORA</span> · {atual.cerveja} {L(atual.litros)} L · {atual.pronto && atual.pronto > hojeReal ? `⏳ pronta em ${fmtDataCurta(atual.pronto)}` : "🟢 pronta"}
+                  {" · "}maturação <input type="number" min="1" placeholder={String(t.diasUsados)} value={diasLote[`${t.nome}|atual`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|atual`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|atual`] ?? "") !== "" ? "#C99700" : "#444" }} /> dias
                   {(() => { const sh = petShareEstilo(atual.cerveja); const b = atual.litros * (1 - sh), pt = atual.litros * sh; return <> · ao ficar pronta vira estoque: 🛢️ {Math.round(b / 50).toLocaleString("pt-BR")} barris ({L(b)} L) + 🧴 {L(pt)} L PET · tanque livre {atual.pronto && atual.pronto > hojeReal ? `em ${fmtDataCurta(atual.pronto)}` : "agora"}</>; })()}
                 </div>
               ) : <div style={{ color: "#4caf6b" }}>AGORA · vazio / livre</div>}
               {passos.map(({ l, barril, pet, vazio }, i) => (
                 <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>
-                  ⚙️ <strong>Produção {fmtDataCurta(l.inicio)}{chaveDia(l.inicio) !== chaveDia(l.fim) ? `–${fmtDataCurta(l.fim)}` : ""}</strong> · {l.estilo}{l.reposicao ? " (reposição)" : ""} {L(l.volume)} L ({l.bateladas} bat.) · ⏳ pronto {fmtDataCurta(l.pronto)} · maturação <input type="number" min="1" placeholder={String(l.dias)} value={diasLote[`${t.nome}|${i}`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|${i}`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|${i}`] ?? "") !== "" ? "#C69700" : "#444" }} /> dias
+                  ⚙️ <strong>Produção {fmtDataCurta(l.inicio)}{chaveDia(l.inicio) !== chaveDia(l.fim) ? `–${fmtDataCurta(l.fim)}` : ""}</strong> · {l.estilo}{l.reposicao ? " (reposição)" : ""} {L(l.volume)} L ({l.bateladas} bat.) · ⏳ pronto {fmtDataCurta(l.pronto)} · maturação <input type="number" min="1" placeholder={String(l.dias)} value={diasLote[`${t.nome}|${i}`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|${i}`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|${i}`] ?? "") !== "" ? "#C99700" : "#444" }} /> dias
                   {" · "}ao ficar pronto vira estoque: 🛢️ {Math.round(l.volume * (1 - (l.petPct || 0)) / 50).toLocaleString("pt-BR")} barris ({L(l.volume * (1 - (l.petPct || 0)))} L) + 🧴 {L(l.volume * (l.petPct || 0))} L PET
                   {" · "}tanque livre em {fmtDataCurta(l.pronto)}
                   {l.atrasado ? " · ⚠️ atrasado" : ""}
@@ -6601,14 +6601,14 @@ function PlanejamentoProducao() {
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.estoque ? L(r.estoque) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.acabado ? L(r.acabado) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.semana ? L(r.semana) + " L" : "—"}</td>
-                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.precisa ? "#C69700" : "#4caf6b" }}>{r.precisa ? fmtDataCurta(r.semLote.ruptura) : "cobre os 120 dias"}</td>
+                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.precisa ? "#C99700" : "#4caf6b" }}>{r.precisa ? fmtDataCurta(r.semLote.ruptura) : "cobre os 120 dias"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.dias}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right", color: "#fff", fontWeight: 700 }}>{r.iniciarAte ? fmtDataCurta(r.iniciarAte) : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "left", whiteSpace: "nowrap" }}>{r.proximo ? `${fmtDataCurta(r.proximo.inicio)} → pronto ${fmtDataCurta(r.proximo.pronto)} · ${L(r.proximo.volume)} L (${r.proximo.tanque})` : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "left", color: r.comLote.ruptura ? "#e57373" : r.precisa ? "#4caf6b" : "#4caf6b" }}>
                         {r.comLote.ruptura ? `⚠️ ruptura em ${fmtDataCurta(r.comLote.ruptura)} (faltam ${L(r.comLote.falta)} L)` : !r.precisa ? "🟢 não precisa produzir" : r.folga !== null ? `✅ ${r.folga >= 0 ? `${r.folga} dia(s) de folga` : "no limite"}` : "✅ coberto"}
                       </td>
-                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.comLote.final > r.semana * 8 ? "#C69700" : "#ddd" }}>{L(r.comLote.final)} L</td>
+                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.comLote.final > r.semana * 8 ? "#C99700" : "#ddd" }}>{L(r.comLote.final)} L</td>
                     </tr>
                   ))}
                 </tbody>
@@ -6660,7 +6660,7 @@ function PlanejamentoProducao() {
                       <td style={{ padding: "3px 8px", whiteSpace: "nowrap", color: "#fff" }}>{r.e}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.inicial ? L(r.inicial) : "—"}</td>
                       {r.colunas.map((c, i) => {
-                        const cor = c.saldo < -50 ? "#e57373" : c.vendido > 0 && c.saldo > c.vendido * 2 ? "#C69700" : "#4caf6b";
+                        const cor = c.saldo < -50 ? "#e57373" : c.vendido > 0 && c.saldo > c.vendido * 2 ? "#C99700" : "#4caf6b";
                         return (
                           <React.Fragment key={i}>
                             <td style={{ padding: "3px 6px", textAlign: "right", borderLeft: "1px solid #333" }}>{c.produzido ? L(c.produzido) : "—"}</td>
@@ -6695,10 +6695,10 @@ function PlanejamentoProducao() {
         const prontosSem = evs.flatMap(e => e.prontos);
         const petSem = prontosSem.reduce((s, l) => s + l.atende * l.petPct, 0);
         return (
-          <div key={seg.getTime()} style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: 10, marginBottom: 10 }}>
+          <div key={seg.getTime()} style={{ background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: 10, marginBottom: 10 }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
               <strong style={{ color: "#fff", fontSize: 13 }}>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
-              <span style={{ color: "#C69700", fontSize: 12 }}>
+              <span style={{ color: "#C99700", fontSize: 12 }}>
                 {totBat} bateladas ({L(totLitrosSem)} L) · {prontosSem.length} lote(s) pronto(s)
                 {petSem > 0 ? ` · envase PET ≈ ${L(petSem)} L (${(petSem / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dia)` : ""}
               </span>
@@ -6726,7 +6726,7 @@ function PlanejamentoProducao() {
                     return (
                       <tr key={d.getTime()}>
                         <td style={{ ...td, textAlign: "left", whiteSpace: "nowrap", color: "#fff", width: 90, verticalAlign: "top" }}>{fmtDataSem(d)}</td>
-                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C69700" : "#555" }}>{bat}/6 bat.</td>
+                        <td style={{ ...td, whiteSpace: "nowrap", width: 80, verticalAlign: "top", color: bat ? "#C99700" : "#555" }}>{bat}/6 bat.</td>
                         <td style={{ ...td, textAlign: "left" }}>
                           {brass.length === 0 && prontos.length === 0 && <span style={{ color: "#555" }}>—</span>}
                           {brass.map(({ l, n }, i) => {
@@ -6753,10 +6753,10 @@ function PlanejamentoProducao() {
         const faltaPorEstilo = {}; faltas.forEach(x => { faltaPorEstilo[x.estilo] = (faltaPorEstilo[x.estilo] || 0) + x.falta; });
         const origemTxt = usos => { const m = {}; usos.forEach(u => { m[u.tanque] = (m[u.tanque] || 0) + u.litros; }); const ks = Object.keys(m); return ks.length ? ks.map(k => `${k} (${L(m[k])} L)`).join(" + ") : "—"; };
         return (
-          <details key={seg.getTime() + "v"} open style={{ background: "#161616", border: "1px solid #2a2a2a", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
+          <details key={seg.getTime() + "v"} open style={{ background: "#111812", border: "1px solid #26302A", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
             <summary style={{ cursor: "pointer", color: "#fff", fontSize: 13 }}>
               <strong>Semana {fmtDataCurta(seg)} – {fmtDataCurta(somarDiasData(seg, 4))}</strong>
-              <span style={{ color: "#C69700", fontSize: 12 }}> · previsão de vendas {L(e.totalBarril + e.totalPet)} L · 🛢️ {L(e.totalBarril)} L barril (≈{Math.round(e.totalBarril / 50).toLocaleString("pt-BR")} barris de 50 L) · 🧴 {L(e.totalPet)} L PET ({(e.totalPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias de envase · {(e.totalPet / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} pallets)</span>
+              <span style={{ color: "#C99700", fontSize: 12 }}> · previsão de vendas {L(e.totalBarril + e.totalPet)} L · 🛢️ {L(e.totalBarril)} L barril (≈{Math.round(e.totalBarril / 50).toLocaleString("pt-BR")} barris de 50 L) · 🧴 {L(e.totalPet)} L PET ({(e.totalPet / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias de envase · {(e.totalPet / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} pallets)</span>
             </summary>
             <div style={{ marginTop: 8 }}>
               {Object.keys(faltaPorEstilo).length > 0 && (
@@ -6794,7 +6794,7 @@ function PlanejamentoProducao() {
                         <td style={{ ...td, textAlign: "left", color: "#fff", whiteSpace: "nowrap", verticalAlign: "top" }}>{fmtDataSem(d.data)}</td>
                         <td style={{ ...td, textAlign: "left", verticalAlign: "top" }}>{d.blocos.length === 0 ? <span style={{ color: "#555" }}>{diaUtil(d.data) ? "sem envase" : "feriado"}</span> : d.blocos.map((b, j) => <div key={j}>🧴 {b.produto} · {L(b.litros)} L</div>)}</td>
                         <td style={{ ...td, verticalAlign: "top" }}>{d.litros > 0 ? L(d.litros) : "—"}</td>
-                        <td style={{ ...td, verticalAlign: "top", color: "#C69700", fontWeight: 700 }}>{d.litros > 0 ? (d.litros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—"}</td>
+                        <td style={{ ...td, verticalAlign: "top", color: "#C99700", fontWeight: 700 }}>{d.litros > 0 ? (d.litros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—"}</td>
                         <td style={{ ...td, textAlign: "left", verticalAlign: "top" }}>{d.blocos.map((b, j) => <div key={j} style={{ color: b.falta > 50 ? "#e57373" : "#ddd" }}>{origemTxt(b.usos)}{b.falta > 50 ? ` · falta ${L(b.falta)} L` : ""}</div>)}</td>
                       </tr>
                     ))}
@@ -6826,7 +6826,7 @@ function PlanejamentoProducao() {
         })();
         if (!progJSX && !vendaJSX) return null;
         return (
-          <div key={seg.getTime()} style={{ marginBottom: 14, borderLeft: "3px solid #C69700", paddingLeft: 8 }}>
+          <div key={seg.getTime()} style={{ marginBottom: 14, borderLeft: "3px solid #C99700", paddingLeft: 8 }}>
             {progJSX}
             {vendaJSX}
           </div>
@@ -7185,8 +7185,8 @@ function ProdutosTab() {
   if (!todosProdutosNomes.length) {
     return (
       <div style={{ color: "#888", textAlign: "center", padding: "60px 20px", fontSize: 14 }}>
-        Nenhum dado de produtos encontrado ainda. Crie as abas <strong style={{ color: "#C69700" }}>produtos_faturamento</strong> e{" "}
-        <strong style={{ color: "#C69700" }}>produtos_litros</strong> na planilha (mesmo formato "largo" dos relatórios de
+        Nenhum dado de produtos encontrado ainda. Crie as abas <strong style={{ color: "#C99700" }}>produtos_faturamento</strong> e{" "}
+        <strong style={{ color: "#C99700" }}>produtos_litros</strong> na planilha (mesmo formato "largo" dos relatórios de
         faturamento/litros por cliente, com a coluna "Produto" e "Descrição" e uma coluna por mês) pra essa aba passar a mostrar dados.
       </div>
     );
@@ -7228,7 +7228,7 @@ function ProdutosTab() {
         }} />
         <BotaoImprimir label="Imprimir Produtos (comparação + projeção)" />
       </div>
-      <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
+      <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 20 }}>
         <div style={{ color: "#888", fontSize: 12, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <Package size={13} /> Embalagem ({produtosNomes.length} de {todosProdutosNomes.length} produtos):
         </div>
@@ -7256,13 +7256,13 @@ function ProdutosTab() {
 
       {produtosNomes.length > 0 && (
       <>
-      <Section title="Comparação Mês a Mês por Produto" icon={<AlertTriangle size={16} color="#C69700" />}>
-        <div style={{ background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 14 }}>
+      <Section title="Comparação Mês a Mês por Produto" icon={<AlertTriangle size={16} color="#C99700" />}>
+        <div style={{ background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-            <button onClick={() => setMetricaHeatmap("faturamento")} style={modoBtnStyle(metricaHeatmap === "faturamento", "#02601D")}>
+            <button onClick={() => setMetricaHeatmap("faturamento")} style={modoBtnStyle(metricaHeatmap === "faturamento", "#025F1D")}>
               <TrendingUp size={13} /> Faturamento
             </button>
-            <button onClick={() => setMetricaHeatmap("litros")} style={modoBtnStyle(metricaHeatmap === "litros", "#C69700")}>
+            <button onClick={() => setMetricaHeatmap("litros")} style={modoBtnStyle(metricaHeatmap === "litros", "#C99700")}>
               <Droplets size={13} /> Litros
             </button>
           </div>
@@ -7316,10 +7316,10 @@ function ProdutosTab() {
           {incluirProjecao && (
             <div style={{ marginTop: 10, background: "rgba(198,151,0,0.06)", border: "1px solid rgba(198,151,0,0.25)", borderRadius: 8, padding: 12 }}>
               <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                <button onClick={() => setModoProjecao("anoAnterior")} style={modoBtnStyle(modoProjecao === "anoAnterior", "#C69700")}>
+                <button onClick={() => setModoProjecao("anoAnterior")} style={modoBtnStyle(modoProjecao === "anoAnterior", "#C99700")}>
                   Mesmo período do ano anterior
                 </button>
-                <button onClick={() => setModoProjecao("mediaRecente")} style={modoBtnStyle(modoProjecao === "mediaRecente", "#C69700")}>
+                <button onClick={() => setModoProjecao("mediaRecente")} style={modoBtnStyle(modoProjecao === "mediaRecente", "#C99700")}>
                   Média recente + sazonalidade
                 </button>
               </div>
@@ -7358,13 +7358,13 @@ function ProdutosTab() {
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ color: "#888", fontSize: 12 }}>Base: média dos últimos</span>
                       <input type="number" min="1" max="24" value={mesesBaseMedia} onChange={e => setMesesBaseMedia(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
-                        style={{ width: 50, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                        style={{ width: 50, background: "#0E1510", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                       <span style={{ color: "#888", fontSize: 12 }}>meses</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ color: "#888", fontSize: 12 }}>Projetar: próximos</span>
                       <input type="number" min="1" max="24" value={mesesProjetarFrente} onChange={e => setMesesProjetarFrente(Math.max(1, Math.min(24, Number(e.target.value) || 1)))}
-                        style={{ width: 50, background: "#141412", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                        style={{ width: 50, background: "#0E1510", border: "1px solid #444", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                       <span style={{ color: "#888", fontSize: 12 }}>meses</span>
                     </div>
                   </div>
@@ -7381,17 +7381,17 @@ function ProdutosTab() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#e0645a", fontSize: 12 }}>% mínimo:</span>
                   <input type="number" min="0" max="300" value={pctMin} onChange={e => setPctMin(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
-                    style={{ width: 65, background: "#141412", border: "1px solid #e0645a", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                    style={{ width: 65, background: "#0E1510", border: "1px solid #e0645a", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#C69700", fontSize: 12 }}>% igual ano passado:</span>
+                  <span style={{ color: "#C99700", fontSize: 12 }}>% igual ano passado:</span>
                   <input type="number" min="0" max="300" value={pctBase} onChange={e => setPctBase(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
-                    style={{ width: 65, background: "#141412", border: "1px solid #C69700", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                    style={{ width: 65, background: "#0E1510", border: "1px solid #C99700", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ color: "#4caf6b", fontSize: 12 }}>% máximo:</span>
                   <input type="number" min="0" max="300" value={pctMax} onChange={e => setPctMax(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
-                    style={{ width: 65, background: "#141412", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                    style={{ width: 65, background: "#0E1510", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 </div>
               </div>
               <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
@@ -7426,7 +7426,7 @@ function ProdutosTab() {
 
             {incluirProjecao && linhasProjecao.length > 0 && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ color: "#C69700", fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                <div style={{ color: "#C99700", fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
                   📈 Projeção (estimativa — colunas com * não são dado real)
                 </div>
                 <TabelaProjecao linhas={expandidoHeatmap ? linhasProjecao : linhasProjecao.slice(0, LIMITE_HEATMAP)} rotuloColuna="Produto" unidade={unidadeAtual} />
@@ -7436,7 +7436,7 @@ function ProdutosTab() {
         )}
       </Section>
 
-      <Section title="Comparação entre Produtos · Mês a Mês (Litros, por ano)" icon={<TrendingUp size={18} color="#02601D" />}>
+      <Section title="Comparação entre Produtos · Mês a Mês (Litros, por ano)" icon={<TrendingUp size={18} color="#025F1D" />}>
         <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
           <BotaoExcel nomeAba="Grafico Produtos" gerar={() => {
             if (!seriesProdutosGrafico.linhas.length) return [{ nome: "Gráfico", linhas: [["Selecione produtos no app antes de exportar."]] }];
@@ -7451,7 +7451,7 @@ function ProdutosTab() {
           em litros.
         </div>
 
-        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 16, background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
+        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
           <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Calendar size={13} /> Período:</span>
           <MonthPicker periodosDisponiveis={produtosPeriodos} valor={inicioGrafico} onSelecionar={setInicioGrafico} placeholder="Início" />
           <span style={{ color: "#666" }}>até</span>
@@ -7482,7 +7482,7 @@ function ProdutosTab() {
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ color: "#C69700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟡 Chopes ({chopesFixosGrafico.length})</div>
+            <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟡 Chopes ({chopesFixosGrafico.length})</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {chopesFixosGrafico.map(nome => (
                 <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
@@ -7496,8 +7496,8 @@ function ProdutosTab() {
           </div>
         </div>
 
-        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
-          <Search size={14} color="#C69700" />
+        <div className="no-print" style={{ display: "flex", alignItems: "center", gap: 8, background: "#15201A", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 10 }}>
+          <Search size={14} color="#C99700" />
           <input placeholder="Buscar outro produto (fora da lista fixa) pra adicionar ao gráfico..." value={buscaGrafico} onChange={e => setBuscaGrafico(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
         </div>
@@ -7519,10 +7519,10 @@ function ProdutosTab() {
               {extrasGrafico.map(nome => (
                 <span key={nome} style={{
                   display: "flex", alignItems: "center", gap: 6, background: "rgba(198,151,0,0.12)",
-                  border: "1px solid #C69700", borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
+                  border: "1px solid #C99700", borderRadius: 20, padding: "5px 6px 5px 12px", fontSize: 12, color: "#fff",
                 }}>
                   {nome}
-                  <button onClick={() => toggleProdutoGrafico(nome)} style={{ background: "transparent", border: "none", color: "#C69700", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 4px" }}>×</button>
+                  <button onClick={() => toggleProdutoGrafico(nome)} style={{ background: "transparent", border: "none", color: "#C99700", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 4px" }}>×</button>
                 </span>
               ))}
             </div>
@@ -7540,7 +7540,7 @@ function ProdutosTab() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="mes" tick={{ fill: "#fff", fontSize: 13 }} />
                 <YAxis tick={{ fill: "#ccc", fontSize: 13 }} tickFormatter={v => rotuloCompactoGeral(v, "L")} />
-                <Tooltip formatter={(v, name) => [v == null ? "-" : rotuloCompactoGeral(v, "L"), name]} contentStyle={{ background: "#1D1D1B", border: "1px solid #333" }} />
+                <Tooltip formatter={(v, name) => [v == null ? "-" : rotuloCompactoGeral(v, "L"), name]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                 <Legend content={<LegendaBranca />} />
                 {seriesProdutosGrafico.linhas.map(l => (
                   <Line key={l.key} type="monotone" dataKey={l.key} name={`${l.produto} ${l.ano}`} stroke={l.cor} strokeWidth={2} dot={{ r: 2 }} connectNulls />
@@ -7551,9 +7551,9 @@ function ProdutosTab() {
         )}
       </Section>
 
-      <Section title={`Por Tipo de Produto (${produtosExibidos.length}${buscaTipo.trim() ? ` de ${produtosComComparativo.length}` : ""})`} icon={<TrendingUp size={18} color="#02601D" />}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
-          <Search size={14} color="#C69700" />
+      <Section title={`Por Tipo de Produto (${produtosExibidos.length}${buscaTipo.trim() ? ` de ${produtosComComparativo.length}` : ""})`} icon={<TrendingUp size={18} color="#025F1D" />}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#15201A", border: "1px solid #333", borderRadius: 6, padding: "8px 12px", marginBottom: 14 }}>
+          <Search size={14} color="#C99700" />
           <input placeholder="Buscar um tipo de produto específico..." value={buscaTipo} onChange={e => setBuscaTipo(e.target.value)}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
         </div>
@@ -7742,7 +7742,7 @@ function ClienteAnaliticoTab() {
 
   if (!A.linhas.length) {
     return (<Section title="Cliente Analítico"><div style={{ color: "#aaa", fontSize: 13 }}>
-      Não encontrei dados da aba <strong style={{ color: "#C69700" }}>analitico</strong> no retorno da planilha{A.erro ? ` (${A.erro})` : ""}. Confirme que a aba existe e reimplante o Code.gs na versão v3.5.
+      Não encontrei dados da aba <strong style={{ color: "#C99700" }}>analitico</strong> no retorno da planilha{A.erro ? ` (${A.erro})` : ""}. Confirme que a aba existe e reimplante o Code.gs na versão v3.5.
     </div></Section>);
   }
 
@@ -7754,13 +7754,13 @@ function ClienteAnaliticoTab() {
         <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
           <div style={{ flex: "1 1 320px", minWidth: 260, position: "relative" }}>
             <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Buscar cliente (nome, razão social ou código)</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1D1D1B", border: "1px solid #333", borderRadius: 6, padding: "6px 10px" }}>
-              <Search size={14} color="#C69700" />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#15201A", border: "1px solid #333", borderRadius: 6, padding: "6px 10px" }}>
+              <Search size={14} color="#C99700" />
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="digite para buscar…" style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13 }} />
             </div>
             {resultadosBusca.length > 0 && (
-              <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, background: "#1D1D1B", border: "1px solid #444", borderRadius: 6, marginTop: 2, maxHeight: 240, overflow: "auto" }}>
-                {resultadosBusca.map(c => <div key={c} onClick={() => { setCodsSel(l => [...l, c]); setBusca(""); }} style={{ padding: "6px 10px", cursor: "pointer", fontSize: 12, color: "#ddd", borderBottom: "1px solid #2a2a2a" }}>{rotulo(c)} <span style={{ color: "#666" }}>· {c}</span></div>)}
+              <div style={{ position: "absolute", zIndex: 20, left: 0, right: 0, background: "#15201A", border: "1px solid #444", borderRadius: 6, marginTop: 2, maxHeight: 240, overflow: "auto" }}>
+                {resultadosBusca.map(c => <div key={c} onClick={() => { setCodsSel(l => [...l, c]); setBusca(""); }} style={{ padding: "6px 10px", cursor: "pointer", fontSize: 12, color: "#ddd", borderBottom: "1px solid #26302A" }}>{rotulo(c)} <span style={{ color: "#666" }}>· {c}</span></div>)}
               </div>
             )}
           </div>
@@ -7790,7 +7790,7 @@ function ClienteAnaliticoTab() {
           <div className="no-print" style={{ marginBottom: 10 }}>
             <div style={{ color: "#aaa", fontSize: 12, marginBottom: 4 }}>Grupos firmados (clientes unidos)</div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {unioes.map(u => <span key={u.id} style={{ ...chip(unioesSel.includes(u.id), "#C69700"), display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {unioes.map(u => <span key={u.id} style={{ ...chip(unioesSel.includes(u.id), "#C99700"), display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <label style={{ cursor: "pointer" }}><input type="checkbox" style={{ marginRight: 4 }} checked={unioesSel.includes(u.id)} onChange={() => setUnioesSel(l => l.includes(u.id) ? l.filter(x => x !== u.id) : [...l, u.id])} />{u.nome} ({u.codigos.length})</label>
                 <span title="apagar este grupo firmado" style={{ color: "#e57373", cursor: "pointer" }} onClick={() => { setUnioesSel(l => l.filter(x => x !== u.id)); gravarUnioes(unioes.filter(x => x.id !== u.id), `Grupo “${u.nome}” desfeito.`); }}>×</span>
               </span>)}
@@ -7800,7 +7800,7 @@ function ClienteAnaliticoTab() {
 
         {codsSel.length > 0 && (
           <div className="no-print" style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-            {codsSel.map(c => <span key={c} style={{ background: "#2a2a2a", color: "#ddd", borderRadius: 10, padding: "2px 10px", fontSize: 12 }}>{rotulo(c)} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setCodsSel(l => l.filter(x => x !== c))}>×</span></span>)}
+            {codsSel.map(c => <span key={c} style={{ background: "#26302A", color: "#ddd", borderRadius: 10, padding: "2px 10px", fontSize: 12 }}>{rotulo(c)} <span style={{ cursor: "pointer", color: "#e57373" }} onClick={() => setCodsSel(l => l.filter(x => x !== c))}>×</span></span>)}
             <button style={chipBtnStyle} onClick={() => { setCodsSel([]); setGruposSel([]); setUnioesSel([]); }}>limpar seleção</button>
           </div>
         )}
@@ -7876,8 +7876,8 @@ function ClienteAnaliticoTab() {
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
               <BarChart data={graficoAnos}>
-                <CartesianGrid stroke="#2a2a2a" /><XAxis dataKey="ano" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" ? `${Math.round(v / 1000)}k` : metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
-                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                <CartesianGrid stroke="#26302A" /><XAxis dataKey="ano" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" ? `${Math.round(v / 1000)}k` : metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
+                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#15201A", border: "1px solid #444" }} /><Legend />
                 {topEnt.map((e, i) => <Bar key={e.id} dataKey={e.nome} fill={cores[i % cores.length]} />)}
               </BarChart>
             </ResponsiveContainer>
@@ -7885,8 +7885,8 @@ function ClienteAnaliticoTab() {
           <div style={{ width: "100%", height: 300, marginTop: 14 }}>
             <ResponsiveContainer>
               <LineChart data={graficoMeses}>
-                <CartesianGrid stroke="#2a2a2a" /><XAxis dataKey="mes" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" || metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
-                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                <CartesianGrid stroke="#26302A" /><XAxis dataKey="mes" stroke="#888" /><YAxis stroke="#888" tickFormatter={v => metrica === "litros" || metrica === "faturamento" ? `${Math.round(v / 1000)}k` : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} />
+                <Tooltip formatter={(v) => fmtMetrica(v)} contentStyle={{ background: "#15201A", border: "1px solid #444" }} /><Legend />
                 {topEnt.map((e, i) => <Line key={e.id} type="monotone" dataKey={e.nome} stroke={cores[i % cores.length]} dot={false} strokeWidth={2} connectNulls />)}
               </LineChart>
             </ResponsiveContainer>
@@ -7896,13 +7896,13 @@ function ClienteAnaliticoTab() {
           <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
             <button style={chip(metricaTipo === "litros")} onClick={() => setMetricaTipo("litros")}>Litros</button>
             <button style={chip(metricaTipo === "faturamento")} onClick={() => setMetricaTipo("faturamento")}>Faturamento</button>
-            <button style={chip(tipoPct, "#C69700")} onClick={() => setTipoPct(v => !v)}>{tipoPct ? "em % do cliente" : "valores absolutos"}</button>
+            <button style={chip(tipoPct, "#C99700")} onClick={() => setTipoPct(v => !v)}>{tipoPct ? "em % do cliente" : "valores absolutos"}</button>
           </div>
           <div style={{ width: "100%", height: Math.max(220, graficoTipo.length * 34 + 60) }}>
             <ResponsiveContainer>
               <BarChart data={graficoTipo} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid stroke="#2a2a2a" /><XAxis type="number" stroke="#888" tickFormatter={v => tipoPct ? `${Math.round(v)}%` : `${Math.round(v / 1000)}k`} /><YAxis type="category" dataKey="nome" stroke="#888" width={170} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v) => tipoPct ? `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : (metricaTipo === "litros" ? fmtLitros(v) : fmtMoeda(v))} contentStyle={{ background: "#1D1D1B", border: "1px solid #444" }} /><Legend />
+                <CartesianGrid stroke="#26302A" /><XAxis type="number" stroke="#888" tickFormatter={v => tipoPct ? `${Math.round(v)}%` : `${Math.round(v / 1000)}k`} /><YAxis type="category" dataKey="nome" stroke="#888" width={170} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => tipoPct ? `${v.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : (metricaTipo === "litros" ? fmtLitros(v) : fmtMoeda(v))} contentStyle={{ background: "#15201A", border: "1px solid #444" }} /><Legend />
                 {TIPOS_ORDEM.map(k => <Bar key={k} dataKey={k} stackId="t" fill={COR_TIPO[k]} />)}
               </BarChart>
             </ResponsiveContainer>
@@ -7965,7 +7965,7 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, sans-serif", background: "#141412", minHeight: 600, padding: 20, borderRadius: 14 }}>
+    <div style={{ fontFamily: "system-ui, -apple-system, sans-serif", background: "#0E1510", minHeight: 600, padding: 20, borderRadius: 14 }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         .spin { animation: spin 1s linear infinite; }
@@ -7978,7 +7978,7 @@ export default function App() {
         <div>
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 1 }}>
-              HBIER <span style={{ color: "#C69700" }}>BI</span>
+              HBIER <span style={{ color: "#C99700" }}>BI</span>
               <span style={{ color: "#555", fontSize: 12, marginLeft: 10, fontFamily: "system-ui" }}>{APP_VERSION}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -7999,7 +7999,7 @@ export default function App() {
 
           {status === "ready" && contexto && (
             <DataContext.Provider value={contexto}>
-              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: "1px solid #2a2a28" }}>
+              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: "1px solid #232D26" }}>
                 <button onClick={() => setTab("cliente")} style={tabStyle(tab === "cliente")}>
                   <Search size={14} /> Cliente
                 </button>
@@ -8060,9 +8060,9 @@ export default function App() {
 function tabStyle(ativo) {
   return {
     background: "transparent", border: "none", cursor: "pointer",
-    color: ativo ? "#C69700" : "#888", fontSize: 14, fontWeight: 600,
+    color: ativo ? "#C99700" : "#888", fontSize: 14, fontWeight: 600,
     padding: "8px 4px", display: "flex", alignItems: "center", gap: 6,
-    borderBottom: ativo ? "2px solid #C69700" : "2px solid transparent",
+    borderBottom: ativo ? "2px solid #C99700" : "2px solid transparent",
     marginBottom: -1,
   };
 }
