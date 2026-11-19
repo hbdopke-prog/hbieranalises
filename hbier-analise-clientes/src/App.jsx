@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.64";
+const APP_VERSION = "v10.65";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -523,7 +523,7 @@ function calcularVariacao(atual, anterior) {
 // Escala de cores usada em todo o app pra crescimento/queda:
 // > +10% verde · 0% a +10% amarelo · 0% a -10% laranja · < -10% vermelho
 function classificarTendencia(pct) {
-  if (pct > 10) return { cor: "#3FAE5F", corFundo: "rgba(76,175,107,0.28)", Icon: ArrowUp, texto: "Crescimento" };
+  if (pct > 10) return { cor: "#3FAE5F", corFundo: "rgba(2,95,29,0.55)", Icon: ArrowUp, texto: "Crescimento" };
   if (pct >= 0) return { cor: "#e8c400", corFundo: "rgba(232,196,0,0.22)", Icon: ArrowUp, texto: "Crescimento leve" };
   if (pct >= -10) return { cor: "#f0883e", corFundo: "rgba(240,136,62,0.22)", Icon: ArrowDown, texto: "Queda leve" };
   return { cor: "#e0645a", corFundo: "rgba(224,101,90,0.28)", Icon: ArrowDown, texto: "Queda" };
@@ -1294,7 +1294,7 @@ function ClienteDashboard() {
           </Section>
 
           <Section title="Comparação Ano a Ano" icon={<Calendar size={18} color="#C99700" />}>
-            <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
+            <div style={{ background: "rgba(2,95,29,0.55)", border: "1px solid rgba(2,95,29,0.55)", borderRadius: 10, padding: 16 }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
                 <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
                 <MonthPicker periodosDisponiveis={rowsFechadas.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
@@ -1863,7 +1863,7 @@ function ComparacaoTab() {
             </div>
           </Section>
 
-          <div style={{ background: "rgba(76,175,107,0.05)", border: "1px solid rgba(76,175,107,0.2)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+          <div style={{ background: "rgba(2,95,29,0.55)", border: "1px solid rgba(2,95,29,0.55)", borderRadius: 12, padding: 16, marginBottom: 20 }}>
             <Section title="Faturamento" icon={<TrendingUp size={18} color="#025F1D" />}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartFat} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
@@ -3470,7 +3470,7 @@ function GlobalTab() {
       </Section>
 
       <Section title="Comparação Ano a Ano (Global)" icon={<Calendar size={18} color="#C99700" />}>
-        <div style={{ background: "rgba(76,175,107,0.06)", border: "1px solid rgba(76,175,107,0.25)", borderRadius: 10, padding: 16 }}>
+        <div style={{ background: "rgba(2,95,29,0.55)", border: "1px solid rgba(2,95,29,0.55)", borderRadius: 10, padding: 16 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16, background: "#15201A", border: "1px solid #333", borderRadius: 8, padding: 12 }}>
             <span style={{ color: "#888", fontSize: 12 }}>Mês de referência:</span>
             <MonthPicker periodosDisponiveis={rowsGlobais.map(r => r.chave)} valor={mesRefAno} onSelecionar={setMesRefAno} placeholder="Selecionar mês" />
@@ -6015,7 +6015,7 @@ function PlanejamentoProducao() {
   return (
     <div>
       {/* plano salvo */}
-      <div style={{ background: usarSalvo ? "#0F2A17" : "#2a2112", border: `1px solid ${usarSalvo ? "#0F5A28" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: usarSalvo ? "#C4E6CF" : "#e8c766" }}>
+      <div style={{ background: usarSalvo ? "#0F2A17" : "#2a2112", border: `1px solid ${usarSalvo ? "#025F1D" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: usarSalvo ? "#C4E6CF" : "#e8c766" }}>
         {usarSalvo ? (
           <div>
             <strong>📌 Plano salvo em {new Date(planoSalvo.salvoEm).toLocaleString("pt-BR")}</strong> (ritmo {planoSalvo.ritmo}/dia). É esse plano que a equipe segue — as datas só mudam se você replanejar.
@@ -6395,7 +6395,7 @@ function PlanejamentoProducao() {
         )}
       </div>
 
-      <div style={{ background: cenarioValidado ? "#0F2A17" : "#2a2112", border: `1px solid ${cenarioValidado ? "#0F5A28" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#C4E6CF" : "#e8c766" }}>
+      <div style={{ background: cenarioValidado ? "#0F2A17" : "#2a2112", border: `1px solid ${cenarioValidado ? "#025F1D" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#C4E6CF" : "#e8c766" }}>
         <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
           <input type="checkbox" checked={cenarioValidado} onChange={e => setCenarioValidado(e.target.checked)} />
           <strong>Cenário futuro validado</strong> — {cenarioValidado ? "a programação de produção está liberada abaixo." : "marque quando os números acima estiverem ok para montar a programação dos tanques."}
@@ -6405,7 +6405,7 @@ function PlanejamentoProducao() {
       {(cenarioValidado || usarSalvo) ? (<>
       {/* brassagem */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia (tanque grande enche em dias de 3 ou 6 bateladas, um por dia; os de 1.000 L entram junto no dia)</h4>
-      <div style={{ background: "#0F2A17", border: "1px solid #0F5A28", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#C4E6CF" }}>
+      <div style={{ background: "#0F2A17", border: "1px solid #025F1D", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#C4E6CF" }}>
         <strong>Recomendação (com os dados atuais): {recomendado} bateladas/dia.</strong> {motivo}
         <div style={{ marginTop: 6, color: "#8fbf9f" }}>
           3/dia: {p3.diasBrassagem} dias de brassagem, {p3.bateladasTotal} bateladas, {p3.atrasados} atraso(s), último lote pronto em {fmtDataCurta(p3.ultimoPronto)}.
