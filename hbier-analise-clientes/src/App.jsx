@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.66";
+const APP_VERSION = "v10.68";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -886,7 +886,7 @@ function LoginScreen({ onLogin }) {
   return (
     <div style={{ minHeight: 420, display: "flex", alignItems: "center", justifyContent: "center", background: "#15201A", borderRadius: 12, padding: 24 }}>
       <div style={{ width: 300, textAlign: "center" }}>
-        <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ width: 260, maxWidth: "100%", borderRadius: 10, display: "block", margin: "0 auto 8px" }} />
+        <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ width: 230, maxWidth: "100%", display: "block", margin: "0 auto 8px" }} />
         <div style={{ color: "#888", fontSize: 12, marginBottom: 18 }}>{APP_VERSION}</div>
         <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} disabled={carregando} />
         <input placeholder="Senha" type="password" value={senha} onKeyDown={handleKeyDown} onChange={e => setSenha(e.target.value)} style={inputStyle} disabled={carregando} />
@@ -7923,6 +7923,30 @@ function ClienteAnaliticoTab() {
   );
 }
 
+// Cópia da última leitura da planilha no navegador (IndexedDB), para abrir o app instantaneamente
+const CACHE_DB = "hbier-bi-cache", CACHE_KEY = "dados-v1";
+function cacheAbrir() {
+  return new Promise((res, rej) => {
+    try {
+      const rq = indexedDB.open(CACHE_DB, 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore("kv");
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    } catch (e) { rej(e); }
+  });
+}
+function cacheLer() {
+  return cacheAbrir().then(db => new Promise(res => {
+    const rq = db.transaction("kv").objectStore("kv").get(CACHE_KEY);
+    rq.onsuccess = () => res(rq.result || null);
+    rq.onerror = () => res(null);
+  })).catch(() => null);
+}
+function cacheGravar(json) {
+  if (!json || !json.ok) return;
+  cacheAbrir().then(db => { db.transaction("kv", "readwrite").objectStore("kv").put(json, CACHE_KEY); }).catch(() => {});
+}
+
 export default function App() {
   const [logado, setLogado] = useState(false);
   const [usuario, setUsuario] = useState("");
@@ -7935,8 +7959,15 @@ export default function App() {
   const [erroMsg, setErroMsg] = useState("");
   const [contexto, setContexto] = useState(null);
 
-  function carregarDados() {
-    setStatus("loading");
+  const [atualizando, setAtualizando] = useState(false); // true enquanto atualiza em segundo plano (dados do cache já na tela)
+
+  function aplicarJson(json) {
+    if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
+    setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || "", json.unioesClientes || "", json.analitico || null));
+    setStatus("ready");
+  }
+
+  function carregarDados(usarCache) {
     setErroMsg("");
 
     if (!GAS_URL) {
@@ -7945,21 +7976,35 @@ export default function App() {
       return;
     }
 
-    fetch(GAS_URL)
-      .then(r => r.json())
-      .then(json => {
-        if (!json.ok) throw new Error(json.erro || "Erro desconhecido ao ler a planilha.");
-        setContexto(processarDados(json.dados, json.produtosPorTipo || [], json.estoque || [], json.tanques || [], json.receitas || [], json.planoSalvo || "", json.cenariosSalvos || "", json.unioesClientes || "", json.analitico || null));
-        setStatus("ready");
-      })
-      .catch(err => {
-        setErroMsg(`Não foi possível carregar os dados: ${err.message}`);
-        setStatus("error");
-      });
+    // Abre rápido: se há uma cópia da última leitura, mostra na hora e atualiza por baixo dos panos.
+    const cachePromise = usarCache === true ? cacheLer() : Promise.resolve(null);
+    cachePromise.then(cache => {
+      let mostrouCache = false;
+      if (cache) {
+        try { aplicarJson(cache); mostrouCache = true; setAtualizando(true); } catch (e) { /* cache inválido: ignora */ }
+      }
+      if (!mostrouCache) setStatus("loading");
+      // Na primeira carga reaproveita a requisição que o index.html já iniciou antes do app carregar
+      const pre = usarCache === true && window.__hbDados ? window.__hbDados : null;
+      if (usarCache === true) window.__hbDados = null;
+      return (pre || fetch(GAS_URL).then(r => r.json()))
+        .catch(() => fetch(GAS_URL).then(r => r.json()))
+        .then(json => {
+          aplicarJson(json);
+          cacheGravar(json);
+          setAtualizando(false);
+        })
+        .catch(err => {
+          setAtualizando(false);
+          if (mostrouCache) return; // mantém o que está na tela; a próxima abertura tenta de novo
+          setErroMsg(`Não foi possível carregar os dados: ${err.message}`);
+          setStatus("error");
+        });
+    });
   }
 
   useEffect(() => {
-    carregarDados();
+    carregarDados(true);
   }, []);
 
   return (
@@ -7975,10 +8020,11 @@ export default function App() {
         <div>
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ height: 56, borderRadius: 8, display: "block" }} />
+              <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ height: 64, display: "block" }} />
               <span style={{ color: "#555", fontSize: 12, fontFamily: "'Barlow', system-ui" }}>{APP_VERSION}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {atualizando && <span style={{ color: "#C99700", fontSize: 12 }}>Atualizando dados…</span>}
               <span style={{ color: "#888", fontSize: 13 }}>{usuario}</span>
               <button onClick={() => { setLogado(false); setIsAdmin(false); }} style={{
                 background: "transparent", border: "1px solid #444", color: "#888",
@@ -7991,12 +8037,12 @@ export default function App() {
           </div>
 
           {status !== "ready" && (
-            <CarregandoDados onRetry={carregarDados} mensagem={status === "error" ? erroMsg : null} />
+            <CarregandoDados onRetry={() => carregarDados(false)} mensagem={status === "error" ? erroMsg : null} />
           )}
 
           {status === "ready" && contexto && (
             <DataContext.Provider value={contexto}>
-              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: "1px solid #232D26" }}>
+              <div className="no-print" style={{ display: "flex", flexWrap: "wrap", columnGap: 16, rowGap: 4, marginBottom: 22, borderBottom: "1px solid #232D26" }}>
                 <button onClick={() => setTab("cliente")} style={tabStyle(tab === "cliente")}>
                   <Search size={14} /> Cliente
                 </button>
@@ -8058,7 +8104,7 @@ function tabStyle(ativo) {
   return {
     background: "transparent", border: "none", cursor: "pointer",
     color: ativo ? "#C99700" : "#888", fontSize: 14, fontWeight: 600,
-    padding: "8px 4px", display: "flex", alignItems: "center", gap: 6,
+    padding: "8px 4px", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
     borderBottom: ativo ? "2px solid #C99700" : "2px solid transparent",
     marginBottom: -1,
   };

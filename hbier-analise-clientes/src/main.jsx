@@ -7,17 +7,17 @@ import "./fonts.css";
 function Abertura() {
   const [fase, setFase] = useState("visivel"); // visivel | saindo | fim
   useEffect(() => {
-    const t1 = setTimeout(() => setFase("saindo"), 1800);
-    const t2 = setTimeout(() => setFase("fim"), 2500);
+    const t1 = setTimeout(() => setFase("saindo"), 1100);
+    const t2 = setTimeout(() => setFase("fim"), 1600);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
   if (fase === "fim") return null;
   return (
     <div onClick={() => setFase("fim")}
       style={{
-        position: "fixed", inset: 0, zIndex: 99999, background: "#025F1D",
+        position: "fixed", inset: 0, zIndex: 99999, background: "#0E1510",
         display: "flex", alignItems: "center", justifyContent: "center",
-        opacity: fase === "saindo" ? 0 : 1, transition: "opacity 0.7s ease", cursor: "pointer",
+        opacity: fase === "saindo" ? 0 : 1, transition: "opacity 0.5s ease", cursor: "pointer",
       }}>
       <img src={`${import.meta.env.BASE_URL}abertura.png`} alt="HBier Inteligência"
         style={{ width: "100%", height: "100%", objectFit: "contain", maxWidth: 1200 }} />

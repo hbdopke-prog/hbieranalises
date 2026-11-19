@@ -17,6 +17,18 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="HBier BI" />
 
+    <link rel="preconnect" href="https://script.google.com" />
+    <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin />
+    <script>
+      /* Começa a buscar os dados da planilha já na abertura, em paralelo ao carregamento do app */
+      (function () {
+        var u = "%VITE_GAS_URL%";
+        if (u && u.indexOf("%") < 0) {
+          window.__hbDados = fetch(u).then(function (r) { return r.json(); });
+          window.__hbDados.catch(function () {});
+        }
+      })();
+    </script>
     <style>
       body { margin: 0; background: #0E1510; font-family: 'Barlow', system-ui, sans-serif; }
 
