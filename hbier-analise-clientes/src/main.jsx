@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
+import "./fonts.css";
 
 // Tela de abertura (identidade HBier Inteligência): aparece ao abrir o app, some sozinha ou ao tocar
 function Abertura() {

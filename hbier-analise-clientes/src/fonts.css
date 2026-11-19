@@ -1,0 +1,7 @@
+/* Fonte parecida com a Agenda do brandbook: Barlow (corpo) e Barlow Condensed (títulos). */
+@font-face{font-family:'Barlow';font-weight:300;font-display:swap;src:url('@fontsource/barlow/files/barlow-latin-300-normal.woff2') format('woff2');}
+@font-face{font-family:'Barlow';font-weight:400;font-display:swap;src:url('@fontsource/barlow/files/barlow-latin-400-normal.woff2') format('woff2');}
+@font-face{font-family:'Barlow';font-weight:500;font-display:swap;src:url('@fontsource/barlow/files/barlow-latin-500-normal.woff2') format('woff2');}
+@font-face{font-family:'Barlow';font-weight:700;font-display:swap;src:url('@fontsource/barlow/files/barlow-latin-700-normal.woff2') format('woff2');}
+@font-face{font-family:'Barlow';font-weight:900;font-display:swap;src:url('@fontsource/barlow/files/barlow-latin-900-normal.woff2') format('woff2');}
+@font-face{font-family:'HB Titulo';font-weight:400 900;font-display:swap;src:url('@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2') format('woff2');}

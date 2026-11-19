@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.63";
+const APP_VERSION = "v10.64";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -154,8 +154,8 @@ function janelaAnoAnterior(rows, chaveReferencia, n) {
 }
 
 // Paleta de cores pra distinguir anos sobrepostos no mesmo gráfico (12 meses no eixo X)
-const PALETA_PIZZA10 = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c", "#f1c40f", "#e84393"];
-const PALETA_ANOS = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#2ecc71", "#e67e22", "#1abc9c"];
+const PALETA_PIZZA10 = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#3FAE5F", "#e67e22", "#1abc9c", "#f1c40f", "#e84393"];
+const PALETA_ANOS = ["#025F1D", "#C99700", "#4a90d9", "#d9534f", "#9b59b6", "#3FAE5F", "#e67e22", "#1abc9c"];
 // Grupos/canais que pesam muito nos filtros "Todos" (consumo interno, eventos, venda online -
 // muitos clientes/pedidos de baixo valor unitário) e por isso ficam DE FORA da seleção padrão.
 // Detecta pelo PADRÃO de numeração da empresa (5.xxx = consumo direto, 6.xxx = eventos) e pela
@@ -246,7 +246,7 @@ function encontrarProdutoFixo(def, nomes) {
 // diferente dentro da família da sua categoria, ciclando se passar do tamanho da paleta.
 // Tons bem variados (claro/escuro intercalado) pra linhas vizinhas no gráfico não ficarem
 // parecidas - ainda dentro da família verde (envasado) ou amarelo/âmbar (chope).
-const PALETA_ENVASADO_CLARO = ["#2ECC71", "#145A32", "#A5D6A7", "#0B8043", "#C6F17D", "#1B5E20", "#66BB6A", "#073B2E"];
+const PALETA_ENVASADO_CLARO = ["#3FAE5F", "#145A32", "#A5D6A7", "#0B8043", "#C6F17D", "#1B5E20", "#66BB6A", "#073B2E"];
 const PALETA_CHOPE_CLARO = ["#FFD600", "#8D6708", "#FFF176", "#B8860B", "#F9A825", "#5C4404", "#FBE27B", "#7A5B00"];
 
 // Cor por produto no gráfico comparativo: cada produto tem uma FAMÍLIA de cor própria (PET 1L = verde,
@@ -254,7 +254,7 @@ const PALETA_CHOPE_CLARO = ["#FFD600", "#8D6708", "#FFF176", "#B8860B", "#F9A825
 // do mesmo produto são tons da mesma família (ano mais recente = cor cheia; anos anteriores = mais claro/escuro).
 // ordem de cada família: [cor cheia, mais clara, mais escura, bem clara, bem escura]
 const FAMILIAS_COR = {
-  verde: ["#22C55E", "#86EFAC", "#15803D", "#BBF7D0", "#14532D"],
+  verde: ["#3FAE5F", "#86EFAC", "#15803D", "#BBF7D0", "#14532D"],
   roxo: ["#A855F7", "#D8B4FE", "#7E22CE", "#EDE9FE", "#581C87"],
   amarelo: ["#FACC15", "#FEF08A", "#CA8A04", "#FEF9C3", "#854D0E"],
   azul: ["#3B82F6", "#93C5FD", "#1D4ED8", "#DBEAFE", "#1E3A8A"],
@@ -523,7 +523,7 @@ function calcularVariacao(atual, anterior) {
 // Escala de cores usada em todo o app pra crescimento/queda:
 // > +10% verde · 0% a +10% amarelo · 0% a -10% laranja · < -10% vermelho
 function classificarTendencia(pct) {
-  if (pct > 10) return { cor: "#4caf6b", corFundo: "rgba(76,175,107,0.28)", Icon: ArrowUp, texto: "Crescimento" };
+  if (pct > 10) return { cor: "#3FAE5F", corFundo: "rgba(76,175,107,0.28)", Icon: ArrowUp, texto: "Crescimento" };
   if (pct >= 0) return { cor: "#e8c400", corFundo: "rgba(232,196,0,0.22)", Icon: ArrowUp, texto: "Crescimento leve" };
   if (pct >= -10) return { cor: "#f0883e", corFundo: "rgba(240,136,62,0.22)", Icon: ArrowDown, texto: "Queda leve" };
   return { cor: "#e0645a", corFundo: "rgba(224,101,90,0.28)", Icon: ArrowDown, texto: "Queda" };
@@ -553,7 +553,7 @@ function StatCard({ label, value, icon, badge }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#C99700", fontSize: 11, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4, lineHeight: 1.4 }}>
         {icon}{label}
       </div>
-      <div style={{ color: "#fff", fontSize: 22, fontWeight: 800, fontFamily: "system-ui, -apple-system, sans-serif", letterSpacing: 0.2 }}>
+      <div style={{ color: "#fff", fontSize: 22, fontWeight: 800, fontFamily: "'Barlow', system-ui, -apple-system, sans-serif", letterSpacing: 0.2 }}>
         {value}
       </div>
       {badge}
@@ -592,11 +592,11 @@ function CardJanelaDetalhada({ titulo, icon, rowsAtual, rowsAnterior, campo, for
       <div style={{ display: "flex", gap: 24, marginBottom: 8 }}>
         <div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Total</div>
-          <div style={{ color: "#fff", fontSize: 19, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(totalAtual)}</div>
+          <div style={{ color: "#fff", fontSize: 19, fontWeight: 800, fontFamily: "'Barlow', system-ui, sans-serif" }}>{formatador(totalAtual)}</div>
         </div>
         <div>
           <div style={{ color: "#666", fontSize: 10, marginBottom: 2 }}>Média/mês</div>
-          <div style={{ color: "#ddd", fontSize: 19, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(mediaAtual)}</div>
+          <div style={{ color: "#ddd", fontSize: 19, fontWeight: 800, fontFamily: "'Barlow', system-ui, sans-serif" }}>{formatador(mediaAtual)}</div>
         </div>
       </div>
 
@@ -825,7 +825,7 @@ function Section({ title, icon, children }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h3 style={{
-        color: "#fff", fontFamily: "system-ui, -apple-system, sans-serif", fontSize: 16,
+        color: "#fff", fontFamily: "'Barlow', system-ui, -apple-system, sans-serif", fontSize: 16,
         fontWeight: 800, letterSpacing: 0.3, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8,
         borderBottom: "2px solid #025F1D", paddingBottom: 8, marginBottom: 14,
       }}>
@@ -886,9 +886,7 @@ function LoginScreen({ onLogin }) {
   return (
     <div style={{ minHeight: 420, display: "flex", alignItems: "center", justifyContent: "center", background: "#15201A", borderRadius: 12, padding: 24 }}>
       <div style={{ width: 300, textAlign: "center" }}>
-        <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 34, letterSpacing: 1.5, marginBottom: 4 }}>
-          HBIER <span style={{ color: "#C99700" }}>BI</span>
-        </div>
+        <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ width: 260, maxWidth: "100%", borderRadius: 10, display: "block", margin: "0 auto 8px" }} />
         <div style={{ color: "#888", fontSize: 12, marginBottom: 18 }}>{APP_VERSION}</div>
         <input placeholder="Usuário" value={usuario} onKeyDown={handleKeyDown} onChange={e => setUsuario(e.target.value)} style={inputStyle} disabled={carregando} />
         <input placeholder="Senha" type="password" value={senha} onKeyDown={handleKeyDown} onChange={e => setSenha(e.target.value)} style={inputStyle} disabled={carregando} />
@@ -1025,7 +1023,7 @@ function abasDeHeatmap(nomeValores, nomePct, rotuloColuna, linhas, dadosCompleto
 function BotaoExcel({ nomeAba, gerar }) {
   return (
     <button onClick={() => exportarExcel(nomeAba, gerar())} style={{
-      background: "transparent", border: "1px solid #4caf6b", color: "#4caf6b",
+      background: "transparent", border: "1px solid #3FAE5F", color: "#3FAE5F",
       borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600,
       display: "flex", alignItems: "center", gap: 6,
     }}>
@@ -1257,7 +1255,7 @@ function ClienteDashboard() {
 
       {clientesSel.length > 0 && todasRows && todasRows.length > 0 && (
         <>
-          <h2 style={{ color: "#C99700", fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
+          <h2 style={{ color: "#C99700", fontFamily: "'HB Titulo', 'Barlow Condensed', sans-serif", fontSize: 28, letterSpacing: 1, marginBottom: 2 }}>
             {clientesSel.length === 1 ? labelDoCliente[clientesSel[0]] : `${clientesSel.length} clientes (somados)`}
           </h2>
           {clientesSel.length === 1 && razaoSocialDoCliente[clientesSel[0]] && razaoSocialDoCliente[clientesSel[0]] !== labelDoCliente[clientesSel[0]] && (
@@ -1309,7 +1307,7 @@ function ClienteDashboard() {
 
               {janelasAno && (
                 <>
-                  <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
+                  <div style={{ color: "#3FAE5F", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
                     <CardJanelaDetalhada titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
                     <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
@@ -1317,7 +1315,7 @@ function ClienteDashboard() {
                     <CardJanelaDetalhada titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
                   </div>
 
-                  <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
+                  <div style={{ color: "#3FAE5F", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <CardJanelaDetalhada titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
                     <CardJanelaDetalhada titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
@@ -1433,7 +1431,7 @@ function MonthPicker({ periodosDisponiveis, valor, onSelecionar, disabled, place
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
             <button type="button" onClick={() => setAnoVisivel(a => a - 1)} style={navBtnStyle}>‹</button>
-            <span style={{ color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: 1 }}>{anoVisivel}</span>
+            <span style={{ color: "#fff", fontSize: 13, fontWeight: 700, fontFamily: "'HB Titulo', 'Barlow Condensed', sans-serif", letterSpacing: 1 }}>{anoVisivel}</span>
             <button type="button" onClick={() => setAnoVisivel(a => a + 1)} style={navBtnStyle}>›</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
@@ -1510,7 +1508,7 @@ function ColunaComparacao({ titulo, cor, modo, setModo, selecionados, setSelecio
   return (
     <div style={{ flex: 1, minWidth: 280, background: "#15201A", borderRadius: 10, padding: 16, border: `1px solid ${cor}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ color: cor, fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 0.5 }}>
+        <div style={{ color: cor, fontFamily: "'HB Titulo', 'Barlow Condensed', sans-serif", fontSize: 18, letterSpacing: 0.5 }}>
           {titulo}
         </div>
         <button onClick={limparSelecao} style={{
@@ -1593,12 +1591,12 @@ function CardComparativo({ titulo, valorA, valorB, variacao, formatador, icon })
       </div>
       <div style={{ display: "flex", gap: 20, marginBottom: 8 }}>
         <div>
-          <div style={{ color: "#4caf6b", fontSize: 11, fontWeight: 700 }}>A</div>
-          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(valorA)}</div>
+          <div style={{ color: "#3FAE5F", fontSize: 11, fontWeight: 700 }}>A</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "'Barlow', system-ui, sans-serif" }}>{formatador(valorA)}</div>
         </div>
         <div>
           <div style={{ color: "#e8c67a", fontSize: 11, fontWeight: 700 }}>B</div>
-          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "system-ui, sans-serif" }}>{formatador(valorB)}</div>
+          <div style={{ color: "#fff", fontSize: 18, fontWeight: 800, fontFamily: "'Barlow', system-ui, sans-serif" }}>{formatador(valorB)}</div>
         </div>
       </div>
       <BadgeTendencia variacao={variacao} formatador={formatador} periodoTexto="A em relação a B" />
@@ -1875,12 +1873,12 @@ function ComparacaoTab() {
                   <Tooltip formatter={(v, n) => [v == null ? "-" : fmtMoeda(v), n]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend content={<LegendaBranca />} />
                   <Bar dataKey="faturamentoA" name={labelA} fill="#025F1D" radius={[4,4,0,0]}>
-                    <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                    <LabelList dataKey="faturamentoA" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#8FD4A3" }} />
                   </Bar>
                   <Bar dataKey="faturamentoB" name={labelB} fill="#C99700" radius={[4,4,0,0]}>
                     <LabelList dataKey="faturamentoB" position="top" formatter={rotuloCompactoMoeda} style={{ fontSize: 10, fill: "#e8c67a" }} />
                   </Bar>
-                  <ReferenceLine y={mediaFatA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                  <ReferenceLine y={mediaFatA} stroke="#3FAE5F" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoMoeda(mediaFatA)}`, position: "insideTopLeft", fill: "#3FAE5F", fontSize: 13, fontWeight: 700 }} />
                   <ReferenceLine y={mediaFatB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoMoeda(mediaFatB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
                 </BarChart>
               </ResponsiveContainer>
@@ -1897,7 +1895,7 @@ function ComparacaoTab() {
                   <Bar dataKey="diferencaFat" radius={[3,3,3,3]}>
                     <LabelList dataKey="diferencaFat" position="top" formatter={rotuloDiferencaMoeda} style={{ fontSize: 10, fill: "#ccc" }} />
                     {chartFat.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.diferencaFat == null ? "#555" : (entry.diferencaFat >= 0 ? "#4caf6b" : "#e0645a")} />
+                      <Cell key={idx} fill={entry.diferencaFat == null ? "#555" : (entry.diferencaFat >= 0 ? "#3FAE5F" : "#e0645a")} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -1915,12 +1913,12 @@ function ComparacaoTab() {
                   <Tooltip formatter={(v, n) => [v == null ? "-" : fmtLitros(v), n]} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
                   <Legend content={<LegendaBranca />} />
                   <Line type="monotone" dataKey="litrosA" name={labelA} stroke="#025F1D" strokeWidth={2} dot={{ r: 3 }}>
-                    <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                    <LabelList dataKey="litrosA" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#8FD4A3" }} />
                   </Line>
                   <Line type="monotone" dataKey="litrosB" name={labelB} stroke="#C99700" strokeWidth={2} dot={{ r: 3 }}>
                     <LabelList dataKey="litrosB" position="top" formatter={rotuloCompactoLitros} style={{ fontSize: 10, fill: "#e8c67a" }} />
                   </Line>
-                  <ReferenceLine y={mediaLitA} stroke="#4caf6b" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#4caf6b", fontSize: 13, fontWeight: 700 }} />
+                  <ReferenceLine y={mediaLitA} stroke="#3FAE5F" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média A: ${rotuloCompactoLitros(mediaLitA)}`, position: "insideTopLeft", fill: "#3FAE5F", fontSize: 13, fontWeight: 700 }} />
                   <ReferenceLine y={mediaLitB} stroke="#e8c67a" strokeWidth={2} strokeDasharray="5 3" ifOverflow="extendDomain" label={{ value: `Média B: ${rotuloCompactoLitros(mediaLitB)}`, position: "insideBottomLeft", fill: "#e8c67a", fontSize: 13, fontWeight: 700 }} />
                 </LineChart>
               </ResponsiveContainer>
@@ -1937,7 +1935,7 @@ function ComparacaoTab() {
                   <Bar dataKey="diferencaLit" radius={[3,3,3,3]}>
                     <LabelList dataKey="diferencaLit" position="top" formatter={rotuloDiferencaLitros} style={{ fontSize: 10, fill: "#ccc" }} />
                     {chartLit.map((entry, idx) => (
-                      <Cell key={idx} fill={entry.diferencaLit == null ? "#555" : (entry.diferencaLit >= 0 ? "#4caf6b" : "#e0645a")} />
+                      <Cell key={idx} fill={entry.diferencaLit == null ? "#555" : (entry.diferencaLit >= 0 ? "#3FAE5F" : "#e0645a")} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -2080,7 +2078,7 @@ function ComparacaoTab() {
                           <td style={{ ...tdStyle, color: corOriginal, fontWeight: 700 }}>{nome}</td>
                           <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtLitros(lit)}</td>
                           <td style={{ ...tdStyle, color: "#fff", fontWeight: 700 }}>{fmtMoeda(fat)}</td>
-                          <td style={{ ...tdStyle, color: idx === 0 ? "#4caf6b" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
+                          <td style={{ ...tdStyle, color: idx === 0 ? "#3FAE5F" : "#ddd", fontWeight: idx === 0 ? 700 : 400 }}>
                             {idx === 0 ? "líder" : `${pctLider.toFixed(1)}%`}
                           </td>
                           <td style={{ ...tdStyle, color: "#C99700", fontWeight: 700 }}>{pctTotal.toFixed(1)}%</td>
@@ -3060,7 +3058,7 @@ function DashboardTab() {
                 <tr>
                   <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>Novos clientes</td>
                   {novosClientesPorMes.map(m => (
-                    <td key={m.mes} style={{ ...tdStyle, fontWeight: m.quantidade > 0 ? 700 : 400, color: m.quantidade > 0 ? "#4caf6b" : "#666" }}>
+                    <td key={m.mes} style={{ ...tdStyle, fontWeight: m.quantidade > 0 ? 700 : 400, color: m.quantidade > 0 ? "#3FAE5F" : "#666" }}>
                       {m.quantidade}
                     </td>
                   ))}
@@ -3108,7 +3106,7 @@ function DashboardTab() {
 
         {inicioTopN && fimTopN && (
           <>
-            <div style={{ color: "#4caf6b", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
+            <div style={{ color: "#3FAE5F", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>
               Maiores crescimentos entre {labelMes(inicioTopN)} e {labelMes(fimTopN)}
             </div>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
@@ -3125,7 +3123,7 @@ function DashboardTab() {
           </>
         )}
 
-        <div style={{ color: "#4caf6b", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Maiores crescimentos</div>
+        <div style={{ color: "#3FAE5F", fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Maiores crescimentos</div>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
           <ListaTop10 titulo="Faturamento vs mês anterior" itens={top10FatMesCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
           <ListaTop10 titulo="Faturamento vs mesmo mês ano anterior" itens={top10FatAnoCresc} formatador={fmtMoeda} labelDoCliente={labelDoCliente} />
@@ -3486,7 +3484,7 @@ function GlobalTab() {
 
           {janelasAno && (
             <>
-              <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
+              <div style={{ color: "#3FAE5F", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Faturamento comparativo por ano anterior</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
                 <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Último mês" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
                 <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 3 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
@@ -3494,7 +3492,7 @@ function GlobalTab() {
                 <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 12 meses" icon={<TrendingUp size={13} />} rowsAtual={janelasAno.m12.atual} rowsAnterior={janelasAno.m12.anoAnterior} campo="faturamento" formatador={fmtMoeda} />
               </div>
 
-              <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
+              <div style={{ color: "#3FAE5F", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>Litros comparativo por ano anterior</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Último mês" icon={<Droplets size={13} />} rowsAtual={janelasAno.m1.atual} rowsAnterior={janelasAno.m1.anoAnterior} campo="litros" formatador={fmtLitros} />
                 <CardJanelaDetalhada detalhado chaveParcial={emAndamento ? emAndamento.chave : null} titulo="Últimos 3 meses" icon={<Droplets size={13} />} rowsAtual={janelasAno.m3.atual} rowsAnterior={janelasAno.m3.anoAnterior} campo="litros" formatador={fmtLitros} />
@@ -3599,7 +3597,7 @@ function GlobalTab() {
               <YAxis type="category" dataKey="grupo" stroke="#888" fontSize={11} width={160} />
               <Tooltip formatter={v => fmtMoeda(v)} contentStyle={{ background: "#15201A", border: "1px solid #333" }} />
               <Bar dataKey="Faturamento" fill="#025F1D" radius={[0,4,4,0]}>
-                <LabelList dataKey="Faturamento" position="right" formatter={v => fmtMoeda(v)} style={{ fontSize: 10, fill: "#8fd19e" }} />
+                <LabelList dataKey="Faturamento" position="right" formatter={v => fmtMoeda(v)} style={{ fontSize: 10, fill: "#8FD4A3" }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -3940,12 +3938,12 @@ function MesTab() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <strong style={{ color: "#fff", fontSize: 13 }}>🔗 Unir clientes</strong>
           <span style={{ color: "#888", fontSize: 12 }}>junte lojas da mesma rede (ex.: todos os Miller) para ver como um cliente só.</span>
-          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: unioesLigadas ? "#4caf6b" : "#888", fontWeight: 700, cursor: "pointer" }} title="Liga ou desliga todas as uniões de uma vez; elas continuam salvas.">
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, color: unioesLigadas ? "#3FAE5F" : "#888", fontWeight: 700, cursor: "pointer" }} title="Liga ou desliga todas as uniões de uma vez; elas continuam salvas.">
             <input type="checkbox" checked={unioesLigadas} onChange={e => persistirUnioes(unioes, e.target.checked ? "Uniões ativadas." : "Uniões desativadas (continuam salvas).", e.target.checked)} /> Usar uniões
           </label>
           <button style={chipBtnStyle} onClick={() => setPainelUniao(v => !v)}>{painelUniao ? "Fechar" : `Abrir (${unioes.length} união(ões))`}</button>
         </div>
-        {msgUniao && <div style={{ color: "#bfe6cc", fontSize: 12, marginTop: 6 }}>{msgUniao}</div>}
+        {msgUniao && <div style={{ color: "#C4E6CF", fontSize: 12, marginTop: 6 }}>{msgUniao}</div>}
         {painelUniao && (
           <div style={{ marginTop: 12 }}>
             <div style={{ color: "#C99700", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Uniões criadas</div>
@@ -3953,7 +3951,7 @@ function MesTab() {
             {unioes.map(u => (
               <div key={u.id} style={{ border: "1px solid #333", borderRadius: 6, padding: "6px 10px", marginBottom: 6 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", opacity: u.ativa === false ? 0.55 : 1 }}>
-                  <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: u.ativa === false ? "#888" : "#4caf6b", cursor: "pointer" }}>
+                  <label style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 12, color: u.ativa === false ? "#888" : "#3FAE5F", cursor: "pointer" }}>
                     <input type="checkbox" checked={u.ativa !== false} onChange={e => persistirUnioes(unioes.map(x => x.id === u.id ? { ...x, ativa: e.target.checked } : x), e.target.checked ? `“${u.nome}” ativada.` : `“${u.nome}” desativada (continua salva).`)} /> ativa
                   </label>
                   <input value={u.nome} onChange={e => setUnioes(l => l.map(x => x.id === u.id ? { ...x, nome: e.target.value } : x))} onBlur={() => persistirUnioes(unioes, "União renomeada.")}
@@ -3974,7 +3972,7 @@ function MesTab() {
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <strong style={{ color: "#fff", fontSize: 13 }}>{sg.nome}</strong>
                   <span style={{ color: "#888", fontSize: 12 }}>{sg.codigos.length} clientes · {fmtLitros(sg.vol)} no período · {sg.motivo}</span>
-                  <button style={{ ...chipBtnStyle, color: "#4caf6b", padding: "2px 8px" }} onClick={() => persistirUnioes([...unioes, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, nome: sg.nome, codigos: sg.codigos }], `União “${sg.nome}” criada.`)}>unir</button>
+                  <button style={{ ...chipBtnStyle, color: "#3FAE5F", padding: "2px 8px" }} onClick={() => persistirUnioes([...unioes, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, nome: sg.nome, codigos: sg.codigos }], `União “${sg.nome}” criada.`)}>unir</button>
                 </div>
                 <div style={{ color: "#999", fontSize: 11, marginTop: 4 }}>{sg.codigos.map(c => labelDoCliente[c]).join(" · ")}</div>
               </div>
@@ -4050,7 +4048,7 @@ function MesTab() {
                       <td style={{ ...tdStyle, fontWeight: ordenacao === "litros" ? 800 : 400, color: ordenacao === "litros" ? "#C99700" : "#ddd" }}>
                         {fmtLitros(c.lit)}<PctInline variacao={c.varLit} />
                       </td>
-                      <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#4caf6b" : "#ddd" }}>
+                      <td style={{ ...tdStyle, fontWeight: ordenacao === "faturamento" ? 800 : 400, color: ordenacao === "faturamento" ? "#3FAE5F" : "#ddd" }}>
                         {fmtMoeda(c.fat)}<PctInline variacao={c.varFat} />
                       </td>
                       <td style={{ ...tdStyle, fontWeight: ordenacao === "precoLitro" ? 800 : 400, color: ordenacao === "precoLitro" ? "#4a90d9" : "#ddd" }}>{fmtPrecoLitro(c.precoLitro)}</td>
@@ -4182,7 +4180,7 @@ function ListaPositivacao({ titulo, cor, itens, labelDoCliente, mostrarData }) {
           <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>
             {mostrarData && <div style={{ color: "#888" }}>{ultimaCompra ? labelMes(ultimaCompra) : "nunca"}</div>}
             {ultimaCompra && (
-              <div style={{ color: "#4caf6b", fontSize: 11 }}>{fmtMoeda(ultimoFat)} · {fmtLitros(ultimoLit)}</div>
+              <div style={{ color: "#3FAE5F", fontSize: 11 }}>{fmtMoeda(ultimoFat)} · {fmtLitros(ultimoLit)}</div>
             )}
           </span>
         </div>
@@ -4663,7 +4661,7 @@ function ProjecaoVendasTab() {
                 <thead>
                   <tr>
                     <th style={thStyle}>Mês</th>
-                    <th style={{ ...thStyle, color: "#4caf6b" }}>Novos</th>
+                    <th style={{ ...thStyle, color: "#3FAE5F" }}>Novos</th>
                     <th style={{ ...thStyle, color: "#4a90d9" }}>Existentes</th>
                     <th style={thStyle}>Total</th>
                   </tr>
@@ -4672,7 +4670,7 @@ function ProjecaoVendasTab() {
                   {analise.mesAMes.map(m => (
                     <tr key={m.chave}>
                       <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{labelMes(m.chave)}</td>
-                      <td style={{ ...tdStyle, color: "#4caf6b" }}>{fmtMoeda(m.fatNovos)}</td>
+                      <td style={{ ...tdStyle, color: "#3FAE5F" }}>{fmtMoeda(m.fatNovos)}</td>
                       <td style={{ ...tdStyle, color: "#4a90d9" }}>{fmtMoeda(m.fatExistentes)}</td>
                       <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{fmtMoeda(m.total)}</td>
                     </tr>
@@ -4695,9 +4693,9 @@ function ProjecaoVendasTab() {
             </div>
             {ritmo === "anoAnterior" && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                <span style={{ color: "#4caf6b", fontSize: 12 }}>% de ajuste sobre os Novos PDVs:</span>
+                <span style={{ color: "#3FAE5F", fontSize: 12 }}>% de ajuste sobre os Novos PDVs:</span>
                 <input type="number" min="0" max="500" value={pctNovos} onChange={e => setPctNovos(Math.max(0, Number(e.target.value) || 0))}
-                  style={{ width: 65, background: "#0E1510", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                  style={{ width: 65, background: "#0E1510", border: "1px solid #3FAE5F", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 <span style={{ color: "#666", fontSize: 11 }}>(separado da base — dá pra simular os novos PDVs crescendo mais rápido, por exemplo)</span>
               </div>
             )}
@@ -4725,7 +4723,7 @@ function ProjecaoVendasTab() {
                     <tr>
                       <th style={thStyle}>Mês (a projetar)</th>
                       <th style={thStyle}>Base: mesmo mês {analise.anoAnalise - 1}</th>
-                      <th style={{ ...thStyle, color: "#4caf6b" }}>+ Novos PDVs ({pctNovos}%)</th>
+                      <th style={{ ...thStyle, color: "#3FAE5F" }}>+ Novos PDVs ({pctNovos}%)</th>
                       <th style={{ ...thStyle, color: "#4a90d9" }}>= Total ajustado ({pctAjuste}%)</th>
                     </tr>
                   </thead>
@@ -4734,7 +4732,7 @@ function ProjecaoVendasTab() {
                       <tr key={d.chave}>
                         <td style={{ ...tdStyle, fontWeight: 700, color: "#fff" }}>{labelMes(d.chave)}</td>
                         <td style={tdStyle}>{labelMes(d.chaveAnoPassado)}: {fmtMoeda(d.valorBaseAnoPassado)} → {fmtMoeda(d.valorBaseAjustado)}</td>
-                        <td style={{ ...tdStyle, color: "#4caf6b" }}>{fmtMoeda(d.valorNovosAjustado)}</td>
+                        <td style={{ ...tdStyle, color: "#3FAE5F" }}>{fmtMoeda(d.valorNovosAjustado)}</td>
                         <td style={{ ...tdStyle, fontWeight: 700, color: "#4a90d9" }}>{fmtMoeda(d.valorTotal)}</td>
                       </tr>
                     ))}
@@ -4844,14 +4842,14 @@ function PositivacaoTab() {
         <>
           <Section title={`Positivação de Clientes · ${labelMes(mesRef)}`} icon={<Trophy size={18} color="#C99700" />}>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-              <CardResumoPositivacao titulo="Positivados" cor="#4caf6b" icone="🟢" quantidade={classificacao.positivados.length} total={totalFiltrado} />
+              <CardResumoPositivacao titulo="Positivados" cor="#3FAE5F" icone="🟢" quantidade={classificacao.positivados.length} total={totalFiltrado} />
               <CardResumoPositivacao titulo="Sem compra no mês" cor="#e8c400" icone="🟡" quantidade={classificacao.semCompraMes.length} total={totalFiltrado} />
               <CardResumoPositivacao titulo="Sem compra há 2+ meses" cor="#e0645a" icone="🔴" quantidade={classificacao.semCompra2Meses.length} total={totalFiltrado} />
               <CardResumoPositivacao titulo="Nunca comprou" cor="#888" icone="⚪" quantidade={classificacao.nuncaComprou.length} total={totalFiltrado} />
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <ListaPositivacao titulo="🟢 Positivados" cor="#4caf6b" itens={classificacao.positivados} labelDoCliente={labelDoCliente} mostrarData={false} />
+              <ListaPositivacao titulo="🟢 Positivados" cor="#3FAE5F" itens={classificacao.positivados} labelDoCliente={labelDoCliente} mostrarData={false} />
               <ListaPositivacao titulo="🟡 Sem compra no mês" cor="#e8c400" itens={classificacao.semCompraMes} labelDoCliente={labelDoCliente} mostrarData />
               <ListaPositivacao titulo="🔴 Sem compra há 2+ meses" cor="#e0645a" itens={classificacao.semCompra2Meses} labelDoCliente={labelDoCliente} mostrarData />
               <ListaPositivacao titulo="⚪ Nunca comprou" cor="#888" itens={classificacao.nuncaComprou} labelDoCliente={labelDoCliente} mostrarData={false} />
@@ -5429,7 +5427,7 @@ function PlanoInsumos({ lotes, envase, hojeReal, resolverBase }) {
                     <td style={{ ...td, textAlign: "left", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis" }} title={l.c}>{l.n}</td>
                     <td style={td}>{l.un}</td><td style={td}>{l.pack}</td>
                     <td style={td}><input type="number" value={estOv[l.c] != null ? estOv[l.c] : l.est} onChange={e => setEst(l.c, e.target.value)} style={{ width: 70, background: "#222", color: estOv[l.c] != null ? "#C99700" : "#ddd", border: "1px solid #333", borderRadius: 4, padding: "1px 4px", textAlign: "right" }} /></td>
-                    {colunas.map(c => { const v = c.idx.reduce((z, i) => z + l.compra[i], 0); return <td key={c.k} style={{ ...td, background: v > 0 ? "#1f2a1f" : "transparent", color: v > 0 ? "#8fe3a0" : "#555", fontWeight: v > 0 ? 700 : 400 }}>{fmt(v, l.un)}</td>; })}
+                    {colunas.map(c => { const v = c.idx.reduce((z, i) => z + l.compra[i], 0); return <td key={c.k} style={{ ...td, background: v > 0 ? "#1f2a1f" : "transparent", color: v > 0 ? "#8FD4A3" : "#555", fontWeight: v > 0 ? 700 : 400 }}>{fmt(v, l.un)}</td>; })}
                     <td style={{ ...td, fontWeight: 700 }}>{fmt(l.totCompra, l.un)}</td>
                     <td style={td}>{Math.round(l.totCompra * (l.preco || 0)).toLocaleString("pt-BR")}</td>
                   </tr>
@@ -5465,10 +5463,10 @@ function PainelNivelamento({ nivel, lotes, nivelar, estoqueExtra }) {
           <thead><tr><th style={{ ...th, textAlign: "left" }}>Mês</th><th style={th}>Venda prevista</th><th style={th}>Produção programada</th><th style={th}>Saldo acumulado</th><th style={th}>Lotes (volume)</th></tr></thead>
           <tbody>
             {nivel.linhas.map(l => (
-              <tr key={l.chave}><td style={{ ...td, textAlign: "left" }}>{labelMes(l.chave)}</td><td style={td}>{L(l.venda)}</td><td style={{ ...td, color: "#8fe3a0", fontWeight: 700 }}>{L(l.prod)}</td><td style={{ ...td, color: l.saldo < -1 ? "#ef4444" : "#ddd" }}>{L(l.saldo)}</td><td style={td}>{lotesMes[l.chave] ? L(lotesMes[l.chave]) : "–"}</td></tr>
+              <tr key={l.chave}><td style={{ ...td, textAlign: "left" }}>{labelMes(l.chave)}</td><td style={td}>{L(l.venda)}</td><td style={{ ...td, color: "#8FD4A3", fontWeight: 700 }}>{L(l.prod)}</td><td style={{ ...td, color: l.saldo < -1 ? "#ef4444" : "#ddd" }}>{L(l.saldo)}</td><td style={td}>{lotesMes[l.chave] ? L(lotesMes[l.chave]) : "–"}</td></tr>
             ))}
             <tr><td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#fff" }}>TOTAL</td><td style={{ ...td, fontWeight: 700 }}>{L(nivel.totVenda)}</td><td style={{ ...td, fontWeight: 700 }}>{L(nivel.totProd)}</td>
-              <td style={{ ...td, fontWeight: 700, color: Math.abs(dif) < 1 ? "#4caf6b" : "#e0a040" }}>{Math.abs(dif) < 1 ? "✓ fecha" : `dif. ${L(dif)}`}</td><td style={{ ...td, fontWeight: 700 }}>{L(totLotes)}</td></tr>
+              <td style={{ ...td, fontWeight: 700, color: Math.abs(dif) < 1 ? "#3FAE5F" : "#e0a040" }}>{Math.abs(dif) < 1 ? "✓ fecha" : `dif. ${L(dif)}`}</td><td style={{ ...td, fontWeight: 700 }}>{L(totLotes)}</td></tr>
           </tbody>
         </table>
       </div>
@@ -5482,7 +5480,7 @@ function PainelNivelamento({ nivel, lotes, nivelar, estoqueExtra }) {
               <thead><tr><th style={{ ...th, textAlign: "left" }}>Estilo</th>{nivel.chaves.map(c => <th key={c} style={th}>{labelMes(c)}<br /><span style={{ fontWeight: 400, color: "#666" }}>venda → produz</span></th>)}</tr></thead>
               <tbody>
                 {nivel.estilos.map(e => { const o = nivel.porEstilo[e]; return (
-                  <tr key={e}><td style={{ ...td, textAlign: "left" }}>{e}</td>{o.N2.map((v, i) => <td key={i} style={td}>{Math.round(v).toLocaleString("pt-BR")} → <strong style={{ color: "#8fe3a0" }}>{Math.round(o.P[i]).toLocaleString("pt-BR")}</strong></td>)}</tr>
+                  <tr key={e}><td style={{ ...td, textAlign: "left" }}>{e}</td>{o.N2.map((v, i) => <td key={i} style={td}>{Math.round(v).toLocaleString("pt-BR")} → <strong style={{ color: "#8FD4A3" }}>{Math.round(o.P[i]).toLocaleString("pt-BR")}</strong></td>)}</tr>
                 ); })}
               </tbody>
             </table>
@@ -6017,7 +6015,7 @@ function PlanejamentoProducao() {
   return (
     <div>
       {/* plano salvo */}
-      <div style={{ background: usarSalvo ? "#12261a" : "#2a2112", border: `1px solid ${usarSalvo ? "#1f5c35" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: usarSalvo ? "#bfe6cc" : "#e8c766" }}>
+      <div style={{ background: usarSalvo ? "#0F2A17" : "#2a2112", border: `1px solid ${usarSalvo ? "#0F5A28" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, fontSize: 12, color: usarSalvo ? "#C4E6CF" : "#e8c766" }}>
         {usarSalvo ? (
           <div>
             <strong>📌 Plano salvo em {new Date(planoSalvo.salvoEm).toLocaleString("pt-BR")}</strong> (ritmo {planoSalvo.ritmo}/dia). É esse plano que a equipe segue — as datas só mudam se você replanejar.
@@ -6029,7 +6027,7 @@ function PlanejamentoProducao() {
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
           {usarSalvo && <button style={btn("#C99700")} onClick={() => setPrevia(true)}>🔄 Replanejar com os dados atuais</button>}
-          {!usarSalvo && <button disabled={salvando} style={btn("#4caf6b")} onClick={() => salvarPlano(planoCalc.lotes, ritmoUsado, feitos)}>{salvando ? "Salvando…" : "💾 Salvar este plano"}</button>}
+          {!usarSalvo && <button disabled={salvando} style={btn("#3FAE5F")} onClick={() => salvarPlano(planoCalc.lotes, ritmoUsado, feitos)}>{salvando ? "Salvando…" : "💾 Salvar este plano"}</button>}
           {!usarSalvo && planoSalvo && <button style={btn("#888")} onClick={() => setPrevia(false)}>↩ Voltar ao plano salvo</button>}
           <BotaoExcel nomeAba="PlanejamentoProducao" gerar={gerarExcel} />
         </div>
@@ -6055,9 +6053,9 @@ function PlanejamentoProducao() {
                 <td style={{ ...td, color: t.situacao === "maturando" ? "#C99700" : "#ddd" }}>{t.diasLiberar ?? "—"}{t.dataProd && !t.diasRec ? "*" : ""}</td>
                 <td style={td}>{t.litrosNoTanque ? L(t.litrosNoTanque) : "—"}</td>
                 <td style={{ ...td, textAlign: "left" }}>
-                  {t.situacao === "vazio" && <span style={{ color: "#4caf6b" }}>🟢 livre</span>}
+                  {t.situacao === "vazio" && <span style={{ color: "#3FAE5F" }}>🟢 livre</span>}
                   {t.situacao === "maturando" && <span style={{ color: "#C99700" }}>⏳ maturando — libera {fmtDataCurta(t.pronto)}</span>}
-                  {t.situacao === "pronta" && <span style={{ color: "#4caf6b" }}>🟢 cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
+                  {t.situacao === "pronta" && <span style={{ color: "#3FAE5F" }}>🟢 cerveja pronta{t.litrosNoTanque ? ` (${L(t.litrosNoTanque)} L)` : ""}</span>}
                   {t.situacao === "sem data" && <span style={{ color: "#e57373" }}>informe os dias no tanque</span>}
                 </td>
               </tr>
@@ -6089,7 +6087,7 @@ function PlanejamentoProducao() {
           <div style={{ display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
             {mesesCandidatos.map(m => {
               const on = m === alvo || !mesesOff[m];
-              return <label key={m} title={m === alvo ? "mês em destaque: sempre projetado" : ""} style={{ ...modoBtnStyle(on, "#4caf6b"), display: "inline-flex", gap: 4, alignItems: "center", cursor: m === alvo ? "default" : "pointer" }}>
+              return <label key={m} title={m === alvo ? "mês em destaque: sempre projetado" : ""} style={{ ...modoBtnStyle(on, "#3FAE5F"), display: "inline-flex", gap: 4, alignItems: "center", cursor: m === alvo ? "default" : "pointer" }}>
                 <input type="checkbox" checked={on} disabled={m === alvo} onChange={() => setMesesOff(p => ({ ...p, [m]: !p[m] }))} style={{ margin: 0 }} />{labelMes(m)}
               </label>;
             })}
@@ -6098,7 +6096,7 @@ function PlanejamentoProducao() {
         <div style={{ fontSize: 12, color: "#aaa" }}>Cenário da projeção<br />
           <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
             {["min", "base", "max"].map(c => (
-              <button key={c} onClick={() => setCenario(c)} style={modoBtnStyle(cenario === c, "#4caf6b")}>
+              <button key={c} onClick={() => setCenario(c)} style={modoBtnStyle(cenario === c, "#3FAE5F")}>
                 {c === "min" ? "Mínimo" : c === "base" ? "Base" : "Máximo"} ({pcts[c]}%)
               </button>
             ))}
@@ -6152,7 +6150,7 @@ function PlanejamentoProducao() {
                 <button style={{ ...btn("#888"), padding: "1px 7px" }} disabled={i === 0} onClick={() => setPrioridade(p => { const a = p.slice(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; return a; })}>↑</button>
                 <button style={{ ...btn("#888"), padding: "1px 7px" }} disabled={i === prioridade.length - 1} onClick={() => setPrioridade(p => { const a = p.slice(); [a[i + 1], a[i]] = [a[i], a[i + 1]]; return a; })}>↓</button>
                 <button style={{ ...btn("#c0392b"), padding: "1px 7px" }} onClick={() => setPrioridade(p => p.filter(x => x !== e))}>remover</button>
-                <span style={{ color: atrasadosE ? "#e57373" : "#4caf6b" }}>{atrasadosE ? `${atrasadosE} lote(s) atrasado(s)` : "sem atraso"}</span>
+                <span style={{ color: atrasadosE ? "#e57373" : "#3FAE5F" }}>{atrasadosE ? `${atrasadosE} lote(s) atrasado(s)` : "sem atraso"}</span>
               </div>
             );
           })}
@@ -6192,7 +6190,7 @@ function PlanejamentoProducao() {
             <select value={novoManual.tanque} onChange={e => setNovoManual(p => ({ ...p, tanque: e.target.value }))} style={{ ...inputNum, width: 130, textAlign: "left" }}><option value="">tanque…</option>{statusTanques.map(t => <option key={t.nome} value={t.nome}>{t.nome}</option>)}</select>
             <select value={novoManual.estilo} onChange={e => setNovoManual(p => ({ ...p, estilo: e.target.value }))} style={{ ...inputNum, width: 150, textAlign: "left" }}><option value="">estilo…</option>{listaEstilos.map(e => <option key={e.estilo} value={e.estilo}>{e.estilo}</option>)}</select>
             <input type="date" value={novoManual.inicio} onChange={e => setNovoManual(p => ({ ...p, inicio: e.target.value }))} style={{ ...inputNum, width: 140, textAlign: "left" }} />
-            <button style={btn("#4caf6b")} disabled={!novoManual.tanque || !novoManual.estilo || !novoManual.inicio} onClick={() => { setLotesManuais(l => [...l, novoManual]); setNovoManual({ tanque: "", estilo: "", inicio: "" }); }}>incluir</button>
+            <button style={btn("#3FAE5F")} disabled={!novoManual.tanque || !novoManual.estilo || !novoManual.inicio} onClick={() => { setLotesManuais(l => [...l, novoManual]); setNovoManual({ tanque: "", estilo: "", inicio: "" }); }}>incluir</button>
           </div>
           {lotesManuais.map((m, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 3 }}>🛠️ {m.tanque} · {m.estilo} · a partir de {fmtDataCurta(dataDeChave(m.inicio))} <button style={{ ...btn("#c0392b"), padding: "1px 7px" }} onClick={() => setLotesManuais(l => l.filter((_, j) => j !== i))}>remover</button></div>)}
           <div style={{ color: "#fff", fontWeight: 700, margin: "12px 0 4px" }}>🧴 PET 500ml · envase em lote</div>
@@ -6271,7 +6269,7 @@ function PlanejamentoProducao() {
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#aaa", marginBottom: 6, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <span>Estilos que entram no plano ({listaEstilos.filter(e => !estilosOff[e.estilo]).length} de {listaEstilos.length} marcados) — desmarque os que não quer mais produzir</span>
-          <button style={{ ...btn("#4caf6b"), padding: "2px 8px" }} onClick={() => setEstilosOff({})}>marcar todos</button>
+          <button style={{ ...btn("#3FAE5F"), padding: "2px 8px" }} onClick={() => setEstilosOff({})}>marcar todos</button>
           <button style={{ ...btn("#888"), padding: "2px 8px" }} onClick={() => { const o = {}; listaEstilos.forEach(e => { o[e.estilo] = true; }); setEstilosOff(o); }}>desmarcar todos</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 6 }}>
@@ -6343,7 +6341,7 @@ function PlanejamentoProducao() {
                           <td style={td}>{L(n.petProj)}</td>
                           <td style={td}><input type="number" placeholder={String(Math.round(n.petProj))} value={ovPet[kx] ?? ""} onChange={e => setOvPet(p => ({ ...p, [kx]: e.target.value }))} style={inputNum} /></td>
                           <td style={td}>{L(n.estoque)}</td>
-                          <td style={{ ...td, color: "#4caf6b", fontWeight: 700 }}>{L(n.necessario)}</td>
+                          <td style={{ ...td, color: "#3FAE5F", fontWeight: 700 }}>{L(n.necessario)}</td>
                           <td style={td}><input type="number" min="1" placeholder={n.diasEstiloBase ? String(n.diasEstiloBase) : "preencher"} value={diasMes[kx] ?? ""} onChange={e => setDiasMes(p => ({ ...p, [kx]: e.target.value }))} style={{ ...inputNum, width: 54, borderColor: (diasMes[kx] || diasEstilo[n.estilo]) ? "#C99700" : n.dias ? "#444" : "#e57373" }} title={n.diasReceita ? `receita: ${n.diasReceita} dias` : "sem prazo na receita"} /></td>
                           <td style={td}>{(n.petProd / CAPACIDADE_ENVASE_PET_DIA).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</td>
                           <td style={td}><button style={{ ...btn("#4a90d9"), padding: "2px 8px" }} onClick={() => setExpandidos(p => ({ ...p, [kx]: !p[kx] }))}>{expandidos[kx] ? "ocultar" : "por quê?"}</button></td>
@@ -6379,7 +6377,7 @@ function PlanejamentoProducao() {
         <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, marginBottom: 6 }}>Cenários salvos {cenarioCarregado && <span style={{ color: "#C99700", fontWeight: 400 }}>· em uso: {cenarioCarregado}</span>}</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
           <input type="text" placeholder="Nome do cenário (ex.: Natal forte)" value={nomeNovoCenario} onChange={e => setNomeNovoCenario(e.target.value)} style={{ ...inputNum, width: 240, textAlign: "left" }} />
-          <button style={btn("#4caf6b")} onClick={salvarCenarioComNome}>💾 Salvar cenário futuro</button>
+          <button style={btn("#3FAE5F")} onClick={salvarCenarioComNome}>💾 Salvar cenário futuro</button>
         </div>
         {msgCenario && <div style={{ fontSize: 12, color: "#bbb", marginBottom: 8 }}>{msgCenario}</div>}
         {cenariosSalvos.length === 0 ? <div style={{ fontSize: 12, color: "#666" }}>Nenhum cenário salvo ainda. Ajuste os números acima, dê um nome e salve — dá para guardar quantos quiser e alternar entre eles.</div> : (
@@ -6397,7 +6395,7 @@ function PlanejamentoProducao() {
         )}
       </div>
 
-      <div style={{ background: cenarioValidado ? "#12261a" : "#2a2112", border: `1px solid ${cenarioValidado ? "#1f5c35" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#bfe6cc" : "#e8c766" }}>
+      <div style={{ background: cenarioValidado ? "#0F2A17" : "#2a2112", border: `1px solid ${cenarioValidado ? "#0F5A28" : "#6b5300"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 16, fontSize: 13, color: cenarioValidado ? "#C4E6CF" : "#e8c766" }}>
         <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
           <input type="checkbox" checked={cenarioValidado} onChange={e => setCenarioValidado(e.target.checked)} />
           <strong>Cenário futuro validado</strong> — {cenarioValidado ? "a programação de produção está liberada abaixo." : "marque quando os números acima estiverem ok para montar a programação dos tanques."}
@@ -6407,7 +6405,7 @@ function PlanejamentoProducao() {
       {(cenarioValidado || usarSalvo) ? (<>
       {/* brassagem */}
       <h4 style={{ color: "#fff", fontSize: 13, margin: "6px 0" }}>Brassagem · 3 ou 6 bateladas por dia (tanque grande enche em dias de 3 ou 6 bateladas, um por dia; os de 1.000 L entram junto no dia)</h4>
-      <div style={{ background: "#12261a", border: "1px solid #1f5c35", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#bfe6cc" }}>
+      <div style={{ background: "#0F2A17", border: "1px solid #0F5A28", borderRadius: 8, padding: "10px 12px", marginBottom: 10, fontSize: 12, color: "#C4E6CF" }}>
         <strong>Recomendação (com os dados atuais): {recomendado} bateladas/dia.</strong> {motivo}
         <div style={{ marginTop: 6, color: "#8fbf9f" }}>
           3/dia: {p3.diasBrassagem} dias de brassagem, {p3.bateladasTotal} bateladas, {p3.atrasados} atraso(s), último lote pronto em {fmtDataCurta(p3.ultimoPronto)}.
@@ -6531,7 +6529,7 @@ function PlanejamentoProducao() {
                   {" · "}maturação <input type="number" min="1" placeholder={String(t.diasUsados)} value={diasLote[`${t.nome}|atual`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|atual`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|atual`] ?? "") !== "" ? "#C99700" : "#444" }} /> dias
                   {(() => { const sh = petShareEstilo(atual.cerveja); const b = atual.litros * (1 - sh), pt = atual.litros * sh; return <> · ao ficar pronta vira estoque: 🛢️ {Math.round(b / 50).toLocaleString("pt-BR")} barris ({L(b)} L) + 🧴 {L(pt)} L PET · tanque livre {atual.pronto && atual.pronto > hojeReal ? `em ${fmtDataCurta(atual.pronto)}` : "agora"}</>; })()}
                 </div>
-              ) : <div style={{ color: "#4caf6b" }}>AGORA · vazio / livre</div>}
+              ) : <div style={{ color: "#3FAE5F" }}>AGORA · vazio / livre</div>}
               {passos.map(({ l, barril, pet, vazio }, i) => (
                 <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>
                   ⚙️ <strong>Produção {fmtDataCurta(l.inicio)}{chaveDia(l.inicio) !== chaveDia(l.fim) ? `–${fmtDataCurta(l.fim)}` : ""}</strong> · {l.estilo}{l.reposicao ? " (reposição)" : ""} {L(l.volume)} L ({l.bateladas} bat.) · ⏳ pronto {fmtDataCurta(l.pronto)} · maturação <input type="number" min="1" placeholder={String(l.dias)} value={diasLote[`${t.nome}|${i}`] ?? ""} onChange={ev => setDiasLote(p => ({ ...p, [`${t.nome}|${i}`]: ev.target.value }))} style={{ ...inputNum, width: 46, padding: "1px 4px", borderColor: (diasLote[`${t.nome}|${i}`] ?? "") !== "" ? "#C99700" : "#444" }} /> dias
@@ -6601,11 +6599,11 @@ function PlanejamentoProducao() {
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.estoque ? L(r.estoque) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.acabado ? L(r.acabado) + " L" : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.semana ? L(r.semana) + " L" : "—"}</td>
-                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.precisa ? "#C99700" : "#4caf6b" }}>{r.precisa ? fmtDataCurta(r.semLote.ruptura) : "cobre os 120 dias"}</td>
+                      <td style={{ padding: "3px 6px", textAlign: "right", color: r.precisa ? "#C99700" : "#3FAE5F" }}>{r.precisa ? fmtDataCurta(r.semLote.ruptura) : "cobre os 120 dias"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.dias}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right", color: "#fff", fontWeight: 700 }}>{r.iniciarAte ? fmtDataCurta(r.iniciarAte) : "—"}</td>
                       <td style={{ padding: "3px 6px", textAlign: "left", whiteSpace: "nowrap" }}>{r.proximo ? `${fmtDataCurta(r.proximo.inicio)} → pronto ${fmtDataCurta(r.proximo.pronto)} · ${L(r.proximo.volume)} L (${r.proximo.tanque})` : "—"}</td>
-                      <td style={{ padding: "3px 6px", textAlign: "left", color: r.comLote.ruptura ? "#e57373" : r.precisa ? "#4caf6b" : "#4caf6b" }}>
+                      <td style={{ padding: "3px 6px", textAlign: "left", color: r.comLote.ruptura ? "#e57373" : r.precisa ? "#3FAE5F" : "#3FAE5F" }}>
                         {r.comLote.ruptura ? `⚠️ ruptura em ${fmtDataCurta(r.comLote.ruptura)} (faltam ${L(r.comLote.falta)} L)` : !r.precisa ? "🟢 não precisa produzir" : r.folga !== null ? `✅ ${r.folga >= 0 ? `${r.folga} dia(s) de folga` : "no limite"}` : "✅ coberto"}
                       </td>
                       <td style={{ padding: "3px 6px", textAlign: "right", color: r.comLote.final > r.semana * 8 ? "#C99700" : "#ddd" }}>{L(r.comLote.final)} L</td>
@@ -6660,7 +6658,7 @@ function PlanejamentoProducao() {
                       <td style={{ padding: "3px 8px", whiteSpace: "nowrap", color: "#fff" }}>{r.e}</td>
                       <td style={{ padding: "3px 6px", textAlign: "right" }}>{r.inicial ? L(r.inicial) : "—"}</td>
                       {r.colunas.map((c, i) => {
-                        const cor = c.saldo < -50 ? "#e57373" : c.vendido > 0 && c.saldo > c.vendido * 2 ? "#C99700" : "#4caf6b";
+                        const cor = c.saldo < -50 ? "#e57373" : c.vendido > 0 && c.saldo > c.vendido * 2 ? "#C99700" : "#3FAE5F";
                         return (
                           <React.Fragment key={i}>
                             <td style={{ padding: "3px 6px", textAlign: "right", borderLeft: "1px solid #333" }}>{c.produzido ? L(c.produzido) : "—"}</td>
@@ -6716,7 +6714,7 @@ function PlanejamentoProducao() {
                   return itens.length === 0 ? <span style={{ color: "#666" }}>Sem brassagem nesta semana</span> :
                     itens.map((x, i) => <div key={i} style={{ color: x.l.atrasado ? "#e57373" : "#ddd" }}>⚙️ {x.l.tanque}: {x.l.estilo} · {x.n} bat. ({x.dias.join("/")}) · pronto {fmtDataCurta(x.l.pronto)}</div>);
                 })()}
-                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
+                {prontosSem.map((l, i) => <div key={"p" + i} style={{ color: "#3FAE5F" }}>🟢 {l.tanque}: {l.estilo} fica pronto ({fmtDataCurta(l.pronto)}) · {L(l.atende)} L</div>)}
               </div>
             ) : (
               <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -6733,7 +6731,7 @@ function PlanejamentoProducao() {
                             const ini = chaveDia(l.inicio) === chaveDia(d), fimL = chaveDia(l.fim) === chaveDia(d);
                             return <div key={i} style={{ color: l.atrasado ? "#e57373" : "#ddd", opacity: feitos[chaveLote(l)] ? 0.5 : 1 }}>⚙️ {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} · {n} bat. ({L(n * (l.capacidade / l.bateladas))} L){ini && fimL ? " · tanque completo" : ini ? " · começa o tanque" : fimL ? " · completa o tanque" : ""}</div>;
                           })}
-                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#4caf6b" }}>🟢 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} {l.existente ? "pronto (já no tanque)" : "pronto"} · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
+                          {prontos.map((l, i) => <div key={"p" + i} style={{ color: "#3FAE5F" }}>🟢 {l.tanque} · {l.estilo}{l.reposicao ? " (reposição)" : ""} {l.existente ? "pronto (já no tanque)" : "pronto"} · {L(l.reposicao ? l.volume : l.atende)} L{l.petPct > 0.01 ? ` (≈${L(l.atende * l.petPct)} L PET)` : ""}</div>)}
                         </td>
                       </tr>
                     );
@@ -7389,9 +7387,9 @@ function ProdutosTab() {
                     style={{ width: 65, background: "#0E1510", border: "1px solid #C99700", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ color: "#4caf6b", fontSize: 12 }}>% máximo:</span>
+                  <span style={{ color: "#3FAE5F", fontSize: 12 }}>% máximo:</span>
                   <input type="number" min="0" max="300" value={pctMax} onChange={e => setPctMax(Math.max(0, Math.min(300, Number(e.target.value) || 0)))}
-                    style={{ width: 65, background: "#0E1510", border: "1px solid #4caf6b", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
+                    style={{ width: 65, background: "#0E1510", border: "1px solid #3FAE5F", borderRadius: 6, color: "#fff", padding: "6px 8px", fontSize: 13 }} />
                 </div>
               </div>
               <div style={{ color: "#666", fontSize: 11, marginTop: 6 }}>
@@ -7469,7 +7467,7 @@ function ProdutosTab() {
 
         <div className="no-print" style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 16 }}>
           <div style={{ flex: 1, minWidth: 240 }}>
-            <div style={{ color: "#4caf6b", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟢 Envasados ({envasadosFixosGrafico.length})</div>
+            <div style={{ color: "#3FAE5F", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🟢 Envasados ({envasadosFixosGrafico.length})</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {envasadosFixosGrafico.map(nome => (
                 <label key={nome} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#fff", cursor: "pointer" }}>
@@ -7568,7 +7566,7 @@ function ProdutosTab() {
           <>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {produtosVisiveis.map(({ nome, comp }) => (
-                <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#4caf6b" />
+                <CardCategoriaProduto key={nome} nome={nome} comp={comp} cor="#3FAE5F" />
               ))}
             </div>
 
@@ -7590,7 +7588,7 @@ function ProdutosTab() {
 
 // ───────────────────────── Aba "Cliente Analítico" (cliente × produto, a partir da aba `analitico`) ─────────────────────────
 const TIPOS_ORDEM = ["Chope", "PET", "Garrafa", "Lata", "Growler", "Outros"];
-const COR_TIPO = { Chope: "#F59E0B", PET: "#22C55E", Garrafa: "#3B82F6", Lata: "#A855F7", Growler: "#06B6D4", Outros: "#9CA3AF" };
+const COR_TIPO = { Chope: "#F59E0B", PET: "#3FAE5F", Garrafa: "#3B82F6", Lata: "#A855F7", Growler: "#06B6D4", Outros: "#9CA3AF" };
 function tipoDoProduto(nome) {
   const n = normalizarTextoProduto(nome);
   if (/^CHOPE/.test(n)) return "Chope";
@@ -7670,7 +7668,7 @@ function ClienteAnaliticoTab() {
     [entidades, ini, fim, vendaSo, tipoFiltro, porCliente, prodInfo]);
   const totF = dados.reduce((s, d) => s + d.f, 0), totL = dados.reduce((s, d) => s + d.l, 0);
   const topEnt = dados.slice(0, 10);
-  const cores = ["#22C55E", "#F59E0B", "#3B82F6", "#EF4444", "#A855F7", "#06B6D4", "#EC4899", "#84CC16", "#F97316", "#9CA3AF"];
+  const cores = ["#3FAE5F", "#F59E0B", "#3B82F6", "#EF4444", "#A855F7", "#06B6D4", "#EC4899", "#84CC16", "#F97316", "#9CA3AF"];
 
   // itens (produtos) da entidade escolhida (ou do total)
   const alvoDet = dados.find(d => d.id === detalhe) || null;
@@ -7738,7 +7736,7 @@ function ClienteAnaliticoTab() {
   const td = { padding: "5px 8px", textAlign: "right", borderBottom: "1px solid #222", whiteSpace: "nowrap", color: "#ddd", fontSize: 12 };
   const pct = (v, t) => t > 0 ? `${((v / t) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "-";
   const brl2 = (v) => v == null ? "-" : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  const chip = (ativo, cor = "#4caf6b") => ({ ...modoBtnStyle(ativo, cor), cursor: "pointer", fontSize: 12, padding: "4px 10px" });
+  const chip = (ativo, cor = "#3FAE5F") => ({ ...modoBtnStyle(ativo, cor), cursor: "pointer", fontSize: 12, padding: "4px 10px" });
 
   if (!A.linhas.length) {
     return (<Section title="Cliente Analítico"><div style={{ color: "#aaa", fontSize: 13 }}>
@@ -7818,7 +7816,7 @@ function ClienteAnaliticoTab() {
             </span>
           )}
         </div>
-        {msg && <div style={{ color: msg.startsWith("⚠️") ? "#e0a040" : "#4caf6b", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
+        {msg && <div style={{ color: msg.startsWith("⚠️") ? "#e0a040" : "#3FAE5F", fontSize: 12, marginBottom: 10 }}>{msg}</div>}
 
         {!dados.length ? (
           <div style={{ color: "#777", fontSize: 13, padding: "20px 0" }}>Selecione um ou mais clientes (busca), um grupo de cliente ou um grupo firmado para ver a análise.</div>
@@ -7965,9 +7963,8 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ fontFamily: "system-ui, -apple-system, sans-serif", background: "#0E1510", minHeight: 600, padding: 20, borderRadius: 14 }}>
+    <div style={{ fontFamily: "'Barlow', system-ui, -apple-system, sans-serif", background: "#0E1510", minHeight: 600, padding: 20, borderRadius: 14 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
@@ -7977,9 +7974,9 @@ export default function App() {
       {logado && (
         <div>
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div style={{ color: "#fff", fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 1 }}>
-              HBIER <span style={{ color: "#C99700" }}>BI</span>
-              <span style={{ color: "#555", fontSize: 12, marginLeft: 10, fontFamily: "system-ui" }}>{APP_VERSION}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <img src={`${import.meta.env.BASE_URL}logo-header.png`} alt="HBier Inteligência" style={{ height: 56, borderRadius: 8, display: "block" }} />
+              <span style={{ color: "#555", fontSize: 12, fontFamily: "'Barlow', system-ui" }}>{APP_VERSION}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ color: "#888", fontSize: 13 }}>{usuario}</span>
