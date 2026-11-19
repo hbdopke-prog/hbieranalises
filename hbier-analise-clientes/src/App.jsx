@@ -20,7 +20,7 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.60";
+const APP_VERSION = "v10.61";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -3407,7 +3407,7 @@ function GlobalTab() {
         }} />
         <BotaoImprimir label="Imprimir Global" />
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#1D1D1B", border: "1px solid #333", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", background: "#1D1D1B", border: "1px solid #C69700", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
         <span style={{ color: "#888", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}><Layers size={13} /> Tipo de cliente ({nomes.length} clientes):</span>
         {FAIXAS_CLIENTE_GLOBAL.map(f => (
           <label key={f.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#fff", cursor: "pointer" }}>
