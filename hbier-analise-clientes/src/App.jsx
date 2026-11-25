@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
+import React, { useState, useMemo, useEffect, useRef, createContext, useContext, lazy, Suspense } from "react";
 import { INSUMOS } from "./insumosData";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, LabelList, ReferenceLine, Cell,
   PieChart, Pie,
 } from "recharts";
-import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package, Boxes, Factory } from "lucide-react";
+import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, Layers, RefreshCw, AlertTriangle, Calendar, Table as TableIcon, ArrowUp, ArrowDown, Minus, LayoutDashboard, Trophy, Globe, Package, Boxes, Factory, Target } from "lucide-react";
 
 /*
   HBier - Análise de Clientes
@@ -20,8 +20,9 @@ import { Search, LogIn, TrendingUp, Droplets, GitCompareArrows, LogOut, Users, L
   Atualize APP_VERSION (+1) a cada ajuste no app e apareça no login.
 */
 
-const APP_VERSION = "v10.68";
+const APP_VERSION = "v10.69";
 const GAS_URL = import.meta.env.VITE_GAS_URL;
+const MetasTab = lazy(() => import("./MetasTab.jsx")); // aba Metas só é baixada quando o henrique abre
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
@@ -872,7 +873,7 @@ function LoginScreen({ onLogin }) {
           setErro(json.erro || "Usuário ou senha inválidos.");
           return;
         }
-        onLogin(json.nome || usuario, !!json.admin, usuario);
+        onLogin(json.nome || usuario, !!json.admin, usuario, senha);
       })
       .catch(err => {
         setCarregando(false);
@@ -7952,6 +7953,8 @@ export default function App() {
   const [usuario, setUsuario] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loginDigitado, setLoginDigitado] = useState("");
+  const [senhaLogin, setSenhaLogin] = useState(""); // só em memória; usada para pedir as metas ao Apps Script
+  const veMetas = loginDigitado === "henrique"; // aba Metas: só o henrique
   const veSomentePlanejamento = ["henrique", "augusto"].includes(loginDigitado); // aba Planejamento restrita aos logins henrique e augusto
   const [tab, setTab] = useState("cliente");
 
@@ -8014,7 +8017,7 @@ export default function App() {
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      {!logado && <LoginScreen onLogin={(u, admin, loginDigitado) => { setUsuario(u); setIsAdmin(admin); setLoginDigitado(String(loginDigitado || "").trim().toLowerCase()); setLogado(true); }} />}
+      {!logado && <LoginScreen onLogin={(u, admin, loginDigitado, senhaDigitada) => { setSenhaLogin(senhaDigitada || ""); setUsuario(u); setIsAdmin(admin); setLoginDigitado(String(loginDigitado || "").trim().toLowerCase()); setLogado(true); }} />}
 
       {logado && (
         <div>
@@ -8079,6 +8082,11 @@ export default function App() {
                     <Globe size={14} /> Global
                   </button>
                 )}
+                {veMetas && (
+                  <button onClick={() => setTab("metas")} style={tabStyle(tab === "metas")}>
+                    <Target size={14} /> Metas
+                  </button>
+                )}
               </div>
 
               {tab === "cliente" && <ClienteDashboard />}
@@ -8092,6 +8100,11 @@ export default function App() {
               {tab === "estoque" && <EstoqueTab />}
               {tab === "projecao" && <ProjecaoVendasTab />}
               {tab === "global" && isAdmin && <GlobalTab />}
+              {tab === "metas" && veMetas && (
+                <Suspense fallback={<div style={{ color: "#aaa", padding: 20 }}>Carregando…</div>}>
+                  <MetasTab contexto={contexto} usuario={loginDigitado} senha={senhaLogin} gasUrl={GAS_URL} chaveMesAtual={chaveMesAtualReal()} />
+                </Suspense>
+              )}
             </DataContext.Provider>
           )}
         </div>

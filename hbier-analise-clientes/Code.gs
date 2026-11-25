@@ -83,6 +83,8 @@
 const SHEET_FATURAMENTO = "faturamento";
 const SHEET_LITROS = "litros";
 const SHEET_USUARIOS = "usuarios";
+const SHEET_METAS = "metas"; // metas x realizado por mês/grupo/vendedor (colunas: ano, mes, grupo, vendedor, meta, realizado)
+const USUARIOS_METAS = ["henrique"]; // só estes logins recebem os dados da aba Metas
 const SHEET_PRODUTOS_FATURAMENTO = "produtos_faturamento";
 const SHEET_PRODUTOS_LITROS = "produtos_litros";
 const SHEET_ESTOQUE = "estoque";
@@ -531,6 +533,9 @@ function doPost(e) {
     if (corpo.action === "login") {
       return jsonResponse(autenticar(corpo.usuario, corpo.senha));
     }
+    if (corpo.action === "metas") {
+      return jsonResponse(lerMetasRestrito(corpo.usuario, corpo.senha));
+    }
     if (corpo.action === "salvarCenarios") {
       return jsonResponse(salvarCenariosSalvos(corpo.cenarios));
     }
@@ -544,6 +549,31 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ ok: false, erro: String(err.message || err) });
   }
+}
+
+// Devolve as metas SOMENTE se usuário e senha forem válidos e o login estiver em USUARIOS_METAS.
+// (Os dados das metas não vão no doGet, então não ficam acessíveis a quem não é o dono.)
+function lerMetasRestrito(usuario, senha) {
+  const aut = autenticar(usuario, senha);
+  if (!aut.ok) return aut;
+  if (USUARIOS_METAS.indexOf(String(usuario || "").trim().toLowerCase()) === -1) {
+    return { ok: false, erro: "Sem permissão para ver as metas." };
+  }
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_METAS);
+  if (!sheet) return { ok: true, linhas: [] };
+  const v = sheet.getDataRange().getValues();
+  const linhas = [];
+  for (let i = 1; i < v.length; i++) {
+    const r = v[i];
+    if (!r[0] || !r[1]) continue;
+    linhas.push({
+      ano: Number(r[0]), mes: Number(r[1]),
+      grupo: String(r[2] || "").trim(), vendedor: String(r[3] || "").trim(),
+      meta: Number(r[4]) || 0, realizado: Number(r[5]) || 0,
+    });
+  }
+  return { ok: true, linhas: linhas };
 }
 
 // Valida usuario/senha contra a aba "usuarios". Devolve { ok, admin, nome }.
